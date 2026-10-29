@@ -139,7 +139,7 @@ body {
   }
   100% {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: none;
   }
 }
 
@@ -150,7 +150,7 @@ body {
   }
   100% {
     opacity: 1;
-    transform: translateY(0);
+    transform: none;
   }
 }
 
@@ -161,7 +161,7 @@ body {
   }
   100% {
     opacity: 1;
-    transform: scale(1);
+    transform: none;
   }
 }
 
@@ -172,7 +172,7 @@ body {
   }
   100% {
     opacity: 1;
-    transform: translateX(0);
+    transform: none;
   }
 }
 
@@ -183,7 +183,7 @@ body {
   }
   100% {
     opacity: 1;
-    transform: translateX(0);
+    transform: none;
   }
 }
 
@@ -430,5 +430,23 @@ body {
     stroke-dashoffset: 0;
   }
 }
+
+/* Custom Slim Scrollbar for Timeline & Cards */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(241, 245, 249, 0.6);
+  border-radius: 9999px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(203, 213, 225, 0.8);
+  border-radius: 9999px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #FF6B00;
+}
+
 
 

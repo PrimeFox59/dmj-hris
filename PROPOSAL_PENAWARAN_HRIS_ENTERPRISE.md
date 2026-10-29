@@ -1,7 +1,7 @@
 # PROPOSAL PENAWARAN PENGEMBANGAN & IMPLEMENTASI SISTEM
 # PRIME HRIS ENTERPRISE
 
-**Solusi Presensi Biometrik Kamera Geotag, Sequential Corporate WiFi Gate, Multi-Tier Approval, dan Akuntansi Penggajian Berbasis Proyek Industri**
+**Solusi Presensi Biometrik Kamera Geotag, Zero-Trust Multi-Site Geofence, Multi-Tier Approval, dan Akuntansi Penggajian Berbasis Proyek Industri**
 
 ---
 
@@ -10,7 +10,7 @@
 * **Vendor Pengembang:** **PT Prime Infinity Systems (Prime ProjectX)**
 * **Author & Lead Architect:** **Galih Primananda, S.E.** (Lead Machining & Platform Architect)
 * **Klien Sasaran:** **Direksi & Manajemen PT Dwi Martha Jaya**
-* **Ekosistem & Showcase:** [primeprojectx.net](https://primeprojectx.net) • [porto.primeprojectx.net](https://porto.primeprojectx.net)
+* **Ekosistem & Showcase:** [primeprojectx.net](https://primeprojectx.net) • [binus.primeprojectx.net](https://binus.primeprojectx.net)
 * **Kontak Direct:** `galih@primeprojectx.net` • `+62 895 2425 7778`
 
 ---
@@ -33,16 +33,16 @@ Sistem konvensional seringkali menghadapi kendala:
 
 ### 2.1. Presensi Kamera Selfie & Watermark Otomatis
 * **Live Camera Viewfinder:** Tangkapan kamera langsung (*real-time webcam*) dengan panduan kontur wajah (*face guideline overlay*).
-* **Cryptographic-Style Watermark Stamp:** Setiap snapshot dibubuhi stempel permanen berisi NIK, Nama Karyawan, Tanggal & Waktu akurat (WIB), Koordinat GPS (Latitude & Longitude), Alamat Geocoded, Status WiFi SSID, dan Security Token terautentikasi `PRIME HRIS • VERIFIED WATERMARK`.
+* **Cryptographic-Style Watermark Stamp:** Setiap snapshot dibubuhi stempel permanen berisi NIK, Nama Karyawan, Tanggal & Waktu akurat (WIB), Koordinat GPS (Latitude & Longitude), Alamat Geocoded, Status Geofence GPS, dan Security Token terautentikasi `PRIME HRIS • VERIFIED WATERMARK`.
 * **Geofencing Verification:** Pengecekan radius fisik terhadap koordinat resmi kantor/workshop (e.g. Kawasan Industri JIIPE Manyar / Surabaya HQ).
 
-### 2.2. Sequential Corporate WiFi Gate Validator
-* **Validasi Berjenjang (Sequential Gate):** Tombol submit presensi WFO otomatis terkunci jika perangkat karyawan tidak terhubung ke Access Point WiFi resmi perusahaan (pengecekan SSID, BSSID, dan Corporate IP Subnet).
-* **Hardware MAC Binding:** Pengikatan MAC address perangkat laptop/ponsel resmi karyawan untuk mencegah pembobolan jaringan.
+### 2.2. Zero-Trust Multi-Site Geofence Validator
+* **Validasi Berjenjang (Precision Geofencing):** Tombol submit presensi WFO otomatis memverifikasi radius fisik terhadap koordinat resmi kantor, workshop, dan site proyek klien.
+* **Audit Trail & Anti-Spoofing:** Verifikasi live satelit GPS chip dan audit IP koneksi untuk mendeteksi anomali tanpa hambatan hardware kaku.
 
 ### 2.3. Fleksibilitas Penugasan "Dinas Luar Mendadak"
 * **Bypass Terkendali:** Bila teknisi ditugaskan mendadak ke luar kota/site klien tanpa sempat ke kantor, teknisi dapat memilih mode **"Dinas Luar Mendadak"**.
-* **Mandatory Field Security:** Pilihan ini merelaksasi syarat WiFi kantor, namun mewajibkan pengisian Klien Tujuan, Kode Proyek, Alamat Site, dan Alasan Urgensi, serta otomatis mengarahkan presensi ke antrean persetujuan atasan (*manager approval queue*).
+* **Mandatory Field Security:** Pilihan ini merelaksasi batas geofence kantor pusat, namun mewajibkan pengisian Klien Tujuan, Kode Proyek, Alamat Site, dan Alasan Urgensi, serta otomatis mengarahkan presensi ke antrean persetujuan atasan (*manager approval queue*).
 
 ### 2.4. Deteksi Keterlambatan & Catatan Aktivitas Harian
 * **Mandatory Daily Notes:** Setiap karyawan wajib mencantumkan catatan rencana kerja dan aktivitas harian.
@@ -87,14 +87,14 @@ Sistem konvensional seringkali menghadapi kendala:
 | **Hitung Gaji & Slip QR Code** | Termasuk Otomatis | Termasuk | Termasuk Mesin Depnaker 1/173 & QR Code |
 | **Approval Cuti, Izin & Sakit** | Termasuk Online Mandiri | Termasuk | Termasuk Multi-Tier Direksi & PM |
 | **Subdomain Sistem** | Subdomain Gratis (`dmj.primeprojectx.net`) | Opsional Domain Brand | Setup Custom Domain Gratis (`DMJhris.com`) |
-| **Kunci WiFi Kantor/Workshop** | *Opsi Add-on (+Rp 1.000.000)* | Tersedia Satuan | **Termasuk (Kunci WiFi Kantor & Workshop)** |
+| **Multi-Site GPS Geofence** | *Opsi Add-on (+Rp 1.000.000)* | Tersedia Satuan | **Termasuk (Multi-Site Geofence Kantor & Workshop)** |
 | **Mobile Version (Smartphone)** | *Opsi Add-on (+Rp 1.000.000)* | Tersedia Satuan | **Termasuk (Presensi Biometrik & GPS HP)** |
 | **Source Code (Offline)** | *Opsi Add-on (+Rp 200.000)* | Tersedia Satuan | **Termasuk (Lisensi Source Code Komplit)** |
 | **Pelatihan Full Team** | *Opsi Add-on (+Rp 1.000.000)* | Tersedia Satuan | **Termasuk (Training Seluruh Tim Semua Divisi)** |
 | **Garansi & Dukungan** | SLA Cloud & Support Dasar | Standar | **Garansi Bebas Masalah & Update 12 Bulan (Prioritas)** |
 
 ### Rincian Pilihan Add-On Modular (Bisa Ditambah Sesuai Kebutuhan DMJ):
-1. **Kunci WiFi Kantor (+ Rp 1.000.000):** Kunci tombol absensi wajib ter-koneksi WiFi kantor/workshop DMJ.
+1. **Multi-Site GPS Geofence (+ Rp 1.000.000):** Penguncian radius presensi fleksibel untuk multi-lokasi kantor, workshop & site proyek DMJ.
 2. **Mobile Version Smartphone (+ Rp 1.000.000):** Akses web responsif HP staf: presensi selfie biometrik, GPS native satelit, & cek slip gaji mandiri.
 3. **Source Code Offline (+ Rp 200.000):** Lisensi source code untuk dijalankan mandiri di PC kantor tanpa biaya cloud.
 4. **Domain Brand DMJhris.com (± Rp 250.000/thn):** Gunakan nama domain brand perusahaan sendiri (menyesuaikan registrar resmi).
@@ -117,7 +117,7 @@ Sistem konvensional seringkali menghadapi kendala:
 Implementasi dilaksanakan dalam **5 Minggu (4 Sprint Agile)**:
 
 ```
-[Sprint 1: Minggu 1] -> Inception, Whitelist WiFi SSID, Setup Database & NIK Pegawai
+[Sprint 1: Minggu 1] -> Inception, Setup Geofence Multi-Site, Setup Database & NIK Pegawai
 [Sprint 2: Minggu 2-3] -> Development Engine Kamera Geotag, Approval Flow & Mesin Gaji
 [Sprint 3: Minggu 4] -> User Acceptance Test (UAT), Penetrasi Keamanan & Kalibrasi Geofence
 [Sprint 4: Minggu 5] -> Training User & HR Admin, Handover Source Code & Go-Live Resmi

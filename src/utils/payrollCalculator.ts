@@ -1,6 +1,9 @@
-﻿import { Employee, Project, PayrollRecord, SalaryRuleConfig, AttendanceRecord } from '../types';
+import { Employee, Project, PayrollRecord, SalaryRuleConfig, AttendanceRecord, ProjectPayrollAllocation } from '../types';
 
-export function formatIDR(amount: number): string {
+export function formatIDR(amount: number, isMasked: boolean = false): string {
+  if (isMasked) {
+    return 'Rp ••••••••';
+  }
   return new Intl.NumberFormat('id-ID', {
     style: 'currency',
     currency: 'IDR',
@@ -8,31 +11,88 @@ export function formatIDR(amount: number): string {
   }).format(amount);
 }
 
+export function formatSalaryDisplay(amount: number, isVisible: boolean = false): string {
+  if (!isVisible) {
+    return 'Rp ••••••••';
+  }
+  return formatIDR(amount);
+}
+
+export interface EmployeeAuditOverride {
+  presentDays?: number;
+  leaveDays?: number;
+  unpaidLeaveDays?: number;
+  lateDays?: number;
+  lateMinutes?: number;
+  overtimeHours?: number;
+  isLatePenaltyWaived?: boolean;
+  validated?: boolean;
+  notes?: string;
+}
+
 export function calculateEmployeePayroll(
   employee: Employee,
   attendances: AttendanceRecord[],
   projects: Project[],
   rules: SalaryRuleConfig,
-  periodStr: string = "September 2026"
+  periodStr: string = "September 2026",
+  startDate?: string,
+  endDate?: string,
+  customWorkingDays?: number,
+  auditOverride?: EmployeeAuditOverride
 ): PayrollRecord {
-  // Count attendance stats
-  const empAttendances = attendances.filter(a => a.employeeId === employee.id);
-  const presentDays = empAttendances.length > 0 ? empAttendances.length : 21; // fallback default
-  const workingDays = rules.standardWorkDaysPerMonth;
-  
-  // Calculate unapproved late deductions
-  const unapprovedLates = empAttendances.filter(a => a.isLate && a.approvalStatus !== 'APPROVED');
-  const lateDays = unapprovedLates.length;
-  let unapprovedLateDeduction = 0;
-  unapprovedLates.forEach(late => {
-    const blocks = Math.ceil(Math.max(0, late.lateMinutes - rules.lateGracePeriodMinutes) / 15);
-    unapprovedLateDeduction += blocks * rules.latePenaltyPerBlock;
+  // Filter attendance records by employee and optional date range [startDate, endDate]
+  const empAttendances = attendances.filter(a => {
+    if (a.employeeId !== employee.id) return false;
+    if (startDate && a.date < startDate) return false;
+    if (endDate && a.date > endDate) return false;
+    return true;
   });
 
+  const workingDays = customWorkingDays || rules.standardWorkDaysPerMonth || 22;
+
+  // Actual count or overridden by HR
+  const initialLeaveDays = employee.usedLeave || 0;
+  const initialPresentDays = empAttendances.length;
+
+  const presentDays = auditOverride?.presentDays !== undefined 
+    ? auditOverride.presentDays 
+    : (initialPresentDays > 0 ? initialPresentDays : Math.max(1, workingDays - initialLeaveDays));
+
+  const leaveDays = auditOverride?.leaveDays !== undefined 
+    ? auditOverride.leaveDays 
+    : initialLeaveDays;
+
+  const unpaidLeaveDays = auditOverride?.unpaidLeaveDays !== undefined 
+    ? auditOverride.unpaidLeaveDays 
+    : (employee.unpaidLeaveDaysTotal || 0);
+
+  // Unpaid leave deduction: pro-rated deduction from base salary for unpaid leave / alpha
+  const dailyBaseSalary = Math.round(employee.baseSalary / Math.max(1, workingDays));
+  const unpaidLeaveDeduction = unpaidLeaveDays * dailyBaseSalary;
+
+  // Calculate unapproved late deductions
+  const unapprovedLates = empAttendances.filter(a => a.isLate && a.approvalStatus !== 'APPROVED');
+  const lateDays = auditOverride?.lateDays !== undefined ? auditOverride.lateDays : unapprovedLates.length;
+
+  let unapprovedLateDeduction = 0;
+  if (!auditOverride?.isLatePenaltyWaived) {
+    if (auditOverride?.lateMinutes !== undefined) {
+      const blocks = Math.ceil(Math.max(0, auditOverride.lateMinutes - rules.lateGracePeriodMinutes) / 15);
+      unapprovedLateDeduction = blocks * rules.latePenaltyPerBlock;
+    } else {
+      unapprovedLates.forEach(late => {
+        const blocks = Math.ceil(Math.max(0, late.lateMinutes - rules.lateGracePeriodMinutes) / 15);
+        unapprovedLateDeduction += blocks * rules.latePenaltyPerBlock;
+      });
+    }
+  }
+
   // Calculate Overtime
-  // Assuming standard OT 10-18 hours for active engineers
   const hourlyBaseRate = Math.round(employee.baseSalary / rules.overtimeFormula.hourlyRateDivisor);
-  const overtimeHours = employee.role === 'Director' ? 0 : 16; // 16 hours sample OT
+  const overtimeHours = auditOverride?.overtimeHours !== undefined 
+    ? auditOverride.overtimeHours 
+    : (employee.role === 'Director' ? 0 : 16);
   const overtimePay = Math.round(
     overtimeHours * (rules.overtimeFormula.subsequentHourRateMultiplier * hourlyBaseRate)
   );
@@ -53,32 +113,43 @@ export function calculateEmployeePayroll(
   const taxableAnnual = Math.max(0, annualGross - ptkp - (bpjsKetenagakerjaan * 12));
   const pph21 = Math.round((taxableAnnual * 0.05) / 12);
 
-  const totalDeductions = unapprovedLateDeduction + bpjsKetenagakerjaan + bpjsKesehatan + pph21;
-  const netSalary = grossSalary - totalDeductions;
+  const totalDeductions = unapprovedLateDeduction + unpaidLeaveDeduction + bpjsKetenagakerjaan + bpjsKesehatan + pph21;
+  const netSalary = Math.max(0, grossSalary - totalDeductions);
 
   // Project Allocation:
-  // Primary project gets 75%, Secondary project or HQ gets 25%
   const primaryProject = projects.find(p => p.id === employee.assignedProjectId) || projects[0];
-  const secondaryProject = projects.find(p => p.id !== employee.assignedProjectId) || projects[1];
+  const secondaryProject = projects.find(p => p.id !== employee.assignedProjectId && p.id !== primaryProject?.id) || (projects.length > 1 ? projects[1] : undefined);
 
-  const projectAllocations = [
-    {
-      projectId: primaryProject.id,
-      projectCode: primaryProject.code,
-      projectName: primaryProject.name,
-      allocatedHours: 125,
-      allocatedCost: Math.round(grossSalary * 0.75),
-      percentage: 75
-    },
-    {
-      projectId: secondaryProject.id,
-      projectCode: secondaryProject.code,
-      projectName: secondaryProject.name,
-      allocatedHours: 42,
-      allocatedCost: Math.round(grossSalary * 0.25),
-      percentage: 25
+  const projectAllocations: ProjectPayrollAllocation[] = [];
+  if (primaryProject) {
+    if (secondaryProject) {
+      projectAllocations.push({
+        projectId: primaryProject.id,
+        projectCode: primaryProject.code || primaryProject.id,
+        projectName: primaryProject.name,
+        allocatedHours: 125,
+        allocatedCost: Math.round(grossSalary * 0.75),
+        percentage: 75
+      });
+      projectAllocations.push({
+        projectId: secondaryProject.id,
+        projectCode: secondaryProject.code || secondaryProject.id,
+        projectName: secondaryProject.name,
+        allocatedHours: 42,
+        allocatedCost: Math.round(grossSalary * 0.25),
+        percentage: 25
+      });
+    } else {
+      projectAllocations.push({
+        projectId: primaryProject.id,
+        projectCode: primaryProject.code || primaryProject.id,
+        projectName: primaryProject.name,
+        allocatedHours: 167,
+        allocatedCost: grossSalary,
+        percentage: 100
+      });
     }
-  ];
+  }
 
   return {
     id: `PAY-${employee.id}-${periodStr.replace(/\s+/g, '')}`,
@@ -94,6 +165,11 @@ export function calculateEmployeePayroll(
     unapprovedLateDeduction,
     overtimeHours,
     overtimePay,
+    leaveDays,
+    unpaidLeaveDays,
+    unpaidLeaveDeduction,
+    hrValidationStatus: auditOverride?.validated ? 'VALIDATED_BY_HR' : 'PENDING_VALIDATION',
+    validationNotes: auditOverride?.notes,
     baseSalary: employee.baseSalary,
     fixedAllowance: employee.fixedAllowance,
     dailyAllowanceTotal,

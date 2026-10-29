@@ -11,7 +11,7 @@ A modern, high-precision Enterprise Human Resource Information System (HRIS) cus
    - Geofence radius validation against PT DMJ office/workshop coordinates using spherical Haversine formula.
    - Dual ISP network gateway identification and physical satellite GPS chip tracking.
    - Zero-distortion `drawCover` camera capture with anti-cheat live timestamp and geotag watermarks.
-   - Optional Sequential WiFi Gateway lock ensuring employee smartphones are physically connected to office WiFi.
+   - Zero-Trust Multi-Site Geofence tracking with instant geocoding and tamper-proof audit trails.
 
 2. **Automated Depnaker Payroll & Project Cost Allocation:**
    - Real-time gross salary, overtime calculation according to Indonesian Ministry of Manpower (Depnaker) official regulations.
@@ -35,7 +35,7 @@ A modern, high-precision Enterprise Human Resource Information System (HRIS) cus
 
 - **Frontend:** React 19, TypeScript, Vite 8, Tailwind CSS, Lucide Icons, Canvas API, QRCode.
 - **Backend:** Node.js, Express, SQLite (`better-sqlite3` with WAL mode).
-- **Deployment & Infra:** PM2 Process Manager, Linux VPS / DEV20 LAN, Cloudflare Edge Tunnels with SSL.
+- **Deployment & Infra:** PM2 Process Manager, POCO Edge Node, Cloudflare Edge Tunnels with SSL.
 
 ---
 

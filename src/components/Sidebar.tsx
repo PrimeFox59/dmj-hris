@@ -12,15 +12,21 @@ import {
   Shield,
   Crown,
   History,
-  Briefcase
+  Briefcase,
+  MessageSquare,
+  Mail,
+  Settings,
+  CalendarDays,
+  HardHat
 } from 'lucide-react';
-import { UserRole, SystemRole } from '../types';
+import { UserRole, SystemRole, Employee, canAccessProjectModule, isProjectManager } from '../types';
 
 interface SidebarProps {
   activeTab: string;
   onSelectTab: (tabId: string) => void;
   userRole: UserRole;
   systemRole?: SystemRole;
+  currentUser?: Employee;
   pendingApprovalsCount: number;
 }
 
@@ -29,32 +35,35 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectTab,
   userRole,
   systemRole = 'staff',
+  currentUser,
   pendingApprovalsCount
 }) => {
   const [hoveredTab, setHoveredTab] = useState<string | null>(null);
 
+  const canViewProjects = canAccessProjectModule(currentUser);
+
   // Build tailored menus based on RBAC role
   const getMenuItems = () => {
-    if (systemRole === 'staff') {
-      return [
+    const buildStaffItems = () => {
+      const staffItems = [
         {
           id: 'dashboard',
           title: 'PORTAL KINERJA SAYA',
           desc: 'Ringkasan kehadiran pribadi, sisa cuti tahunan, slip gaji & proyeksi lembur Anda',
           icon: LayoutDashboard,
-          badge: 'SAYA'
+          badge: null
         },
         {
           id: 'attendance',
           title: 'PRESENSI KAMERA SAYA',
-          desc: 'Presensi selfie kamera geotag, validasi IP resmi kantor & dinas luar mendadak',
+          desc: 'Presensi selfie kamera geotag satelit GPS & dinas luar mendadak',
           icon: Camera,
           badge: null
         },
         {
           id: 'approvals',
           title: 'PENGAJUAN & IZIN SAYA',
-          desc: 'Formulir & riwayat pengajuan cuti, izin sakit, dispensasi lembur & reimbursement',
+          desc: 'Formulir & riwayat pengajuan cuti, izin sakit & dispensasi lembur',
           icon: CheckSquare,
           badge: pendingApprovalsCount > 0 ? pendingApprovalsCount : null
         },
@@ -63,33 +72,45 @@ export const Sidebar: React.FC<SidebarProps> = ({
           title: 'SLIP GAJI SAYA',
           desc: 'Rincian penerimaan gaji pokok, tunjangan kerja, upah lembur & cetak slip resmi PRIME hris',
           icon: Banknote,
-          badge: 'SLIP'
-        },
-        {
-          id: 'projects',
-          title: 'PROYEK & SITE SAYA',
-          desc: 'Informasi penugasan proyek, jadwal jam in/out site & kebijakan cuti roster',
-          icon: Briefcase,
-          badge: null
-        },
-        {
-          id: 'users',
-          title: 'PROFIL DATA SAYA',
-          desc: 'Cek data NIK, departemen, rekening bank payroll, kuota cuti & device MAC terikat',
-          icon: UserCheck,
           badge: null
         }
       ];
+
+      staffItems.push({
+        id: 'users',
+        title: 'PROFIL DATA SAYA',
+        desc: 'Cek data NIK, departemen, rekening bank payroll, kuota cuti & biometrik wajah',
+        icon: UserCheck,
+        badge: null
+      });
+
+
+      // Project Manager / Site Manager: Presensi Tukang Lapangan
+      if (isProjectManager(currentUser)) {
+        staffItems.splice(2, 0, {
+          id: 'casual_attendance',
+          title: 'PRESENSI TUKANG LAPANGAN',
+          desc: 'Presensi cepat harian & foto tukang/pekerja harian lepas di lokasi proyek',
+          icon: HardHat,
+          badge: null
+        });
+      }
+
+      return staffItems;
+    };
+
+    if (systemRole === 'staff') {
+      return buildStaffItems();
     }
 
-    if (systemRole === 'admin') {
+    if (systemRole === 'admin' || systemRole === 'hr') {
       return [
         {
           id: 'dashboard',
           title: 'DASHBOARD HRIS & SDM',
           desc: 'Monitoring operasional SDM, headcount workshop & rekapitulasi kehadiran harian',
           icon: LayoutDashboard,
-          badge: 'HR'
+          badge: null
         },
         {
           id: 'attendance',
@@ -101,36 +122,43 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {
           id: 'approvals',
           title: 'PUSAT APPROVAL SDM',
-          desc: 'Otorisasi berjenjang pengajuan cuti, izin, lembur, dinas luar & reimbursement',
+          desc: 'Otorisasi berjenjang pengajuan cuti, izin, lembur & dinas luar',
           icon: CheckSquare,
           badge: pendingApprovalsCount > 0 ? pendingApprovalsCount : null
+        },
+        {
+          id: 'casual_attendance',
+          title: 'PRESENSI TUKANG LAPANGAN',
+          desc: 'Monitoring audit foto harian tukang lepas di seluruh proyek',
+          icon: HardHat,
+          badge: null
         },
         {
           id: 'projects',
           title: 'MANAJEMEN PROYEK & SITE',
           desc: 'Alokasi teknisi, jam kerja site, roster kerja & aturan cuti proyek',
           icon: Briefcase,
-          badge: 'PROJ'
+          badge: null
         },
         {
           id: 'users',
           title: 'DATA KARYAWAN',
-          desc: 'Manajemen master karyawan, penugasan proyek, kuota cuti & rekening payroll',
+          desc: 'Manajemen master karyawan, penugasan proyek, kuota cuti & data personel',
           icon: Users,
           badge: null
         },
         {
-          id: 'payroll',
-          title: 'PAYROLL & PROYEK',
-          desc: 'Penggajian rapi per proyek, rekap upah lembur Depnaker & slip gaji resmi PRIME hris',
-          icon: Banknote,
+          id: 'work_calendar',
+          title: 'KALENDER KERJA & CUT-OFF',
+          desc: 'Kalender kerja 1 tahun, setting libur mingguan & tanggal cut-off presensi',
+          icon: CalendarDays,
           badge: null
         },
         {
-          id: 'salary_rules',
-          title: 'PENGATURAN & ATURAN HR',
-          desc: 'Konfigurasi jam kerja kantor, batas toleransi terlambat, rumus lembur & BPJS',
-          icon: Sliders,
+          id: 'system_settings',
+          title: 'SETTING SYSTEM',
+          desc: 'Konfigurasi integrasi WhatsApp Bot Gateway & kredensial SMTP Gmail',
+          icon: Settings,
           badge: null
         },
         {
@@ -143,65 +171,158 @@ export const Sidebar: React.FC<SidebarProps> = ({
       ];
     }
 
-    // Default: Superuser (Direksi & Super Admin)
-    return [
-      {
-        id: 'dashboard',
-        title: 'DASHBOARD TERPADU',
-        desc: 'Pusat monitoring terpadu: HRIS SDM, Finance Kas & Kinerja Saya',
-        icon: LayoutDashboard,
-        badge: 'SUPER'
-      },
-      {
-        id: 'attendance',
-        title: 'PRESENSI KAMERA & WIFI',
-        desc: 'Presensi selfie kamera, WiFi gate, geotag & dinas luar',
-        icon: Camera,
-        badge: null
-      },
-      {
-        id: 'approvals',
-        title: 'APPROVAL & PENGAJUAN',
-        desc: 'Pusat otorisasi tiket SDM, persetujuan dispensasi cuti & kompensasi biaya',
-        icon: CheckSquare,
-        badge: pendingApprovalsCount > 0 ? pendingApprovalsCount : null
-      },
-      {
-        id: 'projects',
-        title: 'MANAJEMEN PROYEK & SITE',
-        desc: 'Alokasi teknisi, jam kerja site, roster kerja & aturan cuti proyek',
-        icon: Briefcase,
-        badge: 'PROJ'
-      },
-      {
-        id: 'users',
-        title: 'MASTER DATA KARYAWAN',
-        desc: 'Manajemen pengguna & staf, jatah cuti, data rekening & MAC device',
-        icon: Users,
-        badge: null
-      },
-      {
-        id: 'payroll',
-        title: 'PAYROLL & PROYEK',
-        desc: 'Penggajian rapi dengan filter per proyek & slip gaji resmi PRIME hris',
-        icon: Banknote,
-        badge: null
-      },
-      {
-        id: 'salary_rules',
-        title: 'PENGATURAN & KEBIJAKAN',
-        desc: 'Konfigurasi kebijakan jam kerja, formula lembur Depnaker, BPJS & IP Gateway',
-        icon: Sliders,
-        badge: null
-      },
-      {
-        id: 'audit',
-        title: 'AUDIT TRAIL & LOG',
-        desc: 'Log rekaman kronologis aktivitas sistem, autentikasi, presensi & perubahan data',
-        icon: History,
-        badge: 'SEC'
-      }
-    ];
+    if (systemRole === 'finance') {
+      return [
+        {
+          id: 'dashboard',
+          title: 'DASHBOARD KEUANGAN & FINANCE',
+          desc: 'Monitoring arus kas payroll, burn rate anggaran proyek & alokasi biaya tenaga kerja',
+          icon: LayoutDashboard,
+          badge: null
+        },
+        {
+          id: 'payroll',
+          title: 'PAYROLL & PENGGAJIAN',
+          desc: 'Otoritas penggajian per proyek, rekap lembur Depnaker, cetak slip gaji resmi & audit upah',
+          icon: Banknote,
+          badge: null
+        },
+        {
+          id: 'users',
+          title: 'DATA GAJI KARYAWAN',
+          desc: 'Master data personel, verifikasi rekening bank payroll, skema gaji pokok & tunjangan',
+          icon: Users,
+          badge: null
+        },
+        {
+          id: 'projects',
+          title: 'BIAYA TENAGA KERJA PROYEK',
+          desc: 'Kontrol pagu anggaran, realisasi biaya labor proyek & estimasi EAC selesai',
+          icon: Briefcase,
+          badge: null
+        },
+        {
+          id: 'approvals',
+          title: 'APPROVAL CUTI & LEMBUR',
+          desc: 'Pusat otorisasi permohonan cuti, kompensasi lembur & justifikasi presensi staf',
+          icon: CheckSquare,
+          badge: pendingApprovalsCount > 0 ? pendingApprovalsCount : null
+        },
+        {
+          id: 'attendance',
+          title: 'REKAP PRESENSI & LEMBUR',
+          desc: 'Audit rekapitulasi kehadiran, jam lembur aktual & presensi dinas luar untuk payroll',
+          icon: Camera,
+          badge: null
+        },
+        {
+          id: 'work_calendar',
+          title: 'KALENDER KERJA & CUT-OFF',
+          desc: 'Kalender kerja 1 tahun, setting libur mingguan & tanggal cut-off presensi',
+          icon: CalendarDays,
+          badge: null
+        },
+        {
+          id: 'system_settings',
+          title: 'SETTING SYSTEM',
+          desc: 'Konfigurasi integrasi WhatsApp Bot Gateway & kredensial SMTP Gmail',
+          icon: Settings,
+          badge: null
+        },
+        {
+          id: 'audit',
+          title: 'AUDIT TRAIL & LOG',
+          desc: 'Log rekaman transaksi finansial, perubahan data gaji & aktivitas sistem',
+          icon: History,
+          badge: null
+        },
+        {
+          id: 'invoice',
+          title: 'INVOICE & TAGIHAN RESMI',
+          desc: 'Invoice digital resmi Termin I (50%) proyek Prime HRIS PT DMJ & verifikasi QR',
+          icon: FileSpreadsheet,
+          badge: null
+        }
+      ];
+    }
+
+    if (systemRole === 'superuser') {
+      return [
+        {
+          id: 'dashboard',
+          title: 'DASHBOARD TERPADU',
+          desc: 'Pusat monitoring terpadu: HRIS SDM, Finance Kas & Kinerja Saya',
+          icon: LayoutDashboard,
+          badge: null
+        },
+        {
+          id: 'attendance',
+          title: 'PRESENSI KAMERA & GEOFENCE',
+          desc: 'Presensi selfie kamera, satelit GPS geofence & dinas luar',
+          icon: Camera,
+          badge: null
+        },
+        {
+          id: 'approvals',
+          title: 'APPROVAL & PENGAJUAN',
+          desc: 'Pusat otorisasi tiket SDM, persetujuan dispensasi cuti & kompensasi lembur',
+          icon: CheckSquare,
+          badge: pendingApprovalsCount > 0 ? pendingApprovalsCount : null
+        },
+        {
+          id: 'projects',
+          title: 'MANAJEMEN PROYEK & SITE',
+          desc: 'Alokasi teknisi, jam kerja site, roster kerja & aturan cuti proyek',
+          icon: Briefcase,
+          badge: null
+        },
+        {
+          id: 'users',
+          title: 'MASTER DATA KARYAWAN',
+          desc: 'Manajemen pengguna & staf, jatah cuti, data rekening & biometrik wajah',
+          icon: Users,
+          badge: null
+        },
+        {
+          id: 'payroll',
+          title: 'PAYROLL & PROYEK',
+          desc: 'Penggajian rapi dengan filter per proyek & slip gaji resmi PRIME hris',
+          icon: Banknote,
+          badge: null
+        },
+        {
+          id: 'work_calendar',
+          title: 'KALENDER KERJA & CUT-OFF',
+          desc: 'Kalender kerja 1 tahun, setting libur mingguan & tanggal cut-off presensi',
+          icon: CalendarDays,
+          badge: null
+        },
+        {
+          id: 'system_settings',
+          title: 'SETTING SYSTEM',
+          desc: 'Konfigurasi integrasi WhatsApp Bot Gateway & kredensial SMTP Gmail',
+          icon: Settings,
+          badge: null
+        },
+        {
+          id: 'audit',
+          title: 'AUDIT TRAIL & LOG',
+          desc: 'Log rekaman kronologis aktivitas sistem, autentikasi, presensi & perubahan data',
+          icon: History,
+          badge: null
+        },
+        {
+          id: 'invoice',
+          title: 'INVOICE & TAGIHAN RESMI',
+          desc: 'Invoice digital resmi Termin I (50%) proyek Prime HRIS PT DMJ & verifikasi QR',
+          icon: FileSpreadsheet,
+          badge: null
+        }
+      ];
+    }
+
+    // Default Fail-Safe (Zero Trust): Kembalikan menu Staf Biasa!
+    return buildStaffItems();
   };
 
   const menuItems = getMenuItems();
@@ -213,7 +334,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {menuItems.map((item, idx) => {
           const Icon = item.icon;
           const isDashboard = item.id === 'dashboard' && (activeTab === 'dashboard' || activeTab === 'dashboard_hris' || activeTab === 'dashboard_finance' || activeTab === 'user_performance');
-          const isActive = activeTab === item.id || isDashboard;
+          const isProjects = item.id === 'projects' && (activeTab === 'projects' || activeTab === 'project_dashboard');
+          const isActive = activeTab === item.id || isDashboard || isProjects;
           const isHovered = hoveredTab === item.id;
 
           return (
@@ -237,13 +359,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
               >
                 <Icon className="w-5 h-5 transition-transform" />
                 
-                {/* Badge for Pending Approvals or Special */}
-                {item.badge !== null && (
-                  <span className={`absolute -top-1 -right-1 text-[9px] font-black rounded-full px-1.5 py-0.2 shadow-xs ${
-                    typeof item.badge === 'number'
-                      ? 'bg-rose-500 text-white animate-pulse'
-                      : 'bg-emerald-500 text-white font-mono-code'
-                  }`}>
+                {/* Badge for Pending Approvals (Strictly Numeric) */}
+                {typeof item.badge === 'number' && item.badge > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-rose-500 text-white text-[10px] font-black rounded-full flex items-center justify-center shadow-md animate-pulse font-mono-code">
                     {item.badge}
                   </span>
                 )}

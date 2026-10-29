@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>FaceAPI Test</title>
+  <script src="https://hris.primeprojectx.net/models/face-api.js"></script>
+</head>
+<body>
+  <div id="output">Running...</div>
+  <script>
+    async function run() {
+      const out = document.getElementById('output');
+      try {
+        const MODEL_URL = 'https://hris.primeprojectx.net/models';
+        await Promise.all([
+          faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+          faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+          faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL)
+        ]);
+        out.innerText = 'Models loaded! Loading Wildan image...';
+
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.src = '/scratch_wildan_front.jpg';
+        await new Promise((res, rej) => { img.onload = res; img.onerror = rej; });
+
+        const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.15 });
+        const det = await faceapi.detectSingleFace(img, options).withFaceLandmarks().withFaceDescriptor();
+        
+        if (det) {
+          out.innerText = 'SUCCESS! Detected with score ' + det.detection.score + ', descriptor length ' + det.descriptor.length;
+        } else {
+          out.innerText = 'FAILED: detectSingleFace returned null!';
+        }
+      } catch (e) {
+        out.innerText = 'ERROR: ' + e.message;
+      }
+    }
+    run();
+  </script>
+</body>
+</html>

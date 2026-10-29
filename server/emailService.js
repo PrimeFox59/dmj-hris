@@ -1,0 +1,734 @@
+import nodemailer from 'nodemailer';
+import {
+  saveEmailNotificationLog,
+  getEmailNotificationLogs,
+  hasSentTodayEmailReminder,
+  getDatabase
+} from './db.js';
+
+/**
+ * Standardize and clean email configuration
+ */
+export function getSmtpConfig(customConfig = null) {
+  const db = getDatabase();
+  let dbRules = null;
+  try {
+    const row = db.prepare("SELECT config_json FROM salary_rules WHERE id = 'default'").get();
+    if (row) dbRules = JSON.parse(row.config_json);
+  } catch (e) {}
+
+  const dbSmtp = dbRules?.smtpConfig || {};
+
+  const host = (customConfig?.host || dbSmtp.host || process.env.SMTP_HOST || 'smtp.gmail.com').trim();
+  const port = Number(customConfig?.port || dbSmtp.port || process.env.SMTP_PORT || 465);
+  const secure = customConfig?.secure !== undefined
+    ? Boolean(customConfig.secure)
+    : (dbSmtp.secure !== undefined ? Boolean(dbSmtp.secure) : (port === 465));
+
+  const rawUser = (customConfig?.user || dbSmtp.user || process.env.SMTP_USER || '').trim();
+  const rawPass = (customConfig?.pass || dbSmtp.pass || process.env.SMTP_PASS || '').trim();
+
+  // Strip spaces from Gmail 16-character App Passwords (e.g. "abcd efgh ijkl mnop" -> "abcdefghijklmnop")
+  const cleanPass = rawPass.replace(/\s+/g, '');
+
+  const fromName = (customConfig?.fromName || dbSmtp.fromName || process.env.SMTP_FROM_NAME || 'PRIME HRIS Enterprise').trim();
+  const fromEmail = (customConfig?.fromEmail || dbSmtp.fromEmail || rawUser || process.env.SMTP_FROM_EMAIL || 'noreply@primeprojectx.net').trim();
+
+  return {
+    enabled: customConfig?.enabled !== undefined ? Boolean(customConfig.enabled) : Boolean(dbSmtp.enabled),
+    host,
+    port,
+    secure,
+    user: rawUser,
+    pass: cleanPass,
+    fromName,
+    fromEmail,
+    notifyAttendanceSuccess: customConfig?.notifyAttendanceSuccess !== undefined
+      ? Boolean(customConfig.notifyAttendanceSuccess)
+      : (dbSmtp.notifyAttendanceSuccess !== false),
+    notifyAttendanceLate: customConfig?.notifyAttendanceLate !== undefined
+      ? Boolean(customConfig.notifyAttendanceLate)
+      : (dbSmtp.notifyAttendanceLate !== false),
+    notifyApprovalSubmitted: customConfig?.notifyApprovalSubmitted !== undefined
+      ? Boolean(customConfig.notifyApprovalSubmitted)
+      : (dbSmtp.notifyApprovalSubmitted !== false),
+    notifyApprovalUpdates: customConfig?.notifyApprovalUpdates !== undefined
+      ? Boolean(customConfig.notifyApprovalUpdates)
+      : (dbSmtp.notifyApprovalUpdates !== false),
+    notifyMorningReminder: customConfig?.notifyMorningReminder !== undefined
+      ? Boolean(customConfig.notifyMorningReminder)
+      : Boolean(dbSmtp.notifyMorningReminder),
+    morningReminderTime: customConfig?.morningReminderTime || dbSmtp.morningReminderTime || '07:30'
+  };
+}
+
+/**
+ * Create nodemailer transporter instance
+ */
+export function createTransporter(config) {
+  return nodemailer.createTransport({
+    host: config.host,
+    port: config.port,
+    secure: config.secure, // true for 465, false for other ports
+    auth: {
+      user: config.user,
+      pass: config.pass
+    },
+    tls: {
+      rejectUnauthorized: false
+    },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000
+  });
+}
+
+/**
+ * Verify SMTP connection & authentication
+ */
+export async function verifySmtp(customConfig = null) {
+  const config = getSmtpConfig(customConfig);
+  if (!config.user || !config.pass) {
+    return {
+      success: false,
+      error: 'Akun Gmail (user) dan App Password (16 digit) wajib diisi'
+    };
+  }
+
+  try {
+    const transporter = createTransporter(config);
+    await transporter.verify();
+    return {
+      success: true,
+      message: `Koneksi SMTP ke ${config.host}:${config.port} (${config.user}) berhasil diverifikasi!`,
+      config: {
+        host: config.host,
+        port: config.port,
+        secure: config.secure,
+        user: config.user,
+        fromName: config.fromName,
+        fromEmail: config.fromEmail,
+        enabled: config.enabled
+      }
+    };
+  } catch (err) {
+    let msg = err.message || 'Gagal memverifikasi koneksi SMTP';
+    if (msg.includes('535') || msg.includes('Username and Password not accepted') || msg.includes('BadCredentials')) {
+      msg = 'Autentikasi Gmail ditolak (535): Pastikan menggunakan 16-digit App Password Gmail, bukan password akun Google biasa.';
+    } else if (msg.includes('ETIMEDOUT') || msg.includes('ESOCKETTIMEDOUT')) {
+      msg = `Koneksi timeout ke ${config.host}:${config.port}. Periksa koneksi internet atau coba port alternatif (465 SSL vs 587 TLS).`;
+    }
+    return {
+      success: false,
+      error: msg
+    };
+  }
+}
+
+/**
+ * Wrap HTML content inside executive responsive template
+ */
+function wrapHtmlEmailTemplate(contentHtml, title = 'Notifikasi PRIME HRIS') {
+  return `<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title}</title>
+</head>
+<body style="margin: 0; padding: 24px 12px; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.06); border: 1px solid #e2e8f0;">
+    <!-- HEADER -->
+    <tr>
+      <td style="background: linear-gradient(135deg, #18345E 0%, #0d1e37 100%); padding: 24px 28px; border-bottom: 3px solid #FF6B00;">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td>
+              <div style="font-size: 10px; font-weight: 800; color: #FF8533; letter-spacing: 1.5px; text-transform: uppercase;">PRIME HRIS ENTERPRISE</div>
+              <div style="font-size: 20px; font-weight: 700; color: #ffffff; margin-top: 4px;">PT Prime Infinity Systems</div>
+            </td>
+            <td align="right">
+              <span style="display: inline-block; background: rgba(255,255,255,0.12); color: #ffffff; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2);">Official Notice</span>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+
+    <!-- BODY -->
+    <tr>
+      <td style="padding: 28px; color: #1e293b; font-size: 14px; line-height: 1.6;">
+        ${contentHtml}
+      </td>
+    </tr>
+
+    <!-- ACTION BUTTON / PORTAL LINK -->
+    <tr>
+      <td style="padding: 0 28px 24px 28px;">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f8fafc; border-radius: 12px; border: 1px solid #e2e8f0; padding: 14px;">
+          <tr>
+            <td style="font-size: 12px; color: #64748b;">
+              Akses portal presensi, modul cuti & slip gaji melalui tautan resmi:
+            </td>
+            <td align="right">
+              <a href="https://hris.primeprojectx.net" style="display: inline-block; background-color: #18345E; color: #ffffff; font-size: 12px; font-weight: 700; text-decoration: none; padding: 8px 16px; border-radius: 8px; border: 1px solid #0d1e37;">
+                Buka HRIS Portal &rarr;
+              </a>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+
+    <!-- FOOTER -->
+    <tr>
+      <td style="background-color: #f8fafc; padding: 18px 28px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #64748b; text-align: center;">
+        <p style="margin: 0 0 6px 0;">Notifikasi ini dikirimkan secara otomatis oleh sistem notifikasi server <strong>PRIME HRIS</strong>.</p>
+        <p style="margin: 0;">&copy; ${new Date().getFullYear()} PT Prime Infinity Systems &bull; <a href="https://hris.primeprojectx.net" style="color: #18345E; text-decoration: underline;">hris.primeprojectx.net</a></p>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+/**
+ * Core Email Dispatcher with SQLite Logging
+ */
+export async function sendEmailNotification(options) {
+  const {
+    to,
+    toName = '',
+    subject,
+    html,
+    text = '',
+    eventType = 'GENERAL_NOTIFICATION',
+    recipientId = null,
+    metadata = {},
+    customConfig = null,
+    bypassEnabledCheck = false
+  } = options;
+
+  if (!to || !to.includes('@')) {
+    const err = `Alamat email tidak valid: ${to}`;
+    console.warn(`[SMTP Service] ${err}`);
+    return { success: false, error: err };
+  }
+
+  const config = getSmtpConfig(customConfig);
+
+  if (!bypassEnabledCheck && !config.enabled) {
+    return { success: false, skipped: true, error: 'Notifikasi SMTP Email sedang dinonaktifkan dalam pengaturan' };
+  }
+
+  if (!config.user || !config.pass) {
+    const err = 'Konfigurasi SMTP belum lengkap (user/pass belum diatur)';
+    console.warn(`[SMTP Service] ${err}`);
+    return { success: false, error: err };
+  }
+
+  const logEntry = {
+    recipientId,
+    recipientName: toName || to,
+    recipientEmail: to,
+    eventType,
+    subject: subject || 'Notifikasi PRIME HRIS',
+    htmlBody: html,
+    textBody: text,
+    metadata,
+    sentAt: new Date().toISOString()
+  };
+
+  try {
+    const transporter = createTransporter(config);
+    const fromAddress = config.fromEmail || config.user;
+    const fromHeader = `"${config.fromName}" <${fromAddress}>`;
+    const toHeader = toName ? `"${toName}" <${to}>` : to;
+
+    const fullHtml = wrapHtmlEmailTemplate(html, subject);
+
+    const info = await transporter.sendMail({
+      from: fromHeader,
+      to: toHeader,
+      subject,
+      text: text || subject,
+      html: fullHtml
+    });
+
+    logEntry.status = 'SENT';
+    logEntry.errorMsg = null;
+    logEntry.metadata = { ...metadata, messageId: info.messageId, response: info.response };
+    saveEmailNotificationLog(logEntry);
+
+    console.log(`[SMTP Service] ✅ Email sent to ${to} (${logEntry.recipientName}) - [${eventType}]`);
+    return { success: true, messageId: info.messageId, recipient: to };
+  } catch (err) {
+    logEntry.status = 'FAILED';
+    logEntry.errorMsg = err.message || 'Unknown SMTP error';
+    saveEmailNotificationLog(logEntry);
+
+    console.error(`[SMTP Service] ❌ Failed sending email to ${to}:`, err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+// =============================================================================
+// DOMAIN-SPECIFIC EMAIL NOTIFICATION DISPATCHERS
+// =============================================================================
+
+/**
+ * 1. Notification: Attendance Success (Tepat Waktu / WFO / Dinas Luar)
+ */
+export async function notifyAttendanceSuccessEmail(employee, record) {
+  if (!employee || !employee.email) return null;
+
+  const timeStr = record.checkInTime || '08:00:00';
+  const dateStr = record.date || new Date().toISOString().substring(0, 10);
+  const modeStr = record.mode === 'DINAS_LUAR' ? 'Dinas Luar Lapangan' : (record.mode === 'WFH' ? 'Work From Home' : 'Work From Office (WFO)');
+  const locationStr = record.location?.address || 'Kantor Pusat / Site Proyek PRIME';
+  const bioScore = record.biometricVerification?.matchScore
+    ? `Biometrik Wajah Valid (${record.biometricVerification.matchScore}%)`
+    : 'Presensi Digital Terverifikasi';
+
+  const subject = `[PRIME HRIS] Bukti Kehadiran Resmi - ${dateStr} - ${employee.name}`;
+
+  const html = `
+    <div style="margin-bottom: 20px;">
+      <span style="display: inline-block; background-color: #ecfdf5; color: #047857; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 9999px; border: 1px solid #a7f3d0;">
+        PRESENSI BERHASIL
+      </span>
+      <h2 style="font-size: 18px; font-weight: 700; color: #0f172a; margin: 12px 0 6px 0;">
+        Konfirmasi Presensi Masuk
+      </h2>
+      <p style="margin: 0; color: #475569; font-size: 14px;">
+        Halo <strong>${employee.name}</strong> (${employee.id}), presensi kehadiran Anda telah resmi tercatat ke dalam sistem database HRIS:
+      </p>
+    </div>
+
+    <table width="100%" cellpadding="8" cellspacing="0" border="0" style="background-color: #f8fafc; border-radius: 10px; border: 1px solid #e2e8f0; font-size: 13px; margin-bottom: 20px;">
+      <tr>
+        <td width="35%" style="color: #64748b; border-bottom: 1px solid #e2e8f0;">Tanggal Presensi</td>
+        <td style="font-weight: 600; color: #0f172a; border-bottom: 1px solid #e2e8f0;">${dateStr}</td>
+      </tr>
+      <tr>
+        <td style="color: #64748b; border-bottom: 1px solid #e2e8f0;">Waktu Check-In</td>
+        <td style="font-weight: 600; color: #047857; border-bottom: 1px solid #e2e8f0;">${timeStr} WIB</td>
+      </tr>
+      <tr>
+        <td style="color: #64748b; border-bottom: 1px solid #e2e8f0;">Mode Kerja</td>
+        <td style="font-weight: 600; color: #0f172a; border-bottom: 1px solid #e2e8f0;">${modeStr}</td>
+      </tr>
+      <tr>
+        <td style="color: #64748b; border-bottom: 1px solid #e2e8f0;">Lokasi / Site</td>
+        <td style="font-weight: 600; color: #0f172a; border-bottom: 1px solid #e2e8f0;">${locationStr}</td>
+      </tr>
+      <tr>
+        <td style="color: #64748b;">Metode Verifikasi</td>
+        <td style="font-weight: 600; color: #0f172a;">${bioScore}</td>
+      </tr>
+    </table>
+
+    <p style="margin: 0; color: #475569; font-size: 13px;">
+      Terima kasih atas kedisiplinan dan dedikasi Anda. Selamat menjalankan aktivitas kerja hari ini dengan optimal.
+    </p>
+  `;
+
+  return sendEmailNotification({
+    to: employee.email,
+    toName: employee.name,
+    subject,
+    html,
+    eventType: 'ATTENDANCE_SUCCESS',
+    recipientId: employee.id,
+    metadata: { attendanceId: record.id, date: dateStr, checkInTime: timeStr }
+  });
+}
+
+/**
+ * 2. Notification: Late Clock-in Warning & Justification Reminder
+ */
+export async function notifyAttendanceLateEmail(employee, record, salaryRules = null) {
+  if (!employee || !employee.email) return null;
+
+  const timeStr = record.checkInTime || '08:45:00';
+  const cutoffStr = salaryRules?.cutoffTime || '08:30';
+  const lateMins = record.lateMinutes || 15;
+  const dateStr = record.date || new Date().toISOString().substring(0, 10);
+  const penaltyPerBlock = salaryRules?.latePenaltyPerBlock || 25000;
+  const estimatedPenalty = Math.ceil(lateMins / 15) * penaltyPerBlock;
+
+  const subject = `[PRIME HRIS Peringatan] Keterlambatan Presensi (${lateMins} Menit) - ${dateStr} - ${employee.name}`;
+
+  const html = `
+    <div style="margin-bottom: 20px;">
+      <span style="display: inline-block; background-color: #fff1f2; color: #e11d48; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 9999px; border: 1px solid #fecdd3;">
+        PERINGATAN KETERLAMBATAN
+      </span>
+      <h2 style="font-size: 18px; font-weight: 700; color: #0f172a; margin: 12px 0 6px 0;">
+        Pemberitahuan Presensi Melebihi Batas Cutoff
+      </h2>
+      <p style="margin: 0; color: #475569; font-size: 14px;">
+        Halo <strong>${employee.name}</strong> (${employee.id}), sistem mencatat waktu check-in Anda hari ini telah melewati batas toleransi cutoff:
+      </p>
+    </div>
+
+    <table width="100%" cellpadding="8" cellspacing="0" border="0" style="background-color: #fffbeb; border-radius: 10px; border: 1px solid #fef3c7; font-size: 13px; margin-bottom: 20px;">
+      <tr>
+        <td width="35%" style="color: #92400e; border-bottom: 1px solid #fef3c7;">Tanggal</td>
+        <td style="font-weight: 600; color: #0f172a; border-bottom: 1px solid #fef3c7;">${dateStr}</td>
+      </tr>
+      <tr>
+        <td style="color: #92400e; border-bottom: 1px solid #fef3c7;">Waktu Check-In</td>
+        <td style="font-weight: 600; color: #b45309; border-bottom: 1px solid #fef3c7;">${timeStr} WIB (Cutoff: ${cutoffStr} WIB)</td>
+      </tr>
+      <tr>
+        <td style="color: #92400e; border-bottom: 1px solid #fef3c7;">Durasi Terlambat</td>
+        <td style="font-weight: 700; color: #b91c1c; border-bottom: 1px solid #fef3c7;">${lateMins} Menit</td>
+      </tr>
+      <tr>
+        <td style="color: #92400e;">Estimasi Penalti Gaji</td>
+        <td style="font-weight: 600; color: #b91c1c;">Rp ${estimatedPenalty.toLocaleString('id-ID')} (sebelum justifikasi disetujui)</td>
+      </tr>
+    </table>
+
+    <div style="background-color: #f8fafc; border-left: 4px solid #FF6B00; padding: 14px; border-radius: 0 8px 8px 0; margin-bottom: 20px; font-size: 13px; color: #334155;">
+      <strong>Petunjuk Justifikasi Keterlambatan:</strong><br>
+      Jika keterlambatan disebabkan oleh kendala operasional mendadak, tugas dinas luar, atau gangguan lalu lintas luar biasa, Anda dapat mengajukan <em>Formulir Justifikasi Keterlambatan</em> melalui menu Pengajuan & Approval pada portal HRIS. Pengajuan yang disetujui oleh atasan akan menghapuskan pemotongan penalti.
+    </div>
+  `;
+
+  return sendEmailNotification({
+    to: employee.email,
+    toName: employee.name,
+    subject,
+    html,
+    eventType: 'ATTENDANCE_LATE',
+    recipientId: employee.id,
+    metadata: { attendanceId: record.id, lateMinutes: lateMins, date: dateStr }
+  });
+}
+
+/**
+ * 3. Notification: Approval Request Submitted (To Approver & Applicant Confirmation)
+ */
+export async function notifyApprovalSubmittedEmail(approvalItem, employee, targetApprover = null) {
+  if (!employee) return null;
+
+  // 1. Email confirmation to applicant
+  if (employee.email) {
+    const subjectApplicant = `[PRIME HRIS] Pengajuan ${approvalItem.type} Berhasil Diserahkan - ${approvalItem.id}`;
+    const htmlApplicant = `
+      <div style="margin-bottom: 20px;">
+        <span style="display: inline-block; background-color: #f1f5f9; color: #334155; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 9999px; border: 1px solid #cbd5e1;">
+          PENGAJUAN TERSERAHKAN
+        </span>
+        <h2 style="font-size: 18px; font-weight: 700; color: #0f172a; margin: 12px 0 6px 0;">
+          Pengajuan Menunggu Persetujuan
+        </h2>
+        <p style="margin: 0; color: #475569; font-size: 14px;">
+          Halo <strong>${employee.name}</strong>, permohonan Anda telah berhasil didaftarkan ke sistem dan saat ini sedang menunggu review atasan:
+        </p>
+      </div>
+
+      <table width="100%" cellpadding="8" cellspacing="0" border="0" style="background-color: #f8fafc; border-radius: 10px; border: 1px solid #e2e8f0; font-size: 13px; margin-bottom: 20px;">
+        <tr>
+          <td width="35%" style="color: #64748b; border-bottom: 1px solid #e2e8f0;">ID Permohonan</td>
+          <td style="font-weight: 600; color: #0f172a; border-bottom: 1px solid #e2e8f0;">${approvalItem.id}</td>
+        </tr>
+        <tr>
+          <td style="color: #64748b; border-bottom: 1px solid #e2e8f0;">Tipe Pengajuan</td>
+          <td style="font-weight: 600; color: #18345E; border-bottom: 1px solid #e2e8f0;">${approvalItem.type}</td>
+        </tr>
+        <tr>
+          <td style="color: #64748b; border-bottom: 1px solid #e2e8f0;">Judul / Perihal</td>
+          <td style="font-weight: 600; color: #0f172a; border-bottom: 1px solid #e2e8f0;">${approvalItem.title}</td>
+        </tr>
+        <tr>
+          <td style="color: #64748b; border-bottom: 1px solid #e2e8f0;">Periode Tanggal</td>
+          <td style="font-weight: 600; color: #0f172a; border-bottom: 1px solid #e2e8f0;">${approvalItem.startDate} ${approvalItem.endDate && approvalItem.endDate !== approvalItem.startDate ? 's/d ' + approvalItem.endDate : ''}</td>
+        </tr>
+        <tr>
+          <td style="color: #64748b;">Target Reviewer</td>
+          <td style="font-weight: 600; color: #0f172a;">${approvalItem.targetApproverRole || 'Project Manager / HRD'}</td>
+        </tr>
+      </table>
+
+      <p style="margin: 0; color: #64748b; font-size: 13px;">
+        Anda akan menerima email notifikasi lanjutan segera setelah atasan memberikan keputusan review.
+      </p>
+    `;
+
+    sendEmailNotification({
+      to: employee.email,
+      toName: employee.name,
+      subject: subjectApplicant,
+      html: htmlApplicant,
+      eventType: 'APPROVAL_SUBMITTED_APPLICANT',
+      recipientId: employee.id,
+      metadata: { approvalId: approvalItem.id, type: approvalItem.type }
+    }).catch(e => console.error('[SMTP Applicant Notice Error]', e));
+  }
+
+  // 2. Email alert to Approver
+  if (targetApprover && targetApprover.email) {
+    const subjectApprover = `[PRIME HRIS Action Required] Permohonan Baru: ${approvalItem.type} - ${employee.name}`;
+    const htmlApprover = `
+      <div style="margin-bottom: 20px;">
+        <span style="display: inline-block; background-color: #eff6ff; color: #1d4ed8; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 9999px; border: 1px solid #bfdbfe;">
+          BUTUH PERSETUJUAN
+        </span>
+        <h2 style="font-size: 18px; font-weight: 700; color: #0f172a; margin: 12px 0 6px 0;">
+          Permohonan Membutuhkan Review Anda
+        </h2>
+        <p style="margin: 0; color: #475569; font-size: 14px;">
+          Halo <strong>${targetApprover.name}</strong>, staf Anda telah mengajukan permohonan yang memerlukan persetujuan:
+        </p>
+      </div>
+
+      <table width="100%" cellpadding="8" cellspacing="0" border="0" style="background-color: #f8fafc; border-radius: 10px; border: 1px solid #e2e8f0; font-size: 13px; margin-bottom: 20px;">
+        <tr>
+          <td width="35%" style="color: #64748b; border-bottom: 1px solid #e2e8f0;">Pemohon</td>
+          <td style="font-weight: 600; color: #0f172a; border-bottom: 1px solid #e2e8f0;">${employee.name} (${employee.id} &bull; ${employee.position || 'Staff'})</td>
+        </tr>
+        <tr>
+          <td style="color: #64748b; border-bottom: 1px solid #e2e8f0;">Tipe Pengajuan</td>
+          <td style="font-weight: 600; color: #18345E; border-bottom: 1px solid #e2e8f0;">${approvalItem.type}</td>
+        </tr>
+        <tr>
+          <td style="color: #64748b; border-bottom: 1px solid #e2e8f0;">Perihal & Alasan</td>
+          <td style="font-weight: 600; color: #0f172a; border-bottom: 1px solid #e2e8f0;">${approvalItem.title} - ${approvalItem.description || '-'}</td>
+        </tr>
+        <tr>
+          <td style="color: #64748b;">Tanggal / Durasi</td>
+          <td style="font-weight: 600; color: #0f172a;">${approvalItem.startDate} ${approvalItem.endDate && approvalItem.endDate !== approvalItem.startDate ? 's/d ' + approvalItem.endDate : ''}</td>
+        </tr>
+      </table>
+
+      <p style="margin: 0 0 16px 0; color: #475569; font-size: 13px;">
+        Silakan buka modul Approval pada portal PRIME HRIS untuk memberikan persetujuan atau catatan perbaikan.
+      </p>
+    `;
+
+    return sendEmailNotification({
+      to: targetApprover.email,
+      toName: targetApprover.name,
+      subject: subjectApprover,
+      html: htmlApprover,
+      eventType: 'APPROVAL_PENDING_ACTION',
+      recipientId: targetApprover.id,
+      metadata: { approvalId: approvalItem.id, applicantId: employee.id, type: approvalItem.type }
+    });
+  }
+
+  return null;
+}
+
+/**
+ * 4. Notification: Approval Decision (Approved / Rejected)
+ */
+export async function notifyApprovalDecisionEmail(approvalItem, employee) {
+  if (!employee || !employee.email) return null;
+
+  const isApproved = approvalItem.status === 'APPROVED';
+  const statusColor = isApproved ? '#047857' : '#b91c1c';
+  const statusBg = isApproved ? '#ecfdf5' : '#fff1f2';
+  const statusBorder = isApproved ? '#a7f3d0' : '#fecdd3';
+  const statusLabel = isApproved ? 'DISETUJUI (APPROVED)' : (approvalItem.status === 'REJECTED' ? 'DITOLAK (REJECTED)' : approvalItem.status);
+
+  const subject = `[PRIME HRIS Update] Status Pengajuan ${approvalItem.type}: ${approvalItem.status} - ${approvalItem.id}`;
+
+  const html = `
+    <div style="margin-bottom: 20px;">
+      <span style="display: inline-block; background-color: ${statusBg}; color: ${statusColor}; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 9999px; border: 1px solid ${statusBorder};">
+        ${statusLabel}
+      </span>
+      <h2 style="font-size: 18px; font-weight: 700; color: #0f172a; margin: 12px 0 6px 0;">
+        Hasil Keputusan Permohonan
+      </h2>
+      <p style="margin: 0; color: #475569; font-size: 14px;">
+        Halo <strong>${employee.name}</strong>, permohonan Anda telah selesai ditinjau oleh pimpinan terkait dengan rincian sebagai berikut:
+      </p>
+    </div>
+
+    <table width="100%" cellpadding="8" cellspacing="0" border="0" style="background-color: #f8fafc; border-radius: 10px; border: 1px solid #e2e8f0; font-size: 13px; margin-bottom: 20px;">
+      <tr>
+        <td width="35%" style="color: #64748b; border-bottom: 1px solid #e2e8f0;">Judul Permohonan</td>
+        <td style="font-weight: 600; color: #0f172a; border-bottom: 1px solid #e2e8f0;">${approvalItem.title}</td>
+      </tr>
+      <tr>
+        <td style="color: #64748b; border-bottom: 1px solid #e2e8f0;">Status Keputusan</td>
+        <td style="font-weight: 700; color: ${statusColor}; border-bottom: 1px solid #e2e8f0;">${statusLabel}</td>
+      </tr>
+      <tr>
+        <td style="color: #64748b; border-bottom: 1px solid #e2e8f0;">Ditinjau Oleh</td>
+        <td style="font-weight: 600; color: #0f172a; border-bottom: 1px solid #e2e8f0;">${approvalItem.reviewedBy || 'Manajemen / HR Lead'}</td>
+      </tr>
+      <tr>
+        <td style="color: #64748b;">Catatan Review</td>
+        <td style="font-style: italic; color: #334155;">"${approvalItem.reviewNote || 'Tidak ada catatan khusus.'}"</td>
+      </tr>
+    </table>
+
+    <p style="margin: 0; color: #64748b; font-size: 13px;">
+      Keputusan ini telah tercatat secara permanen dalam audit log sistem PRIME HRIS.
+    </p>
+  `;
+
+  return sendEmailNotification({
+    to: employee.email,
+    toName: employee.name,
+    subject,
+    html,
+    eventType: `APPROVAL_${approvalItem.status}`,
+    recipientId: employee.id,
+    metadata: { approvalId: approvalItem.id, status: approvalItem.status, reviewedBy: approvalItem.reviewedBy }
+  });
+}
+
+/**
+ * 5. Send Test Diagnostic Email
+ */
+export async function sendTestEmail(targetEmail, customConfig = null) {
+  const config = getSmtpConfig(customConfig);
+  const nowWib = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }) + ' WIB';
+
+  const subject = `[PRIME HRIS] Uji Coba Pengiriman Email SMTP Gmail Sukses! (${nowWib})`;
+
+  const html = `
+    <div style="margin-bottom: 20px;">
+      <span style="display: inline-block; background-color: #ecfdf5; color: #047857; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 9999px; border: 1px solid #a7f3d0;">
+        DIAGNOSTIK SMTP BERHASIL
+      </span>
+      <h2 style="font-size: 18px; font-weight: 700; color: #0f172a; margin: 12px 0 6px 0;">
+        Tes Koneksi SMTP Gmail Berhasil!
+      </h2>
+      <p style="margin: 0; color: #475569; font-size: 14px;">
+        Selamat! Layanan pengiriman notifikasi email via SMTP Gmail pada server PRIME HRIS telah berhasil dikonfigurasi dan berfungsi dengan prima.
+      </p>
+    </div>
+
+    <table width="100%" cellpadding="8" cellspacing="0" border="0" style="background-color: #f8fafc; border-radius: 10px; border: 1px solid #e2e8f0; font-size: 13px; margin-bottom: 20px;">
+      <tr>
+        <td width="35%" style="color: #64748b; border-bottom: 1px solid #e2e8f0;">SMTP Host</td>
+        <td style="font-weight: 600; color: #0f172a; border-bottom: 1px solid #e2e8f0;">${config.host}:${config.port} (${config.secure ? 'SSL' : 'TLS'})</td>
+      </tr>
+      <tr>
+        <td style="color: #64748b; border-bottom: 1px solid #e2e8f0;">Akun Pengirim</td>
+        <td style="font-weight: 600; color: #18345E; border-bottom: 1px solid #e2e8f0;">${config.user}</td>
+      </tr>
+      <tr>
+        <td style="color: #64748b; border-bottom: 1px solid #e2e8f0;">Nama Pengirim</td>
+        <td style="font-weight: 600; color: #0f172a; border-bottom: 1px solid #e2e8f0;">${config.fromName}</td>
+      </tr>
+      <tr>
+        <td style="color: #64748b; border-bottom: 1px solid #e2e8f0;">Waktu Pengujian</td>
+        <td style="font-weight: 600; color: #0f172a; border-bottom: 1px solid #e2e8f0;">${nowWib}</td>
+      </tr>
+      <tr>
+        <td style="color: #64748b;">Target Penerima</td>
+        <td style="font-weight: 600; color: #047857;">${targetEmail}</td>
+      </tr>
+    </table>
+
+    <p style="margin: 0; color: #475569; font-size: 13px;">
+      Semua event presensi, peringatan keterlambatan, dan permohonan cuti kini siap dialirkan ke kotak masuk karyawan secara otomatis.
+    </p>
+  `;
+
+  return sendEmailNotification({
+    to: targetEmail,
+    toName: 'HR & Management Test',
+    subject,
+    html,
+    eventType: 'TEST_EMAIL',
+    bypassEnabledCheck: true,
+    customConfig
+  });
+}
+
+/**
+ * 6. Blast Email to Employees who have not clocked in today
+ */
+export async function blastUnrecordedEmployeesEmail(dateStr = null) {
+  const targetDate = dateStr || new Date().toISOString().substring(0, 10);
+  const db = getDatabase();
+
+  const allEmployees = db.prepare('SELECT id, data_json FROM employees ORDER BY id ASC;').all();
+  const attendances = db.prepare('SELECT employeeId FROM attendances WHERE date = ?;').all(targetDate);
+  const recordedSet = new Set(attendances.map(a => a.employeeId));
+
+  const unrecordedEmployees = [];
+  for (const row of allEmployees) {
+    if (!recordedSet.has(row.id)) {
+      try {
+        const emp = JSON.parse(row.data_json);
+        if (emp && emp.email && emp.status !== 'inactive') {
+          unrecordedEmployees.push(emp);
+        }
+      } catch (e) {}
+    }
+  }
+
+  const results = [];
+  let sentCount = 0;
+  let failedCount = 0;
+
+  for (const emp of unrecordedEmployees) {
+    const subject = `[PRIME HRIS Pengingat] Anda Belum Melakukan Presensi Hari Ini (${targetDate})`;
+    const html = `
+      <div style="margin-bottom: 20px;">
+        <span style="display: inline-block; background-color: #fffbeb; color: #b45309; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 9999px; border: 1px solid #fef3c7;">
+          PENGINGAT PRESENSI
+        </span>
+        <h2 style="font-size: 18px; font-weight: 700; color: #0f172a; margin: 12px 0 6px 0;">
+          Pengingat Presensi Kehadiran Harian
+        </h2>
+        <p style="margin: 0; color: #475569; font-size: 14px;">
+          Halo <strong>${emp.name}</strong> (${emp.id}), sistem mencatat hingga saat ini Anda <strong>belum</strong> melakukan presensi masuk kerja untuk hari ini (<strong>${targetDate}</strong>).
+        </p>
+      </div>
+
+      <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; margin-bottom: 20px; font-size: 13px; color: #334155;">
+        <p style="margin: 0 0 10px 0;">Segera lakukan presensi kehadiran melalui portal resmi sebelum batas cutoff jam kerja:</p>
+        <div style="text-align: center; margin: 14px 0;">
+          <a href="https://hris.primeprojectx.net" style="display: inline-block; background-color: #FF6B00; color: #ffffff; font-weight: 700; text-decoration: none; padding: 10px 24px; border-radius: 8px;">
+            Buka Portal Presensi Sekarang &rarr;
+          </a>
+        </div>
+        <p style="margin: 0; font-size: 12px; color: #64748b;">
+          *Abaikan email ini jika Anda sedang dalam status Cuti atau Izin Resmi yang telah disetujui atasan.
+        </p>
+      </div>
+    `;
+
+    const res = await sendEmailNotification({
+      to: emp.email,
+      toName: emp.name,
+      subject,
+      html,
+      eventType: 'CUTOFF_REMINDER_BLAST',
+      recipientId: emp.id,
+      metadata: { date: targetDate }
+    });
+
+    if (res.success) {
+      sentCount++;
+      results.push({ id: emp.id, name: emp.name, email: emp.email, status: 'SENT' });
+    } else {
+      failedCount++;
+      results.push({ id: emp.id, name: emp.name, email: emp.email, status: 'FAILED', error: res.error });
+    }
+
+    // Small delay to prevent rate limiting
+    await new Promise(r => setTimeout(r, 200));
+  }
+
+  return {
+    success: true,
+    targetDate,
+    totalTargeted: unrecordedEmployees.length,
+    sentCount,
+    failedCount,
+    details: results
+  };
+}

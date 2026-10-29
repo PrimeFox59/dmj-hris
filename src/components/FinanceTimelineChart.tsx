@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import React, { useState, useMemo } from 'react';
 import {
   Banknote,
@@ -14,10 +15,12 @@ import {
   Building2,
   PieChart,
   ShieldCheck,
-  ChevronRight
+  ChevronRight,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { Project, Employee, SalaryRuleConfig } from '../types';
-import { formatIDR } from '../utils/payrollCalculator';
+import { formatSalaryDisplay } from '../utils/payrollCalculator';
 
 interface FinanceTimelineChartProps {
   projects: Project[];
@@ -47,6 +50,7 @@ export const FinanceTimelineChart: React.FC<FinanceTimelineChartProps> = ({
   const [selectedProjectId, setSelectedProjectId] = useState<string>('ALL');
   const [scrubberDay, setScrubberDay] = useState<number>(8); // Defaults to Day 8 (Today: Sep 8)
   const [selectedMilestone, setSelectedMilestone] = useState<FinancialMilestone | null>(null);
+  const [showChartNominal, setShowChartNominal] = useState<boolean>(false);
 
   // Compute total monthly payroll estimate across all employees
   const totalMonthlyBaseSalary = employees.reduce((acc, e) => acc + e.baseSalary, 0);
@@ -67,7 +71,7 @@ export const FinanceTimelineChart: React.FC<FinanceTimelineChartProps> = ({
       category: 'PREPARATION',
       estAmount: 0,
       status: 'COMPLETED',
-      description: 'Rekonsiliasi awal rekaman check-in kamera, verifikasi WiFi gate kantor, dan penyesuaian dinas luar site Pomalaa.',
+      description: 'Rekonsiliasi awal rekaman check-in kamera, verifikasi Geofence GPS kantor, dan penyesuaian dinas luar site Pomalaa.',
       parties: ['HR People Operations', 'Site Supervisor']
     },
     {
@@ -129,9 +133,9 @@ export const FinanceTimelineChart: React.FC<FinanceTimelineChartProps> = ({
 
   // Filtered Project stats
   const activeProject = selectedProjectId === 'ALL' ? null : projects.find(p => p.id === selectedProjectId);
-  const totalAllocatedBudget = projects.reduce((acc, p) => acc + p.allocatedBudget, 0);
-  const totalActualLaborCost = projects.reduce((acc, p) => acc + p.actualLaborCost, 0);
-  const overallBurnRate = Math.round((totalActualLaborCost / totalAllocatedBudget) * 100);
+  const totalAllocatedBudget = projects.reduce((acc, p) => acc + (p.allocatedBudget || 0), 0);
+  const totalActualLaborCost = projects.reduce((acc, p) => acc + (p.actualLaborCost || 0), 0);
+  const overallBurnRate = totalAllocatedBudget > 0 ? Math.round((totalActualLaborCost / totalAllocatedBudget) * 100) : 0;
 
   // Bank Disbursement Breakdown Data
   const bankBreakdowns = [
@@ -199,8 +203,21 @@ export const FinanceTimelineChart: React.FC<FinanceTimelineChartProps> = ({
           </p>
         </div>
 
-        {/* Project Selector Filter */}
-        <div className="flex items-center gap-2">
+        {/* Project Selector Filter & Privacy Toggle */}
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setShowChartNominal(prev => !prev)}
+            className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+              showChartNominal
+                ? 'bg-orange-50 text-[#FF6B00] border-orange-200'
+                : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
+            }`}
+            title="Toggle sensor angka nominal arus kas (default: sensor)"
+          >
+            {showChartNominal ? <EyeOff className="w-3.5 h-3.5 text-slate-400" /> : <Eye className="w-3.5 h-3.5 text-[#FF6B00]" />}
+            <span>{showChartNominal ? 'Sembunyikan Nominal' : 'Tampilkan Nominal'}</span>
+          </button>
+
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-xs">
             <Building2 className="w-3.5 h-3.5 text-[#FF6B00]" />
             <span className="font-bold text-slate-600">Alokasi Proyek:</span>
@@ -227,7 +244,7 @@ export const FinanceTimelineChart: React.FC<FinanceTimelineChartProps> = ({
             Estimasi Disbursement Net (THP)
           </span>
           <div className="text-lg font-black text-slate-900 font-mono-code mt-0.5">
-            {formatIDR(totalNetPayrollDisbursement)}
+            {formatSalaryDisplay(totalNetPayrollDisbursement, showChartNominal)}
           </div>
           <span className="text-[10px] text-slate-600 font-medium">
             Jadwal transfer: 25 September 2026
@@ -239,10 +256,12 @@ export const FinanceTimelineChart: React.FC<FinanceTimelineChartProps> = ({
             Budget Tenaga Kerja Proyek
           </span>
           <div className="text-lg font-black text-emerald-900 font-mono-code mt-0.5">
-            {formatIDR(activeProject ? activeProject.allocatedBudget : totalAllocatedBudget)}
+            {activeProject
+              ? ((activeProject.allocatedBudget || 0) > 0 ? formatSalaryDisplay(activeProject.allocatedBudget, showChartNominal) : 'Belum Ditentukan (TBD)')
+              : (totalAllocatedBudget > 0 ? formatSalaryDisplay(totalAllocatedBudget, showChartNominal) : 'Belum Ditentukan (TBD)')}
           </div>
           <span className="text-[10px] text-emerald-700 font-medium">
-            {activeProject ? activeProject.code : '4 Proyek Aktif Terdaftar'}
+            {activeProject ? activeProject.code : `${projects.length} Proyek Aktif Terdaftar`}
           </span>
         </div>
 
@@ -251,7 +270,7 @@ export const FinanceTimelineChart: React.FC<FinanceTimelineChartProps> = ({
             Estimasi Lembur Depnaker
           </span>
           <div className="text-lg font-black text-amber-900 font-mono-code mt-0.5">
-            {formatIDR(totalEstimatedOvertime)}
+            {formatSalaryDisplay(totalEstimatedOvertime, showChartNominal)}
           </div>
           <span className="text-[10px] text-amber-700 font-medium">
             Formula 1/173 Upah Pokok
@@ -264,11 +283,15 @@ export const FinanceTimelineChart: React.FC<FinanceTimelineChartProps> = ({
           </span>
           <div className="text-lg font-black text-blue-900 font-mono-code mt-0.5">
             {activeProject
-              ? `${Math.round((activeProject.actualLaborCost / activeProject.allocatedBudget) * 100)}%`
-              : `${overallBurnRate}%`}
+              ? ((activeProject.allocatedBudget || 0) > 0
+                  ? `${Math.round((activeProject.actualLaborCost / activeProject.allocatedBudget) * 100)}%`
+                  : '0% (TBD)')
+              : (totalAllocatedBudget > 0 ? `${overallBurnRate}%` : '0% (TBD)')}
           </div>
           <span className="text-[10px] text-blue-700 font-medium">
-            Status: Aman di bawah batas target
+            {activeProject
+              ? ((activeProject.allocatedBudget || 0) > 0 ? 'Status: Terpantau' : 'Status: Menunggu penetapan pagu')
+              : (totalAllocatedBudget > 0 ? 'Status: Aman di bawah batas target' : 'Status: Menunggu penetapan pagu')}
           </span>
         </div>
       </div>
@@ -287,7 +310,7 @@ export const FinanceTimelineChart: React.FC<FinanceTimelineChartProps> = ({
                 {scrubberDay} September 2026 {scrubberDay === 8 ? '• (HARI INI)' : ''}
               </p>
               <p className="text-[11px] text-slate-500">
-                Akumulasi Komitmen Kas: <strong className="text-emerald-700 font-mono-code">{formatIDR(currentScrubbedCash)}</strong>
+                Akumulasi Komitmen Kas: <strong className="text-emerald-700 font-mono-code">{formatSalaryDisplay(currentScrubbedCash, showChartNominal)}</strong>
               </p>
             </div>
           </div>
@@ -310,8 +333,8 @@ export const FinanceTimelineChart: React.FC<FinanceTimelineChartProps> = ({
         <div className="relative w-full overflow-hidden rounded-2xl bg-white p-3 border border-slate-200/80 shadow-inner">
           
           <div className="flex items-center justify-between text-[11px] font-mono-code font-bold text-slate-400 mb-2 px-2">
-            <span>Rp 0 (Awal Bulan)</span>
-            <span className="text-[#FF6B00] font-black">Puncak Disbursement: {formatIDR(totalNetPayrollDisbursement)} (Tgl 25)</span>
+            <span>{showChartNominal ? 'Rp 0' : 'Rp ••••••••'} (Awal Bulan)</span>
+            <span className="text-[#FF6B00] font-black">Puncak Disbursement: {formatSalaryDisplay(totalNetPayrollDisbursement, showChartNominal)} (Tgl 25)</span>
           </div>
 
           <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} className="w-full h-48 select-none">
@@ -479,7 +502,7 @@ export const FinanceTimelineChart: React.FC<FinanceTimelineChartProps> = ({
               <p className="text-[11px] text-slate-500 line-clamp-2 mt-1">{m.description}</p>
               <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] font-mono-code">
                 <span className="text-slate-400">Estimasi Nilai:</span>
-                <span className="font-bold text-slate-800">{m.estAmount > 0 ? formatIDR(m.estAmount) : 'SOP Validasi'}</span>
+                <span className="font-bold text-slate-800">{m.estAmount > 0 ? formatSalaryDisplay(m.estAmount, showChartNominal) : 'SOP Validasi'}</span>
               </div>
             </div>
           ))}
@@ -503,7 +526,7 @@ export const FinanceTimelineChart: React.FC<FinanceTimelineChartProps> = ({
                     {b.bank}
                   </span>
                   <div className="text-sm font-black text-slate-900 font-mono-code mt-0.5">
-                    {formatIDR(b.total)}
+                    {formatSalaryDisplay(b.total, showChartNominal)}
                   </div>
                 </div>
                 <div className="mt-2 pt-2 border-t border-slate-200/60 flex items-center justify-between text-[10px] text-slate-500">
@@ -517,10 +540,16 @@ export const FinanceTimelineChart: React.FC<FinanceTimelineChartProps> = ({
 
       </div>
 
-      {/* Modal Detail Milestone Finansial */}
-      {selectedMilestone && (
-        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 relative modal-dialog-animate">
+      {/* Modal Detail Milestone Finansial (Portal to document.body for guaranteed viewport centering) */}
+      {selectedMilestone && typeof document !== 'undefined' && createPortal(
+        <div 
+          className="fixed inset-0 z-[9999] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in"
+          onClick={() => setSelectedMilestone(null)}
+        >
+          <div 
+            className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 relative modal-dialog-animate my-auto max-h-[92vh] overflow-y-auto custom-scrollbar"
+            onClick={e => e.stopPropagation()}
+          >
             <div className="flex items-center gap-2 mb-3">
               <span className="px-2.5 py-0.5 rounded-md bg-[#FF6B00] text-white text-[10px] font-black uppercase font-mono-code">
                 DETAIL TAHAPAN SIKLUS PAYROLL
@@ -541,7 +570,7 @@ export const FinanceTimelineChart: React.FC<FinanceTimelineChartProps> = ({
               <div className="flex justify-between">
                 <span className="text-slate-500">Estimasi Pengeluaran Kas:</span>
                 <span className="font-mono-code font-black text-emerald-700">
-                  {selectedMilestone.estAmount > 0 ? formatIDR(selectedMilestone.estAmount) : 'Non-Cash Task'}
+                  {selectedMilestone.estAmount > 0 ? formatSalaryDisplay(selectedMilestone.estAmount, showChartNominal) : 'Non-Cash Task'}
                 </span>
               </div>
               <div className="flex justify-between">
@@ -569,7 +598,8 @@ export const FinanceTimelineChart: React.FC<FinanceTimelineChartProps> = ({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

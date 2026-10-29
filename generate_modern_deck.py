@@ -249,7 +249,7 @@ p_sub.font.color.rgb = TEXT_MUTED
 # 5 Core Module Cards (Horizontal Row)
 modules_s1 = [
     ("PRESENSI GEOTAG", "Selfie webcam + watermark NIK, GPS & waktu WIB."),
-    ("WIFI GATEWAY", "Validasi jaringan resmi kantor anti titip absen."),
+    ("GEOFENCE MULTI-SITE", "Validasi radius presisi kantor & site anti titip absen."),
     ("PROJECT COSTING", "Alokasi biaya upah langsung per kontrak SPK."),
     ("PAYROLL DEPNAKER", "Formula lembur 1/173 & slip resmi ber-QR Code."),
     ("APPROVAL HUB", "Disposisi satu pintu cuti, lembur, & dinas luar.")
@@ -407,7 +407,7 @@ p.font.color.rgb = BLUE_PRIMARY
 
 p_desc = tf_t.add_paragraph()
 p_desc.space_before = Pt(4)
-p_desc.text = "Prime HRIS Enterprise adalah sistem Enterprise Resource Planning & Human Resource Information System terpadu yang dirancang khusus untuk PT Dwi Martha Jaya. Sistem mengintegrasikan seluruh rantai proses bisnis kontraktor: mulai dari penugasan engineering design, presensi kamera selfie ber-watermark permanen, penguncian jaringan WiFi gateway, akuntansi biaya upah tenaga kerja langsung per proyek konstruksi (Project Cost Accounting), hingga kalkulasi otomatis lembur Depnaker dan pencetakan slip gaji digital ber-QR Code."
+p_desc.text = "Prime HRIS Enterprise adalah sistem Enterprise Resource Planning & Human Resource Information System terpadu yang dirancang khusus untuk PT Dwi Martha Jaya. Sistem mengintegrasikan seluruh rantai proses bisnis kontraktor: mulai dari penugasan engineering design, presensi kamera selfie ber-watermark permanen, penguncian multi-site GPS geofence, akuntansi biaya upah tenaga kerja langsung per proyek konstruksi (Project Cost Accounting), hingga kalkulasi otomatis lembur Depnaker dan pencetakan slip gaji digital ber-QR Code."
 p_desc.font.name = FONT_BODY
 p_desc.font.size = Pt(9.5)
 p_desc.font.color.rgb = TEXT_MUTED
@@ -495,11 +495,11 @@ goals_s3 = [
     ("MEMPERMUDAH MONITORING PRESENSI", "Pemantauan kehadiran teknisi lapangan dan staf workshop secara real-time."),
     ("MENGONTROL BIAYA UPAH & LEMBUR", "Pencegahan pembengkakan biaya tenaga kerja langsung per nomor kontrak SPK."),
     ("MEMASTIKAN AKURASI WATERMARK FOTO", "Stempel digital NIK, Nama, GPS, dan waktu WIB permanen anti titip absen."),
-    ("MENGELOLA DATABASE & MAC PERANGKAT", "Sentralisasi data SDM resmi, rekening payroll, dan binding hardware perangkat."),
+    ("MENGELOLA DATABASE & AKSES AKUN", "Sentralisasi data SDM resmi, rekening payroll, dan hak akses bertingkat RBAC."),
     ("MENGURANGI KESALAHAN HITUNG LEMBUR", "Otomatisasi formula baku Menakertrans RI (1/173 upah sejam) bebas salah."),
     ("MEMPERMUDAH PENERBITAN SLIP GAJI", "Cetak slip resmi berlogo PT DMJ lengkap dengan QR Code verifikasi dokumen."),
     ("MENYEDIAKAN FORECASTING BIAYA (EAC)", "Peramalan total estimasi biaya hingga penyelesaian kontrak proyek."),
-    ("SENTRALISASI DISPOSISI APPROVAL", "Satu pintu persetujuan cuti tahunan, izin sakit, lembur, dan klaim reimbursement."),
+    ("SENTRALISASI DISPOSISI APPROVAL", "Satu pintu persetujuan cuti tahunan, izin sakit, lembur, dan dinas luar mendadak."),
     ("FLEKSIBILITAS DINAS LUAR MENDADAK", "Bypass terkendali saat teknisi dipanggil darurat ke site klien tanpa alpa salah.")
 ]
 
@@ -558,7 +558,7 @@ impacts_s4 = [
     ("MONITORING PROYEK REAL-TIME", "Seluruh progres jam kerja teknisi di Smelter Manyar JIIPE maupun Workshop terpantau live."),
     ("TRACEABILITY & AUDIT TRAIL LENGKAP", "Setiap riwayat absensi tersimpan dengan bukti foto selfie dan koordinat satelit permanen."),
     ("KEPATUHAN REGULASI KEMENAKER", "Perhitungan upah lembur sesuai Kepmenakertrans RI, terhindar dari sanksi audit ketenagakerjaan."),
-    ("PENCEGAHAN TITIP ABSEN & FAKE GPS", "Verifikasi berjenjang kamera + WiFi Gateway memastikan kehadiran fisik 100% sah."),
+    ("PENCEGAHAN TITIP ABSEN & FAKE GPS", "Verifikasi berjenjang kamera + Multi-Site Geofence memastikan kehadiran fisik 100% sah."),
     ("EFISIENSI WAKTU REKAP (HEMAT 90%)", "Rekapitulasi gaji bulanan dari biasanya memakan 3 hari kerja kini selesai dalam beberapa detik."),
     ("DIGITALISASI DOKUMEN & SLIP BER-QR", "Slip gaji resmi diterbitkan secara otomatis dengan QR Code verifikasi dokumen perbankan."),
     ("EVALUASI LABA/RUGI PER KONTRAK SPK", "Transparansi alokasi biaya upah langsung per proyek memudahkan evaluasi profitabilitas riil."),
@@ -630,7 +630,7 @@ p_bt.font.bold = True
 p_bt.font.color.rgb = WHITE
 
 modules_20 = [
-    "01. Master SDM & Rekening", "02. SPK & Kontrak Proyek", "03. Presensi Kamera Selfie", "04. Watermark NIK & GPS", "05. Sequential WiFi Gate",
+    "01. Master SDM & Rekening", "02. SPK & Kontrak Proyek", "03. Presensi Kamera Selfie", "04. Watermark NIK & GPS", "05. Multi-Site Geofence",
     "06. Geofencing Satelit 100m", "07. Form Alasan Terlambat", "08. Bypass Dinas Luar Site", "09. Log Riwayat & Bukti Foto", "10. Task Delegation Teknisi",
     "11. Timesheet Jam Kerja", "12. Formula Lembur 1/173", "13. Project Cost Accounting", "14. Forecast Anggaran (EAC)", "15. Warning Cost Overrun",
     "16. Cetak Slip Gaji QR Code", "17. Ekspor CSV Bank Payroll", "18. Dashboard Eksekutif SDM", "19. Dashboard Finansial Kas", "20. Multi-Role RBAC 3-Tier"
@@ -671,7 +671,7 @@ approvals_6 = [
     ("Izin Sakit", "Verifikasi surat dokter"),
     ("Dispensasi Terlambat", "Pembebasan penalti gaji"),
     ("Disposisi Dinas Luar", "Validasi SPK & foto geotag"),
-    ("Reimbursement", "Klaim bensin, tol & material"),
+    ("Lembur Proyek", "Persetujuan lembur Depnaker"),
     ("Laporan Rekapitulasi", "Audit trail lengkap HRD")
 ]
 
@@ -865,7 +865,7 @@ p_sub2.font.color.rgb = TEXT_MUTED
 
 # 5 Add-On Rows (y: 2.82, 3.25, 3.68, 4.11, 4.54, h=0.40)
 addons = [
-    ("Kunci WiFi Kantor", "Rp 1.000.000", "Kunci tombol absensi wajib terkoneksi WiFi kantor/workshop DMJ.", BLUE_PALE, CARD_BORDER_BLUE, BLUE_PRIMARY),
+    ("Multi-Site GPS Geofence", "Rp 1.000.000", "Penguncian radius presensi presisi kantor, workshop & site DMJ.", BLUE_PALE, CARD_BORDER_BLUE, BLUE_PRIMARY),
     ("Mobile Version (Smartphone)", "Rp 1.000.000", "Akses web HP: presensi, selfie biometrik, GPS native & slip mandiri.", MINT_PALE, RGBColor(167, 243, 208), MINT_GREEN),
     ("Source Code (Offline)", "Rp 200.000", "Lisensi source code untuk dijalankan di PC kantor tanpa biaya cloud.", RGBColor(254, 243, 199), RGBColor(253, 230, 138), ORANGE_ACCENT),
     ("Domain DMJhris.com", "± Rp 250.000/thn", "Gunakan domain brand sendiri. Menyesuaikan tarif registrasi resmi.", BLUE_PALE, CARD_BORDER_BLUE, BLUE_PRIMARY),
@@ -986,7 +986,7 @@ p_m1.font.size = Pt(7.5)
 p_m1.font.bold = True
 p_m1.font.color.rgb = BLUE_DARK
 p_m2 = tf_mb3.add_paragraph()
-p_m2.text = "Paket Dasar (2,5jt) + Kunci WiFi (1jt) + Mobile (1jt) + Source Code (200rb) + Domain (250rb/thn) + Pelatihan Full Team (1jt)"
+p_m2.text = "Paket Dasar (2,5jt) + Multi-Site Geofence (1jt) + Mobile (1jt) + Source Code (200rb) + Domain (250rb/thn) + Pelatihan Full Team (1jt)"
 p_m2.font.name = FONT_BODY
 p_m2.font.size = Pt(6.3)
 p_m2.font.color.rgb = TEXT_MUTED
@@ -1007,7 +1007,7 @@ p_k3.font.color.rgb = ORANGE_ACCENT
 feats_c3 = [
     "1 GB Storage + 10 GB Backup Cadangan",
     "Akses Komplit: Desktop Web Admin + Mobile Smartphone",
-    "Pengamanan Ganda: Selfie Wajah + Kunci WiFi Kantor",
+    "Pengamanan Ganda: Selfie Wajah + Multi-Site Geofence",
     "Penggajian Depnaker Lengkap & Slip Gaji QR",
     "Garansi Bebas Masalah & Update 12 Bulan",
     "Setup Custom Domain Gratis (DMJhris.com)"
@@ -1148,8 +1148,8 @@ add_slide_heading(s7, "JADWAL PELAKSANAAN & JAMINAN SLA",
 
 # 4 Sprint Cards
 sprints_s7 = [
-    ("MINGGU 1", "Sprint 1: Inception & Whitelist", "• Kick-off meeting & analisis proses kerja\n• Whitelist SSID WiFi & BSSID kantor DMJ\n• Setup database karyawan, NIK & rekening\n• Konfigurasi VPS running apps & SSL"),
-    ("MINGGU 2-3", "Sprint 2: Core Development", "• Implementasi kamera viewfinder & watermark\n• Penguncian Sequential WiFi Gateway\n• Integrasi alur bypass Dinas Luar Mendadak\n• Pembangunan mesin payroll lembur Depnaker"),
+    ("MINGGU 1", "Sprint 1: Inception & Setup", "• Kick-off meeting & analisis proses kerja\n• Setup Multi-Site Geofence kantor & workshop\n• Setup database karyawan, NIK & rekening\n• Konfigurasi VPS running apps & SSL"),
+    ("MINGGU 2-3", "Sprint 2: Core Development", "• Implementasi kamera viewfinder & watermark\n• Kalibrasi Precision Multi-Site Geofence\n• Integrasi alur bypass Dinas Luar Mendadak\n• Pembangunan mesin payroll lembur Depnaker"),
     ("MINGGU 4", "Sprint 3: Testing & UAT", "• User Acceptance Testing (UAT) staf & HR\n• Kalibrasi geofence Manyar JIIPE & Surabaya\n• Pengujian simulasi anti Fake GPS / VPN\n• Verifikasi akurasi potongan BPJS & PPh21"),
     ("MINGGU 5", "Sprint 4: Handover & Go-Live", "• Pelatihan HR Admin & jajaran pimpinan\n• Handover dokumentasi & credential akses\n• Migrasi data absensi aktif PT DMJ\n• Go-Live resmi & aktivasi garansi 12 bulan")
 ]

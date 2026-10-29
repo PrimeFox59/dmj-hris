@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import React, { useState, useRef, useEffect } from 'react';
 import {
   X,
@@ -27,8 +28,9 @@ import {
   Clock,
   LogOut
 } from 'lucide-react';
-import { Employee, getEffectiveSystemRole, AuthUser } from '../types';
+import { Employee, getEffectiveSystemRole, AuthUser, BiometricProfile } from '../types';
 import { api } from '../services/api';
+import { BiometricEnrollmentModal } from './BiometricEnrollmentModal';
 
 export type ProfileTabId = 'profile' | 'photo' | 'password' | 'security';
 
@@ -154,6 +156,17 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
   const [selectedAvatar, setSelectedAvatar] = useState(currentUser.avatar);
   const [isSavingAvatar, setIsSavingAvatar] = useState(false);
   const [avatarSuccessMsg, setAvatarSuccessMsg] = useState<string | null>(null);
+  const [isBiometricModalOpen, setIsBiometricModalOpen] = useState(false);
+
+  const handleSaveBiometric = async (profile: BiometricProfile, updateAvatarAsWell: boolean) => {
+    const res = await api.saveBiometricProfile(currentUser.id, profile, updateAvatarAsWell);
+    onUpdateEmployee(res.employee);
+    if (updateAvatarAsWell && profile.samples?.front) {
+      setSelectedAvatar(profile.samples.front);
+    }
+    setAvatarSuccessMsg('🛡️ Profil Biometrik 4 Pose Wajah Berhasil Disimpan!');
+    setTimeout(() => setAvatarSuccessMsg(null), 4000);
+  };
 
   // Password State
   const [oldPassword, setOldPassword] = useState('');
@@ -285,8 +298,8 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
     setPasswordError(null);
     setPasswordSuccessMsg(null);
 
-    if (newPassword.length < 5) {
-      setPasswordError('Kata sandi baru harus memiliki panjang minimal 5 karakter.');
+    if (newPassword.length < 3) {
+      setPasswordError('Kata sandi baru harus memiliki panjang minimal 3 karakter.');
       return;
     }
 
@@ -314,8 +327,12 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/60 backdrop-blur-md animate-in fade-in duration-200">
+  const modalContent = (
+    <>
+      <div 
+        className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-md animate-in fade-in duration-200 overflow-y-auto"
+        onClick={onClose}
+      >
       <div
         className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-slate-200/90 overflow-hidden flex flex-col max-h-[92vh] font-sans animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
@@ -334,11 +351,13 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                 <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider font-mono-code ${
                   currentRole === 'superuser'
                     ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                    : currentRole === 'admin'
+                    : (currentRole === 'admin' || currentRole === 'hr')
                     ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                    : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                    : currentRole === 'finance'
+                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                    : 'bg-slate-500/20 text-slate-300 border border-slate-500/30'
                 }`}>
-                  {currentRole}
+                  {(currentRole === 'admin' || currentRole === 'hr') ? 'HR' : currentRole}
                 </span>
               </div>
               <p className="text-xs text-slate-400 font-mono-code mt-0.5">
@@ -484,7 +503,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                 {/* Bank Account Details */}
                 <div className="pt-3 border-t border-slate-100">
                   <label className="block text-xs font-bold text-slate-700 mb-2">
-                    Rekening Bank untuk Payroll & Reimbursement
+                    Rekening Bank untuk Payroll & Gaji Pokok
                   </label>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
@@ -562,8 +581,10 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                     <span className="font-semibold text-slate-700">{currentUser.leaveQuota} hari (Sisa: {currentUser.leaveQuota - currentUser.usedLeave})</span>
                   </div>
                   <div className="sm:col-span-2">
-                    <span className="text-[10px] text-slate-400 block font-mono-code">Device MAC Terdaftar:</span>
-                    <span className="font-mono-code text-[11px] font-bold text-slate-700">{currentUser.deviceMac || 'Belum Terikat'}</span>
+                    <span className="text-[10px] text-slate-400 block font-mono-code">Status Biometrik Keamanan:</span>
+                    <span className="font-mono-code text-[11px] font-bold text-emerald-700">
+                      {currentUser.biometric?.isEnrolled ? `Terdaftar 4 Pose (${currentUser.biometric.qualityScore || 95}%)` : 'Belum Terdaftar'}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -713,6 +734,63 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                     );
                   })}
                 </div>
+              </div>
+
+              {/* Biometric 4-Pose Enrollment Vault Section */}
+              <div className="p-5 rounded-3xl bg-slate-900 text-white space-y-4 shadow-xl">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-orange-500/20 text-[#FF6B00] flex items-center justify-center border border-orange-500/30">
+                      <ShieldCheck className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-2">
+                        <span>Biometrik Wajah 3D Enterprise</span>
+                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-mono-code font-bold ${
+                          currentUser.biometric?.isEnrolled ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                        }`}>
+                          {currentUser.biometric?.isEnrolled ? '4 POSE TERKUNCI' : 'BELUM ENROLL'}
+                        </span>
+                      </h4>
+                      <p className="text-[11px] text-slate-400">
+                        {currentUser.biometric?.isEnrolled
+                          ? `Terdaftar pada ${new Date(currentUser.biometric.enrolledAt).toLocaleDateString('id-ID', { dateStyle: 'medium' })} • Kualitas: ${currentUser.biometric.qualityScore || 98.5}%`
+                          : 'Rekam 4 sudut wajah (Depan, Kanan, Kiri, Senyum) untuk akurasi presensi & anti-titip absen.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsBiometricModalOpen(true)}
+                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#FF6B00] to-amber-500 hover:from-[#e56000] hover:to-amber-600 text-white text-xs font-black shadow-md shadow-orange-500/25 transition-all cursor-pointer flex items-center gap-1.5 shrink-0 active:scale-95"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>{currentUser.biometric?.isEnrolled ? 'Ulangi / Rekam Ulang' : 'Daftar Biometrik (4 Pose)'}</span>
+                  </button>
+                </div>
+
+                {currentUser.biometric?.isEnrolled && currentUser.biometric.samples && (
+                  <div className="grid grid-cols-4 gap-2 pt-1">
+                    {([
+                      { key: 'front', label: '1. DEPAN' },
+                      { key: 'right', label: '2. KANAN' },
+                      { key: 'left', label: '3. KIRI' },
+                      { key: 'smile', label: '4. SENYUM' }
+                    ] as const).map(p => (
+                      <div key={p.key} className="p-1.5 rounded-xl bg-slate-800/80 border border-slate-700 text-center space-y-1">
+                        <div className="aspect-square rounded-lg overflow-hidden bg-slate-950">
+                          {currentUser.biometric?.samples[p.key] ? (
+                            <img src={currentUser.biometric.samples[p.key]} alt={p.label} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-[10px] text-slate-500">N/A</div>
+                          )}
+                        </div>
+                        <span className="text-[9px] font-mono-code font-bold text-slate-300 block">{p.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Action Buttons */}
@@ -968,5 +1046,17 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
         </div>
       </div>
     </div>
+
+    {/* Biometric 4-Pose Modal */}
+    <BiometricEnrollmentModal
+      isOpen={isBiometricModalOpen}
+      onClose={() => setIsBiometricModalOpen(false)}
+      targetEmployee={currentUser}
+      onSaveBiometric={handleSaveBiometric}
+      operatorName={currentUser.name}
+    />
+  </>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent;
 };

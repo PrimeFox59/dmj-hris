@@ -10,7 +10,6 @@ import {
   Pause,
   Layers,
   Shield,
-  Wifi,
   Camera,
   Users,
   Banknote,
@@ -53,7 +52,7 @@ export const TOUR_STEPS: TourStep[] = [
     badge: 'Platform Enterprise • Overview',
     module: 'Navigasi',
     icon: Sparkles,
-    text: 'Selamat datang di PRIME HRIS Enterprise — sistem manajemen kepegawaian dan penggajian terintegrasi rancangan PT Prime Infinity Systems. Sistem ini mengintegrasikan presensi kamera pintar ber-watermark digital, verifikasi jaringan WiFi/GPS anti-fraud, pusat approval SDM, database master personil & MAC hardware, penggajian otomatis formula Depnaker, hingga simulasi proyeksi payroll real-time. Mari kita jelajahi seluruh kapabilitasnya!'
+    text: 'Selamat datang di PRIME HRIS Enterprise — sistem manajemen kepegawaian dan penggajian terintegrasi rancangan PT Prime Infinity Systems. Sistem ini mengintegrasikan presensi kamera pintar ber-watermark digital, verifikasi biometrik pengenalan wajah 4-pose, satelit GPS Geofence anti-fraud, pusat approval SDM, database master personil terenkripsi, penggajian otomatis formula Depnaker, hingga simulasi proyeksi payroll real-time. Mari kita jelajahi seluruh kapabilitasnya!'
   },
   {
     id: 'rbac-switcher',
@@ -65,19 +64,19 @@ export const TOUR_STEPS: TourStep[] = [
     badge: 'Navigasi • Security',
     module: 'Navigasi',
     icon: Shield,
-    text: 'Aplikasi ini menerapkan Role-Based Access Control (RBAC) ketat dalam 3 tingkatan: Superuser (Direksi/Owner dengan akses penuh ke seluruh data & menu rahasia), Admin HR (Kelola database karyawan, verifikasi absensi & rincian gaji), serta Staff Biasa (Hanya dapat mengakses data pribadi, presensi mandiri, dan saldo cuti). Anda dapat berganti persona secara instan di sini untuk menguji simulasi hak akses.'
+    text: 'Aplikasi ini menerapkan Role-Based Access Control (RBAC) ketat dalam 3 tingkatan: Superuser (Direksi/Owner dengan akses penuh ke seluruh data & menu rahasia), HR (Kelola database karyawan, verifikasi absensi & rincian gaji), serta Staff Biasa (Hanya dapat mengakses data pribadi, presensi mandiri, dan saldo cuti). Anda dapat berganti persona secara instan di sini untuk menguji simulasi hak akses.'
   },
   {
-    id: 'network-gateway',
+    id: 'geofence-security',
     tab: 'dashboard',
     subview: 'hris',
-    targetSelector: '#tour-network-gateway',
-    title: 'Smart Gateway & Pemetaan Status Jaringan',
-    subtitle: 'Verifikasi Otomatis Status Kantor (WFO Sah) vs Jaringan Luar',
-    badge: 'Navigasi • Smart Gateway',
+    targetSelector: '#tour-notification-bell',
+    title: 'Pusat Keamanan & Geofencing Presensi',
+    subtitle: 'Validasi Lokasi Fisik Satelit GPS & Biometrik Wajah',
+    badge: 'Navigasi • Lokasi & Security',
     module: 'Navigasi',
-    icon: Wifi,
-    text: 'Indikator pintar ini secara real-time memetakan koneksi pengguna: jika IP publik terdaftar di Whitelist Gateway PRIME (Biznet Dedicated / Astinet), status tervalidasi sebagai PRIME Corporate Network (WFO Sah). Jika Anda mengakses dari jaringan seluler pribadi (Telkomsel/Indihome/iForte), sistem otomatis menandainya sebagai Jaringan Luar (Luar Kantor) yang mewajibkan justifikasi Dinas Luar. Klik indikator ini untuk melihat audit koneksi & mengganti simulasi pengujian!'
+    icon: Shield,
+    text: 'Sistem melindungi integritas presensi melalui validasi ganda: pencocokan koordinat GPS satelit dengan radius resmi kantor (100–350 meter) serta analisis liveness biometrik wajah 4-pose tanpa bergantung pada perangkat keras eksternal.'
   },
   {
     id: 'sidebar-nav',
@@ -158,15 +157,15 @@ export const TOUR_STEPS: TourStep[] = [
     text: 'Karyawan memilih mode "Check In (Masuk)" atau "Check Out (Pulang)". Sistem secara otomatis menghitung selisih menit keterlambatan masuk kerja dan batas toleransi, atau akumulasi pemenuhan jam kerja reguler sebelum jam lembur dimulai.'
   },
   {
-    id: 'attendance-network',
+    id: 'attendance-biometric',
     tab: 'attendance',
-    targetSelector: '#tour-attendance-network',
-    title: 'Multi-Gate Network Security Verification',
-    subtitle: 'Verifikasi WiFi Resmi, IP Whitelist & Anti-VPN',
-    badge: 'Menu 2 • Network Gate',
+    targetSelector: '#tour-attendance-face',
+    title: 'Multi-Pose Biometric & Liveness Verification',
+    subtitle: 'Verifikasi Wajah Cerdas 4 Pose Anti-Spoofing',
+    badge: 'Menu 2 • Biometric Gate',
     module: 'Presensi',
-    icon: Wifi,
-    text: 'Sistem memeriksa apakah koneksi perangkat terhubung ke WiFi kantor terdaftar (SSID PRIME-Corporate-5G), jaringan seluler dinas luar resmi, atau mendeteksi penggunaan VPN / Fake GPS fiktif. Presensi akan diblokir otomatis jika terdeteksi manipulasi jaringan.'
+    icon: Shield,
+    text: 'Sistem menganalisis liveness dan geometri wajah karyawan melalui 4 pose dinamis (Hadap Depan, Kedip Mata, Buka Mulut, Tengok Kanan). Presensi diblokir otomatis jika terdeteksi foto statis atau manipulasi digital.'
   },
   {
     id: 'attendance-gps',
@@ -214,7 +213,7 @@ export const TOUR_STEPS: TourStep[] = [
     badge: 'Menu 3 • Direktori SDM',
     module: 'Karyawan',
     icon: Users,
-    text: 'Pusat database kepegawaian resmi. Di panel atas ini, Admin HR dapat menambahkan karyawan baru, melihat ringkasan total personil aktif, dan memantau klasifikasi status kepegawaian (Tetap, Kontrak, PKWT Proyek).'
+    text: 'Pusat database kepegawaian resmi. Di panel atas ini, HR dapat menambahkan karyawan baru, melihat ringkasan total personil aktif, dan memantau klasifikasi status kepegawaian (Tetap, Kontrak, PKWT Proyek).'
   },
   {
     id: 'employee-filters',
@@ -231,12 +230,12 @@ export const TOUR_STEPS: TourStep[] = [
     id: 'employee-table',
     tab: 'users',
     targetSelector: '#tour-employee-table',
-    title: 'Master Tabel: Kompensasi, Cuti & MAC Binding',
-    subtitle: 'Struktur Penggajian & Proteksi Hardware Perangkat',
+    title: 'Master Tabel: Kompensasi, Cuti & Audit Akun',
+    subtitle: 'Struktur Penggajian & Tata Kelola Kepegawaian',
     badge: 'Menu 3 • Master Table',
     module: 'Karyawan',
     icon: Users,
-    text: 'Tabel induk menyajikan parameter vital tiap staf: Foto profil, NIK resmi, Nomor Rekening Bank Payroll (BCA/Mandiri), Gaji Pokok & Tunjangan, Kuota Sisa Cuti Tahunan, serta Binding MAC Address hardware HP/Laptop terdaftar untuk proteksi anti-spoofing.'
+    text: 'Tabel induk menyajikan parameter vital tiap staf: Foto profil, NIK resmi, Nomor Rekening Bank Payroll (BCA/Mandiri), Gaji Pokok & Tunjangan, Kuota Sisa Cuti Tahunan, serta Hak Akses RBAC terdaftar untuk tata kelola perusahaan.'
   },
 
   // ==========================================
@@ -299,7 +298,7 @@ export const TOUR_STEPS: TourStep[] = [
     badge: 'Pusat Approval',
     module: 'Approval',
     icon: Shield,
-    text: 'Ikon lonceng notifikasi adalah pintu gerbang menuju Pusat Approval Terpadu. Manajer proyek dan direksi dapat memeriksa permohonan cuti tahunan, justifikasi presensi terlambat, pengajuan dinas luar, dan klaim reimbursement proyek dengan opsi Setujui, Tolak, atau Minta Revisi secara terpusat.'
+    text: 'Ikon lonceng notifikasi adalah pintu gerbang menuju Pusat Approval Terpadu. Manajer proyek dan direksi dapat memeriksa permohonan cuti tahunan, justifikasi presensi terlambat, pengajuan dinas luar, dan persetujuan lembur proyek dengan opsi Setujui, Tolak, atau Minta Revisi secara terpusat.'
   },
 
   // ==========================================
@@ -325,7 +324,7 @@ export const TOUR_STEPS: TourStep[] = [
     badge: 'Menu 5 • Paket Layanan',
     module: 'Proposal',
     icon: Layers,
-    text: 'Menyajikan 3 pilihan paket implementasi: Paket Standar (Presensi GPS & Payroll dasar), Paket Enterprise Rekomendasi (Kamera Cerdas Watermark + Gateway WiFi + Payroll Depnaker), serta Opsi Source Code & Dedicated Server.'
+    text: 'Menyajikan 3 pilihan paket implementasi: Paket Standar (Presensi GPS & Payroll dasar), Paket Enterprise Rekomendasi (Kamera Cerdas Watermark + Multi-Site GPS Geofence + Payroll Depnaker), serta Opsi Source Code & Dedicated Server.'
   },
   {
     id: 'proposal-pricing',
@@ -336,7 +335,7 @@ export const TOUR_STEPS: TourStep[] = [
     badge: 'Menu 5 • Kalkulator Biaya',
     module: 'Proposal',
     icon: DollarSign,
-    text: 'Simulasi biaya investasi yang transparan. Klien dapat mengaktifkan atau menonaktifkan modul add-on (seperti verifikasi WiFi sekuensial, aplikasi mobile, atau domain korporat) dan melihat total nilai investasi yang terupdate secara real-time.'
+    text: 'Simulasi biaya investasi yang transparan. Klien dapat mengaktifkan atau menonaktifkan modul add-on (seperti Multi-Site Geofence kustom, aplikasi mobile, atau domain korporat) dan melihat total nilai investasi yang terupdate secara real-time.'
   },
   {
     id: 'proposal-actions',

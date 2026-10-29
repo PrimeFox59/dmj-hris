@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Briefcase,
   PieChart,
@@ -8,10 +8,14 @@ import {
   Calendar,
   DollarSign,
   Download,
-  Filter
+  Filter,
+  Eye,
+  EyeOff,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { Employee, Project, PayrollRecord, SalaryRuleConfig, AttendanceRecord } from '../types';
-import { formatIDR, calculateEmployeePayroll } from '../utils/payrollCalculator';
+import { formatSalaryDisplay, calculateEmployeePayroll } from '../utils/payrollCalculator';
 
 interface ProjectPayrollTabProps {
   employees: Employee[];
@@ -27,6 +31,7 @@ export const ProjectPayrollTab: React.FC<ProjectPayrollTabProps> = ({
   salaryRules
 }) => {
   const [selectedProjectId, setSelectedProjectId] = useState<string>('ALL');
+  const [showPayrollNominal, setShowPayrollNominal] = useState<boolean>(false);
 
   // Compute all employee payrolls
   const payrollRecords: PayrollRecord[] = employees.map(emp =>
@@ -87,6 +92,16 @@ export const ProjectPayrollTab: React.FC<ProjectPayrollTabProps> = ({
     ? allAllocations
     : allAllocations.filter(a => a.projectId === selectedProjectId);
 
+  const [allocDisplayLimit, setAllocDisplayLimit] = useState(15);
+  const visibleAllocations = useMemo(() => {
+    return filteredAllocations.slice(0, allocDisplayLimit);
+  }, [filteredAllocations, allocDisplayLimit]);
+  const hasMoreAllocations = allocDisplayLimit < filteredAllocations.length;
+
+  useEffect(() => {
+    setAllocDisplayLimit(15);
+  }, [selectedProjectId]);
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       
@@ -108,6 +123,19 @@ export const ProjectPayrollTab: React.FC<ProjectPayrollTabProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowPayrollNominal(prev => !prev)}
+            className={`px-3 py-2 rounded-2xl border text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+              showPayrollNominal
+                ? 'bg-orange-50 text-[#FF6B00] border-orange-200'
+                : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
+            }`}
+            title="Toggle sensor nilai alokasi biaya gaji proyek (default: sensor)"
+          >
+            {showPayrollNominal ? <EyeOff className="w-3.5 h-3.5 text-slate-400" /> : <Eye className="w-3.5 h-3.5 text-[#FF6B00]" />}
+            <span>{showPayrollNominal ? 'Sembunyikan Nilai' : 'Tampilkan Nilai'}</span>
+          </button>
+
           <select
             value={selectedProjectId}
             onChange={e => setSelectedProjectId(e.target.value)}
@@ -155,7 +183,7 @@ export const ProjectPayrollTab: React.FC<ProjectPayrollTabProps> = ({
               <div className="pt-2 border-t border-slate-100 space-y-1 text-xs">
                 <div className="flex justify-between">
                   <span className="text-slate-500">Alokasi Biaya Gaji:</span>
-                  <span className="font-bold font-mono-code text-slate-900">{formatIDR(totalLaborCost)}</span>
+                  <span className="font-bold font-mono-code text-slate-900">{formatSalaryDisplay(totalLaborCost, showPayrollNominal)}</span>
                 </div>
                 <div className="flex justify-between text-[11px]">
                   <span className="text-slate-400">Total Jam Kerja:</span>
@@ -205,7 +233,7 @@ export const ProjectPayrollTab: React.FC<ProjectPayrollTabProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredAllocations.map((alloc, idx) => (
+              {visibleAllocations.map((alloc, idx) => (
                 <tr key={idx} className="hover:bg-slate-50/70 transition-colors">
                   <td className="py-3 px-3">
                     <div className="font-bold text-slate-900">{alloc.employeeName}</div>
@@ -236,13 +264,51 @@ export const ProjectPayrollTab: React.FC<ProjectPayrollTabProps> = ({
                   </td>
 
                   <td className="py-3 px-3 text-right font-mono-code font-black text-slate-900 text-sm">
-                    {formatIDR(alloc.allocatedCost)}
+                    {formatSalaryDisplay(alloc.allocatedCost, showPayrollNominal)}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+
+        {filteredAllocations.length > 15 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 bg-slate-50/80 border-t border-slate-200/70 text-xs">
+            <span className="text-slate-500 font-mono-code text-[11px]">
+              Menampilkan <span className="font-bold text-slate-800">{Math.min(allocDisplayLimit, filteredAllocations.length)}</span> dari <span className="font-bold text-slate-800">{filteredAllocations.length}</span> alokasi proyek
+            </span>
+            <div className="flex items-center gap-2">
+              {hasMoreAllocations ? (
+                <button
+                  type="button"
+                  onClick={() => setAllocDisplayLimit(prev => Math.min(prev + 15, filteredAllocations.length))}
+                  className="px-3.5 py-1.5 rounded-xl bg-orange-50 hover:bg-[#FF6B00] text-[#FF6B00] hover:text-white border border-orange-200 hover:border-[#FF6B00] font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs active:scale-95"
+                >
+                  <ChevronDown className="w-3.5 h-3.5" />
+                  <span>Muat 15 Alokasi Lagi ({filteredAllocations.length - allocDisplayLimit} Tersisa)</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setAllocDisplayLimit(15)}
+                  className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 text-slate-600 font-medium text-xs border border-slate-200 shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Ciutkan (Tampilkan 15)</span>
+                </button>
+              )}
+              {hasMoreAllocations && (
+                <button
+                  type="button"
+                  onClick={() => setAllocDisplayLimit(filteredAllocations.length)}
+                  className="px-2.5 py-1.5 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-200/60 font-semibold text-xs transition-all cursor-pointer"
+                >
+                  Tampilkan Semua
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
     </div>

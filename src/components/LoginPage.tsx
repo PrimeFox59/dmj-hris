@@ -5,33 +5,404 @@ import {
   Eye,
   EyeOff,
   LogIn,
-  Sparkles,
-  Briefcase,
-  HardHat,
-  Users,
   AlertCircle,
-  ShieldCheck
+  ShieldCheck,
+  Banknote,
+  Camera,
+  ScanFace,
+  CheckCircle2,
+  RefreshCw,
+  Zap,
+  X,
+  UserCheck,
+  KeyRound,
+  Mail,
+  Phone,
+  Send
 } from 'lucide-react';
 import { AuthUser } from '../types';
 import { api } from '../services/api';
+import {
+  buildGalleryFeatureIndex,
+  evaluateKiosk1N,
+  isHumanFacePresent,
+  EnrolledGalleryItem
+} from '../utils/biometricHelper';
+
+// In-Memory Pre-Indexed Biometric Gallery for Instant Face ID Login (0 ms)
+let memoryCachedGallery: EnrolledGalleryItem[] | null = null;
+let galleryLoadingPromise: Promise<EnrolledGalleryItem[]> | null = null;
+
+async function fetchAndBuildGallery(forceRefresh = false): Promise<EnrolledGalleryItem[]> {
+  if (!forceRefresh && memoryCachedGallery && memoryCachedGallery.length > 0) {
+    return memoryCachedGallery;
+  }
+  if (!forceRefresh && galleryLoadingPromise) {
+    return galleryLoadingPromise;
+  }
+
+  galleryLoadingPromise = (async () => {
+    try {
+      const res = await api.getEnrolledBiometricGallery();
+      if (res.success && Array.isArray(res.employees)) {
+        const gallery = await buildGalleryFeatureIndex(res.employees);
+        memoryCachedGallery = gallery;
+        return gallery;
+      }
+    } catch (e) {
+      console.warn('Failed to pre-index biometric gallery:', e);
+    } finally {
+      galleryLoadingPromise = null;
+    }
+    return [];
+  })();
+
+  return galleryLoadingPromise;
+}
 
 interface LoginPageProps {
   onLoginSuccess: (user: AuthUser, token: string) => void;
+  onOpenKiosk?: () => void;
 }
 
-const PRESETS = [
-  { id: 'superadmin', role: 'Direktur', user: 'admin', pass: 'admin123', icon: <Sparkles className="w-3.5 h-3.5 text-purple-600" /> },
-  { id: 'hr', role: 'HR Admin', user: 'hrmanager', pass: 'hr123', icon: <Briefcase className="w-3.5 h-3.5 text-amber-600" /> },
-  { id: 'pm', role: 'PM Proyek', user: 'projmanager', pass: 'pm123', icon: <Users className="w-3.5 h-3.5 text-emerald-600" /> },
-  { id: 'staff', role: 'Teknisi', user: 'karyawan', pass: 'staff123', icon: <HardHat className="w-3.5 h-3.5 text-blue-600" /> }
-];
-
-export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
+export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onOpenKiosk }) => {
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Forgot Password States
+  const [showForgotModal, setShowForgotModal] = useState<boolean>(false);
+  const [forgotIdentifier, setForgotIdentifier] = useState<string>('');
+  const [isForgotLoading, setIsForgotLoading] = useState<boolean>(false);
+  const [forgotError, setForgotError] = useState<string | null>(null);
+  const [forgotSuccess, setForgotSuccess] = useState<any | null>(null);
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!forgotIdentifier.trim()) {
+      setForgotError('Nomor HP, Email, atau ID/Username wajib diisi');
+      return;
+    }
+    setIsForgotLoading(true);
+    setForgotError(null);
+    try {
+      const res = await api.requestForgotPassword(forgotIdentifier.trim());
+      setForgotSuccess(res);
+    } catch (err: any) {
+      setForgotError(err?.message || 'Gagal memproses pemulihan kata sandi');
+    } finally {
+      setIsForgotLoading(false);
+    }
+  };
+
+  // Login Mode: PASSWORD (Kata Sandi) or FACE_ID (Biometrik Wajah 1:N)
+  const [loginMode, setLoginMode] = useState<'PASSWORD' | 'FACE_ID'>('PASSWORD');
+
+  // Biometric Face ID States
+  const [cameraActive, setCameraActive] = useState<boolean>(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [galleryIndex, setGalleryIndex] = useState<EnrolledGalleryItem[]>(() => memoryCachedGallery || []);
+  const [isIndexingGallery, setIsIndexingGallery] = useState<boolean>(false);
+  const [detectedCandidate, setDetectedCandidate] = useState<any | null>(null);
+  const [recognitionProgress, setRecognitionProgress] = useState<number>(0);
+  const [isFaceAuthenticating, setIsFaceAuthenticating] = useState<boolean>(false);
+  const [faceFeedback, setFaceFeedback] = useState<string>('Posisikan Wajah di Depan Kamera');
+
+  // Confirmation state for Face ID Login (anti-wrong-person gate)
+  const [pendingLogin, setPendingLogin] = useState<{
+    employee: any;
+    score: number;
+    matchedPose: any;
+    countdown: number;
+    verifiedToken?: string | null;
+    verifiedUser?: AuthUser | null;
+  } | null>(null);
+
+  const faceVideoRef = useRef<HTMLVideoElement | null>(null);
+  const faceStreamRef = useRef<MediaStream | null>(null);
+  const isFaceAuthenticatingRef = useRef<boolean>(false);
+
+  // Audio Chime Helper
+  const playTone = (freq: number, type: OscillatorType = 'sine', duration = 0.15) => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, ctx.currentTime);
+      gain.gain.setValueAtTime(0.15, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + duration);
+    } catch (e) {}
+  };
+
+  const startFaceCamera = async () => {
+    try {
+      setCameraError(null);
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          facingMode: 'user'
+        },
+        audio: false
+      });
+      faceStreamRef.current = stream;
+      if (faceVideoRef.current) {
+        faceVideoRef.current.srcObject = stream;
+        await faceVideoRef.current.play();
+      }
+      setCameraActive(true);
+    } catch (err: any) {
+      console.warn('Face camera error:', err);
+      setCameraError('Kamera tidak dapat diakses atau izin ditolak. Harap izinkan akses kamera di browser Anda.');
+      setCameraActive(false);
+    }
+  };
+
+  const stopFaceCamera = () => {
+    if (faceStreamRef.current) {
+      faceStreamRef.current.getTracks().forEach(t => t.stop());
+      faceStreamRef.current = null;
+    }
+    if (faceVideoRef.current) {
+      faceVideoRef.current.srcObject = null;
+    }
+    setCameraActive(false);
+    setRecognitionProgress(0);
+    setDetectedCandidate(null);
+    setPendingLogin(null);
+  };
+
+  // Pre-index Face Gallery immediately in background when LoginPage mounts
+  useEffect(() => {
+    fetchAndBuildGallery().then(gallery => {
+      if (gallery && gallery.length > 0) {
+        setGalleryIndex(gallery);
+      }
+    });
+  }, []);
+
+  // Manage Camera and ensure Gallery is ready when switching to FACE_ID
+  useEffect(() => {
+    if (loginMode === 'FACE_ID') {
+      isFaceAuthenticatingRef.current = false;
+      setIsFaceAuthenticating(false);
+      setPendingLogin(null);
+      setFaceFeedback('Posisikan Wajah di Depan Kamera');
+      startFaceCamera();
+
+      // Selalu perbarui galeri biometrik di latar belakang agar karyawan baru (e.g. Wildan) langsung terindeks
+      setIsIndexingGallery(galleryIndex.length === 0);
+      fetchAndBuildGallery(true).then(gallery => {
+        if (gallery && gallery.length > 0) {
+          setGalleryIndex(gallery);
+          console.log(`[LOGIN FACE ID] Galeri biometrik mutakhir siap (${gallery.length} karyawan terdaftar).`);
+        }
+      }).catch(err => {
+        console.warn('Failed to refresh face gallery:', err);
+      }).finally(() => {
+        setIsIndexingGallery(false);
+      });
+    } else {
+      stopFaceCamera();
+    }
+
+    return () => {
+      stopFaceCamera();
+    };
+  }, [loginMode]);
+
+  // Countdown timer for pending biometric login confirmation
+  useEffect(() => {
+    if (!pendingLogin) return;
+
+    if (pendingLogin.countdown <= 0) {
+      const { employee, score, matchedPose, verifiedUser, verifiedToken } = pendingLogin;
+      setPendingLogin(null);
+      if (verifiedUser && verifiedToken) {
+        playTone(1318.51, 'sine', 0.35);
+        stopFaceCamera();
+        onLoginSuccess(verifiedUser, verifiedToken);
+        return;
+      }
+      executeBiometricLogin(employee, score, matchedPose);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setPendingLogin(prev => (prev ? { ...prev, countdown: prev.countdown - 1 } : null));
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [pendingLogin]);
+
+  const handleCancelPendingLogin = () => {
+    setPendingLogin(null);
+    isFaceAuthenticatingRef.current = false;
+    setIsFaceAuthenticating(false);
+    setRecognitionProgress(0);
+    setDetectedCandidate(null);
+    setFaceFeedback('Verifikasi dibatalkan. Posisikan wajah kembali.');
+  };
+
+  const handleConfirmLoginNow = () => {
+    if (!pendingLogin) return;
+    const { employee, score, matchedPose, verifiedUser, verifiedToken } = pendingLogin;
+    setPendingLogin(null);
+    if (verifiedUser && verifiedToken) {
+      playTone(1318.51, 'sine', 0.35);
+      stopFaceCamera();
+      onLoginSuccess(verifiedUser, verifiedToken);
+      return;
+    }
+    executeBiometricLogin(employee, score, matchedPose);
+  };
+
+  // Real-time 1:N Facial Recognition Loop for Login (OpenCV YuNet + SFace 128D)
+  useEffect(() => {
+    if (loginMode !== 'FACE_ID' || !cameraActive || isFaceAuthenticating || pendingLogin) {
+      return;
+    }
+
+    let isEvaluating = false;
+    const canvas = document.createElement('canvas');
+    canvas.width = 320;
+    canvas.height = 240;
+    const ctx = canvas.getContext('2d');
+
+    const interval = setInterval(async () => {
+      if (isEvaluating || !faceVideoRef.current || faceVideoRef.current.videoWidth === 0 || isFaceAuthenticatingRef.current || pendingLogin) {
+        return;
+      }
+      isEvaluating = true;
+
+      try {
+        if (!ctx || !faceVideoRef.current) return;
+        ctx.drawImage(faceVideoRef.current, 0, 0, 320, 240);
+        const imageB64 = canvas.toDataURL('image/jpeg', 0.65);
+
+        const resp = await fetch('/api/auth/biometric-verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: imageB64 })
+        }).then(r => r.json()).catch(() => null);
+
+        if (!resp) {
+          setFaceFeedback('Menghubungi AI Face Engine...');
+          return;
+        }
+
+        if (resp.status === 'NO_FACE') {
+          setFaceFeedback('Posisikan Wajah di Depan Kamera');
+          setRecognitionProgress(prev => Math.max(0, prev - 25));
+          setDetectedCandidate(null);
+          return;
+        }
+
+        if (resp.status === 'OCCLUDED') {
+          setFaceFeedback(resp.message || '⚠️ Wajah terhalang! Perlihatkan seluruh wajah.');
+          setRecognitionProgress(0);
+          setDetectedCandidate(null);
+          return;
+        }
+
+        if (resp.status === 'AMBIGUOUS') {
+          setFaceFeedback(resp.message || '⚠️ Kemiripan wajah ambigu! Harap login via Email / NIK.');
+          setRecognitionProgress(0);
+          setDetectedCandidate(null);
+          return;
+        }
+
+        if (resp.matched && resp.employee && resp.score >= 70) {
+          const emp = resp.employee;
+          const match = {
+            matchedItem: {
+              employee: emp,
+              employeeName: emp.name,
+              employeeId: emp.id,
+              employeeNik: emp.nik,
+            },
+            score: resp.score,
+            matchedPose: 'front'
+          };
+          setDetectedCandidate(match);
+          setFaceFeedback(`Wajah Terverifikasi: ${emp.name} (${resp.score}%)`);
+          setRecognitionProgress(prev => {
+            const next = prev + 50; // Mengunci dalam ~500ms
+            if (next >= 100) {
+              isFaceAuthenticatingRef.current = true;
+              setIsFaceAuthenticating(true);
+              playTone(880, 'sine', 0.18);
+              setPendingLogin({
+                employee: emp,
+                score: resp.score,
+                matchedPose: 'front',
+                countdown: 4,
+                verifiedToken: resp.token,
+                verifiedUser: resp.user
+              });
+              return 100;
+            }
+            if (prev < 50 && next >= 50) {
+              playTone(659.25, 'sine', 0.08);
+            }
+            return next;
+          });
+        } else {
+          setFaceFeedback(resp.score > 35 ? `Mencocokkan biometrik (${resp.score}%)...` : 'Posisikan Wajah di Depan Kamera');
+          setRecognitionProgress(prev => {
+            const next = Math.max(0, prev - 20);
+            if (next === 0) setDetectedCandidate(null);
+            return next;
+          });
+        }
+      } catch (e) {
+        console.warn('Biometric verify frame error:', e);
+      } finally {
+        isEvaluating = false;
+      }
+    }, 250);
+
+    return () => clearInterval(interval);
+  }, [loginMode, cameraActive, isFaceAuthenticating, pendingLogin, galleryIndex]);
+
+  // Execute Biometric Login on Server
+  const executeBiometricLogin = async (emp: any, matchScore: number, matchedPose: any) => {
+    try {
+      setIsLoading(true);
+      setErrorMessage(null);
+      const res = await api.loginWithBiometric(emp.id, {
+        matchScore,
+        matchedPose,
+        isVerified: true
+      });
+      if (res.success && res.user && res.token) {
+        playTone(1318.51, 'sine', 0.35); // Celebration chime
+        stopFaceCamera();
+        onLoginSuccess(res.user, res.token);
+      } else {
+        setErrorMessage((res as any).error || 'Autentikasi biometrik gagal');
+        isFaceAuthenticatingRef.current = false;
+        setIsFaceAuthenticating(false);
+        setRecognitionProgress(0);
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Gagal login biometrik wajah');
+      isFaceAuthenticatingRef.current = false;
+      setIsFaceAuthenticating(false);
+      setRecognitionProgress(0);
+    } finally {
+      setIsLoading(false);
+    }
+  };
   
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -74,13 +445,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
     }
   };
 
-  const applyPreset = (p: typeof PRESETS[0]) => {
-    setIdentifier(p.user);
-    setPassword(p.pass);
-    setErrorMessage(null);
-    handleLogin(undefined, p.user, p.pass);
-  };
-
   return (
     <div className="min-h-screen w-full bg-[#F4F8FE] flex flex-col justify-between selection:bg-[#0066FF] selection:text-white font-sans text-slate-800 relative">
       
@@ -106,7 +470,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
           {/* Server Indicator */}
           <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-[11px] font-mono text-slate-600 shadow-2xs">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span className="font-semibold">DEV20 : 8567</span>
+            <span className="font-semibold">POCO Edge : 3000</span>
           </div>
         </div>
       </header>
@@ -185,106 +549,287 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
               </div>
             )}
 
-            {/* Login Form */}
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div>
-                <label className="block text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-600 mb-1.5">
-                  Email atau Username
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                    <User className="w-4 h-4" />
-                  </div>
-                  <input
-                    type="text"
-                    value={identifier}
-                    onChange={(e) => setIdentifier(e.target.value)}
-                    placeholder="misal: admin atau hr@primeprojectx.net"
-                    className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50/80 border border-slate-200 rounded-xl text-[13.5px] text-slate-900 font-medium placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0066FF] focus:border-transparent focus:bg-white transition"
-                    disabled={isLoading}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-600 mb-1.5">
-                  Kata Sandi
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                    <Lock className="w-4 h-4" />
-                  </div>
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Masukkan kata sandi akun"
-                    className="w-full pl-10 pr-10 py-2.5 bg-slate-50/80 border border-slate-200 rounded-xl text-[13.5px] text-slate-900 font-medium placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0066FF] focus:border-transparent focus:bg-white transition"
-                    disabled={isLoading}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 transition cursor-pointer"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
+            {/* Mode Switcher Tabs: KATA SANDI vs FACE ID */}
+            <div className="grid grid-cols-2 gap-1.5 p-1 rounded-2xl bg-slate-100 border border-slate-200/90 mb-5">
+              <button
+                type="button"
+                onClick={() => { setLoginMode('PASSWORD'); setErrorMessage(null); }}
+                className={`py-2 px-3 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  loginMode === 'PASSWORD'
+                    ? 'bg-white text-slate-900 shadow-sm border border-slate-200/80'
+                    : 'text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span>KATA SANDI</span>
+              </button>
 
               <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full py-3 px-4 bg-gradient-to-r from-[#0066FF] to-blue-700 hover:from-blue-600 hover:to-blue-800 active:scale-[0.99] text-white font-extrabold rounded-xl shadow-md shadow-blue-500/25 flex items-center justify-center gap-2 text-[13px] tracking-wide uppercase transition cursor-pointer disabled:opacity-60 mt-2"
+                type="button"
+                onClick={() => { setLoginMode('FACE_ID'); setErrorMessage(null); }}
+                className={`py-2 px-3 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                  loginMode === 'FACE_ID'
+                    ? 'bg-gradient-to-r from-[#0066FF] to-blue-700 text-white shadow-md shadow-blue-500/25 ring-2 ring-blue-400/30'
+                    : 'text-slate-500 hover:text-blue-600'
+                }`}
               >
-                {isLoading ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                    <span>Memverifikasi Akun...</span>
-                  </>
-                ) : (
-                  <>
-                    <LogIn className="w-4 h-4" />
-                    <span>Masuk ke PRIME HRIS</span>
-                  </>
-                )}
+                <ScanFace className="w-3.5 h-3.5" />
+                <span>LOGIN WAJAH (FACE ID)</span>
               </button>
-            </form>
-
-            {/* 1-CLICK ROLE PRESETS (PILL-STYLE ALIGNED WITH GAMBAR 2) */}
-            <div className="mt-5 pt-4 border-t border-slate-100">
-              <div className="flex items-center justify-between mb-2.5">
-                <span className="text-[10.5px] font-extrabold uppercase tracking-[0.14em] text-slate-400">
-                  Akses Cepat Peran (1-Klik):
-                </span>
-                <span className="text-[10px] font-mono text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/80">
-                  Demo Ready
-                </span>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                {PRESETS.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => applyPreset(p)}
-                    disabled={isLoading}
-                    className="flex items-center gap-2.5 p-2.5 rounded-2xl border border-slate-200/80 bg-slate-50/60 hover:bg-blue-50/70 hover:border-blue-300 text-slate-700 transition cursor-pointer active:scale-95 group text-left"
-                  >
-                    <div className="w-7 h-7 rounded-lg bg-white border border-slate-200/80 flex items-center justify-center shrink-0 shadow-2xs group-hover:scale-105 transition">
-                      {p.icon}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-[12px] font-bold text-slate-800 leading-tight group-hover:text-[#0066FF] transition truncate">
-                        {p.role}
-                      </div>
-                      <div className="text-[10px] font-mono text-slate-400 truncate">
-                        @{p.user}
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
             </div>
+
+            {loginMode === 'FACE_ID' ? (
+              <div className="space-y-3 animate-in fade-in zoom-in-95 duration-200">
+                {/* Active Enrolled Badge */}
+                <div className="flex items-center justify-between text-[11px] px-1 text-slate-400 max-w-[280px] mx-auto">
+                  <span className="flex items-center gap-1.5 font-medium">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    Biometrik: <strong className="text-slate-200">{galleryIndex.length} Terdaftar</strong>
+                  </span>
+                  {isIndexingGallery && (
+                    <span className="text-amber-400 text-[10px] animate-pulse">Menyelaraskan...</span>
+                  )}
+                </div>
+
+                {/* Camera Viewfinder Box */}
+                <div className="relative w-full max-w-[280px] aspect-[3/4] mx-auto rounded-3xl overflow-hidden bg-slate-950 border-2 border-slate-800 shadow-xl flex items-center justify-center select-none">
+                  <video
+                    ref={faceVideoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className={`w-full h-full object-cover scale-x-[-1] transition-opacity duration-200 ${
+                      cameraActive ? 'block opacity-100' : 'hidden opacity-0'
+                    }`}
+                  />
+
+                  {/* Anti-Salah Orang Confirmation Overlay Gate */}
+                  {pendingLogin && (
+                    <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-md z-30 flex flex-col items-center justify-between p-4 text-center animate-in fade-in zoom-in-95 duration-200">
+                      <div className="w-full flex items-center justify-between">
+                        <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+                          Konfirmasi Identitas
+                        </span>
+                        <span className="text-[11px] font-mono font-bold text-slate-300">
+                          {pendingLogin.countdown}s
+                        </span>
+                      </div>
+
+                      <div className="flex flex-col items-center space-y-2 my-auto">
+                        <div className="relative">
+                          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-[#0066FF] to-cyan-400 flex items-center justify-center text-white text-xl font-black shadow-lg shadow-blue-500/30">
+                            {pendingLogin.employee.name.split(' ').slice(0, 2).map((n: string) => n[0]).join('')}
+                          </div>
+                          <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center border-2 border-slate-900 shadow">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                          </div>
+                        </div>
+
+                        <div>
+                          <h4 className="text-sm font-black text-white leading-tight">
+                            {pendingLogin.employee.name}
+                          </h4>
+                          <p className="text-[11px] font-mono font-semibold text-slate-400 mt-0.5">
+                            {pendingLogin.employee.nik}
+                          </p>
+                          <p className="text-[10.5px] text-blue-400 font-medium">
+                            {pendingLogin.employee.position || pendingLogin.employee.department}
+                          </p>
+                        </div>
+
+                        <div className="px-2.5 py-1 rounded-full bg-emerald-950/80 border border-emerald-500/40 text-[10.5px] font-bold text-emerald-300">
+                          Akurasi Biometrik: {pendingLogin.score}%
+                        </div>
+                      </div>
+
+                      <div className="w-full space-y-2">
+                        <button
+                          type="button"
+                          onClick={handleConfirmLoginNow}
+                          className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white text-xs font-black shadow-lg shadow-emerald-900/30 transition flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <UserCheck className="w-3.5 h-3.5" />
+                          <span>Ya, Masuk Sekarang ({pendingLogin.countdown}s)</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleCancelPendingLogin}
+                          className="w-full py-2 px-3 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-slate-300 hover:text-white text-[11px] font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <X className="w-3 h-3 text-rose-400" />
+                          <span>✕ Bukan Saya / Batal</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {!cameraActive && (
+                    <div className="text-center p-6 space-y-2">
+                      <Camera className="w-8 h-8 text-[#0066FF] mx-auto animate-pulse" />
+                      <p className="text-xs font-bold text-white">Menghubungkan Kamera...</p>
+                      {cameraError && (
+                        <p className="text-[11px] text-rose-400 font-semibold px-2">{cameraError}</p>
+                      )}
+                    </div>
+                  )}
+
+                  {cameraActive && (
+                    <>
+                      {/* Biometric Oval Reticle with dynamic border glow */}
+                      <div className={`absolute w-[68%] h-[74%] rounded-[50%] pointer-events-none transition-all duration-300 ${
+                        detectedCandidate
+                          ? 'border-[3px] border-emerald-400 shadow-[0_0_25px_rgba(52,211,153,0.6)]'
+                          : 'border-2 border-dashed border-cyan-400/80 shadow-[0_0_15px_rgba(6,182,212,0.3)] animate-pulse'
+                      }`} />
+
+                      {/* Scanning Laser Beam */}
+                      {!detectedCandidate && (
+                        <div className="absolute inset-x-8 h-0.5 bg-gradient-to-r from-transparent via-cyan-400 to-transparent pointer-events-none shadow-[0_0_8px_#06b6d4] animate-pulse" />
+                      )}
+
+                      {/* Bottom Status Overlay */}
+                      <div className="absolute bottom-2.5 inset-x-2.5 text-center pointer-events-none">
+                        {detectedCandidate ? (
+                          <div className="px-3 py-1.5 rounded-full bg-emerald-950/90 border border-emerald-400/60 shadow-lg backdrop-blur-md flex items-center justify-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                            <span className="text-[11px] font-bold text-emerald-300 truncate max-w-[200px]">
+                              {detectedCandidate.matchedItem.employeeName} ({detectedCandidate.score}%)
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="px-3 py-1.5 rounded-full bg-slate-900/90 border border-slate-700 shadow-md backdrop-blur-md inline-block">
+                            <span className="text-[10px] font-mono font-semibold text-slate-200">
+                              {isIndexingGallery ? 'Menyiapkan Model Wajah...' : faceFeedback}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Lock-on Progress Bar */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-[11.5px] font-bold text-slate-600 flex items-center gap-1.5">
+                      <ScanFace className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Verifikasi Biometrik 1:N</span>
+                    </span>
+                    <span className="text-xs font-mono font-bold text-blue-600">
+                      {recognitionProgress}%
+                    </span>
+                  </div>
+                  <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden border border-slate-200/80">
+                    <div
+                      className={`h-full transition-all duration-200 ${
+                        recognitionProgress >= 100
+                          ? 'bg-emerald-500'
+                          : 'bg-gradient-to-r from-blue-500 to-cyan-400'
+                      }`}
+                      style={{ width: `${recognitionProgress}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Helper notice */}
+                <p className="text-[11px] text-center text-slate-500">
+                  Arahkan wajah Anda ke lingkaran. Sistem akan mencocokkan wajah dengan profil terdaftar untuk login otomatis.
+                </p>
+
+                {/* Back to password button */}
+                <button
+                  type="button"
+                  onClick={() => { setLoginMode('PASSWORD'); setErrorMessage(null); }}
+                  className="w-full py-2.5 px-4 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-xs transition cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <Lock className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Gunakan Kata Sandi / NIK</span>
+                </button>
+              </div>
+            ) : (
+              /* Login Form */
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div>
+                  <label className="block text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-600 mb-1.5">
+                    Email atau Username
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                      <User className="w-4 h-4" />
+                    </div>
+                    <input
+                      type="text"
+                      value={identifier}
+                      onChange={(e) => setIdentifier(e.target.value)}
+                      placeholder="misal: D001, admin, atau galih"
+                      className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50/80 border border-slate-200 rounded-xl text-[13.5px] text-slate-900 font-medium placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0066FF] focus:border-transparent focus:bg-white transition"
+                      disabled={isLoading}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-600 mb-1.5">
+                    Kata Sandi
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                      <Lock className="w-4 h-4" />
+                    </div>
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Masukkan kata sandi akun"
+                      className="w-full pl-10 pr-10 py-2.5 bg-slate-50/80 border border-slate-200 rounded-xl text-[13.5px] text-slate-900 font-medium placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0066FF] focus:border-transparent focus:bg-white transition"
+                      disabled={isLoading}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 transition cursor-pointer"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end -mt-1.5 mb-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForgotIdentifier(identifier || '');
+                      setForgotError(null);
+                      setForgotSuccess(null);
+                      setShowForgotModal(true);
+                    }}
+                    className="text-[11.5px] font-semibold text-blue-600 hover:text-blue-700 hover:underline transition cursor-pointer"
+                  >
+                    Lupa Kata Sandi?
+                  </button>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full py-3 px-4 bg-gradient-to-r from-[#0066FF] to-blue-700 hover:from-blue-600 hover:to-blue-800 active:scale-[0.99] text-white font-extrabold rounded-xl shadow-md shadow-blue-500/25 flex items-center justify-center gap-2 text-[13px] tracking-wide uppercase transition cursor-pointer disabled:opacity-60 mt-2"
+                >
+                  {isLoading ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                      <span>Memverifikasi Akun...</span>
+                    </>
+                  ) : (
+                    <>
+                      <LogIn className="w-4 h-4" />
+                      <span>Masuk ke PRIME HRIS</span>
+                    </>
+                  )}
+                </button>
+              </form>
+            )}
+
 
             {/* Security Guarantee Pill */}
             <div className="mt-5 pt-3.5 border-t border-slate-100 flex items-center justify-between text-[11px] font-medium text-slate-500">
@@ -306,6 +851,176 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
       <footer className="w-full py-3.5 px-4 text-center text-[11.5px] text-slate-400 border-t border-slate-200/60 bg-white/50 tracking-tight font-medium">
         &copy; 2026 PRIME HRIS ENTERPRISE • PT PRIME INFINITY SYSTEMS • ALL RIGHTS RESERVED
       </footer>
+
+      {/* ========================================================================= */}
+      {/* 4. MODAL PEMULIHAN KATA SANDI (MULTI-IDENTIFIER: HP / EMAIL / USERNAME)   */}
+      {/* ========================================================================= */}
+      {showForgotModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-slate-100 overflow-hidden transform transition-all animate-scaleIn">
+            {/* Header */}
+            <div className="px-6 py-4 bg-gradient-to-r from-blue-50 to-indigo-50/50 border-b border-blue-100/60 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-blue-600/10 text-[#0066FF] flex items-center justify-center">
+                  <KeyRound className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-extrabold text-slate-900 tracking-tight">
+                    Pemulihan Kata Sandi
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    PRIME HRIS Security Gateway
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isForgotLoading) {
+                    setShowForgotModal(false);
+                    setForgotSuccess(null);
+                    setForgotError(null);
+                  }
+                }}
+                className="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-white/80 transition flex items-center justify-center cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6">
+              {!forgotSuccess ? (
+                <form onSubmit={handleForgotPassword} className="space-y-4">
+                  <div className="p-3 bg-blue-50/60 border border-blue-100 rounded-xl text-blue-900 text-xs leading-relaxed">
+                    Masukkan <strong>Nomor WhatsApp</strong>, <strong>Email</strong>, atau <strong>Username/NIK</strong> Anda. Sistem akan memverifikasi dan langsung mengirimkan kata sandi sementara ke kontak terdaftar.
+                  </div>
+
+                  {forgotError && (
+                    <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-500" />
+                      <span>{forgotError}</span>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-600 mb-1.5">
+                      Nomor HP, Email, atau ID / NIK
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                        <UserCheck className="w-4 h-4" />
+                      </div>
+                      <input
+                        type="text"
+                        value={forgotIdentifier}
+                        onChange={(e) => setForgotIdentifier(e.target.value)}
+                        placeholder="Contoh: 08123456789, admin, atau email@kantor.com"
+                        className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[13.5px] text-slate-900 font-medium placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0066FF] focus:bg-white transition"
+                        disabled={isForgotLoading}
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+
+                  <div className="pt-2 flex items-center gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setShowForgotModal(false)}
+                      disabled={isForgotLoading}
+                      className="w-1/3 py-2.5 px-3 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition cursor-pointer"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isForgotLoading || !forgotIdentifier.trim()}
+                      className="w-2/3 py-2.5 px-4 bg-gradient-to-r from-[#0066FF] to-blue-700 hover:from-blue-600 hover:to-blue-800 text-white text-xs font-bold rounded-xl shadow-md shadow-blue-500/20 transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                    >
+                      {isForgotLoading ? (
+                        <>
+                          <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                          <span>Memproses...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Send className="w-3.5 h-3.5" />
+                          <span>Kirim Password Sementara</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                /* Success View */
+                <div className="text-center py-2 space-y-4">
+                  <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto border border-emerald-100 shadow-sm">
+                    <CheckCircle2 className="w-7 h-7" />
+                  </div>
+
+                  <div>
+                    <h4 className="text-sm font-extrabold text-slate-900">
+                      Password Sementara Berhasil Dikirim!
+                    </h4>
+                    <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto leading-relaxed">
+                      {forgotSuccess.message || 'Kata sandi sementara telah dikirimkan ke kontak akun Anda.'}
+                    </p>
+                  </div>
+
+                  <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl text-left space-y-2 text-xs">
+                    <div className="flex items-center justify-between text-slate-600">
+                      <span className="text-slate-400 font-medium">Username / Akun:</span>
+                      <span className="font-mono font-bold text-slate-800">{forgotSuccess.username}</span>
+                    </div>
+                    {forgotSuccess.targetPhone && (
+                      <div className="flex items-center justify-between text-slate-600">
+                        <span className="text-slate-400 font-medium flex items-center gap-1">
+                          <Phone className="w-3 h-3 text-emerald-500" /> WhatsApp:
+                        </span>
+                        <span className="font-mono font-semibold text-emerald-700">{forgotSuccess.targetPhone}</span>
+                      </div>
+                    )}
+                    {forgotSuccess.targetEmail && (
+                      <div className="flex items-center justify-between text-slate-600">
+                        <span className="text-slate-400 font-medium flex items-center gap-1">
+                          <Mail className="w-3 h-3 text-blue-500" /> Email:
+                        </span>
+                        <span className="font-mono font-semibold text-blue-700">{forgotSuccess.targetEmail}</span>
+                      </div>
+                    )}
+                    {forgotSuccess.tempPassword && (
+                      <div className="pt-2 border-t border-slate-200 mt-2">
+                        <span className="text-slate-500 text-[11px] block mb-1">Password Sementara Anda:</span>
+                        <div className="bg-amber-50 border border-amber-200 p-2 rounded-lg text-center font-mono font-extrabold text-amber-900 text-sm tracking-wider">
+                          {forgotSuccess.tempPassword}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <p className="text-[11px] text-slate-400 italic">
+                    Silakan periksa pesan masuk WhatsApp atau Email Anda, lalu login menggunakan password sementara tersebut.
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (forgotSuccess.username) {
+                        setIdentifier(forgotSuccess.username);
+                      }
+                      setShowForgotModal(false);
+                      setForgotSuccess(null);
+                    }}
+                    className="w-full py-2.5 px-4 bg-[#0066FF] hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-md shadow-blue-500/20 transition cursor-pointer"
+                  >
+                    Masuk Sekarang
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

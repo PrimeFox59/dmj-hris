@@ -142,7 +142,7 @@ p.font.bold = True
 p.font.color.rgb = WHITE
 
 p2 = tf.add_paragraph()
-p2.text = "Sistem Manajemen SDM Terpadu, Presensi Kamera Watermark Digital,\nSequential WiFi Gateway, & Otomasi Penggajian Berbasis Proyek Industri"
+p2.text = "Sistem Manajemen SDM Terpadu, Presensi Kamera Watermark Digital,\nMulti-Site GPS Geofence, & Otomasi Penggajian Berbasis Proyek Industri"
 p2.font.name = FONT_BODY
 p2.font.size = Pt(15)
 p2.font.color.rgb = ORANGE_LIGHT
@@ -247,7 +247,7 @@ r_s.font.color.rgb = MINT
 r_s.font.name = FONT_CODE
 r_s.font.size = Pt(10.5)
 r_s2 = p_s.add_run()
-r_s2.text = "Mengintegrasikan Presensi Kamera Watermark, Sequential WiFi Gate, Alokasi Biaya Proyek & Slip Depnaker dalam 1 platform web 100% otomatis."
+r_s2.text = "Mengintegrasikan Presensi Kamera Watermark, Multi-Site GPS Geofence, Alokasi Biaya Proyek & Slip Depnaker dalam 1 platform web 100% otomatis."
 r_s2.font.color.rgb = WHITE
 r_s2.font.name = FONT_BODY
 r_s2.font.size = Pt(10.5)
@@ -263,10 +263,10 @@ add_footer(s3, 3)
 
 pillars = [
     ("PILAR 1", "Presensi Kamera & Watermark", "Selfie webcam dengan stempel permanen NIK, Nama, Waktu WIB, GPS satelit, dan IP subnet. 100% anti titip absen."),
-    ("PILAR 2", "Sequential WiFi Gateway", "Verifikasi berjenjang SSID DMJ-Corporate-5G & MAC Address hardware HP/Laptop. Blokir otomatis VPN & Fake GPS."),
+    ("PILAR 2", "Multi-Site GPS Geofence", "Validasi radius presensi presisi kantor, workshop & site proyek industri. Blokir otomatis VPN & Fake GPS."),
     ("PILAR 3", "Database SDM & Kompensasi", "Sentralisasi NIK resmi, rekening bank payroll BCA/Mandiri, struktur gaji pokok, tunjangan, dan saldo cuti tahunan."),
     ("PILAR 4", "Payroll Depnaker & EAC", "Perhitungan upah lembur 1/173 baku Menakertrans, BPJS, PPh21, dan alokasi biaya tenaga kerja langsung ke proyek."),
-    ("PILAR 5", "Multi-Tier Approval Hub", "Satu pintu persetujuan cuti, dispensasi keterlambatan, lembur, dinas luar mendadak, dan klaim reimbursement.")
+    ("PILAR 5", "Multi-Tier Approval Hub", "Satu pintu persetujuan cuti, dispensasi keterlambatan, lembur, dan dinas luar mendadak berjenjang.")
 ]
 
 for i, (tag, title, desc) in enumerate(pillars):
@@ -332,7 +332,7 @@ p.font.color.rgb = ORANGE
 
 bullets_s4 = [
     ("Real-Time Webcam Viewfinder", "Kamera aktif secara instan dengan face guide oval untuk memastikan wajah teknisi tegak dan jelas."),
-    ("Permanent Digital Watermark", "Foto otomatis dicap stempel digital permanen: NIK, Nama, Jam Detik WIB, Koordinat GPS, SSID WiFi, dan IP Subnet."),
+    ("Permanent Digital Watermark", "Foto otomatis dicap stempel digital permanen: NIK, Nama, Jam Detik WIB, Koordinat GPS, Alamat Geocoded, dan IP Subnet."),
     ("Auto Cut-Off Toleransi Shift", "Batas masuk 08:30 WIB. Keterlambatan terhitung otomatis per menit dan mewajibkan form alasan keterlambatan."),
     ("Geofencing Radius Kantor/Site", "Pengecekan koordinat fisik terhadap titik kantor pusat (Manyar JIIPE / Surabaya HQ) dengan toleransi 100m."),
     ("Audit Trail Log Presensi", "Setiap data presensi tersimpan permanen di database lokal/cloud lengkap dengan foto bukti selfie yang dapat diaudit.")
@@ -398,12 +398,12 @@ p_n.font.bold = True
 p_n.font.color.rgb = ORANGE_LIGHT
 
 # ==============================================================================
-# SLIDE 5: SEQUENTIAL WIFI GATEWAY & DINAS LUAR MENDADAK
+# SLIDE 5: ZERO-TRUST MULTI-SITE GEOFENCE & DINAS LUAR MENDADAK
 # ==============================================================================
 s5 = prs.slides.add_slide(blank_slide_layout)
 apply_background(s5)
-add_header(s5, "Modul 2 • Network Gate", "Sequential Corporate WiFi Gate & Opsi Dinas Luar Mendadak",
-           "Perlindungan berlapis terhadap jaringan fiktif dengan fleksibilitas tinggi saat penugasan mendadak")
+add_header(s5, "Modul 2 • Multi-Site Geofence", "Zero-Trust Multi-Site Geofence & Opsi Dinas Luar Mendadak",
+           "Perlindungan radius presisi lokasi kerja dengan fleksibilitas tinggi saat penugasan mendadak")
 add_footer(s5, 5)
 
 add_card(s5, 0.8, 1.7, 5.75, 4.3, border_color=BORDER_DARK)
@@ -412,21 +412,21 @@ tf_w = tb_w.text_frame
 tf_w.word_wrap = True
 
 p = tf_w.paragraphs[0]
-p.text = "SEQUENTIAL WIFI GATEWAY"
+p.text = "ZERO-TRUST MULTI-SITE GEOFENCE"
 p.font.name = FONT_CODE
 p.font.size = Pt(12)
 p.font.bold = True
 p.font.color.rgb = ORANGE
 
-wifi_pts = [
-    ("Tombol Submit Terkunci", "Tombol presensi WFO otomatis disabled jika perangkat belum terhubung ke Access Point kantor."),
-    ("Validasi SSID & BSSID", "Mencocokkan nama SSID resmi ('DMJ-Corporate-5G') dan BSSID hardware router PT Dwi Martha Jaya."),
-    ("IP Whitelist Subnet", "Memastikan IP Address berasal dari subnet ISP korporat terdaftar (misal Biznet Gio)."),
-    ("Hardware MAC Binding", "Pengecekan MAC address perangkat resmi terdaftar untuk menangkal penyusup luar."),
-    ("Anti-VPN & Fake GPS Shield", "Mendeteksi penggunaan proxy fiktif dan langsung menolak proses absensi.")
+geofence_pts = [
+    ("Radius Presisi Haversine", "Verifikasi radius geofence akurat kantor pusat, workshop & site proyek industri."),
+    ("Validasi Satelit GPS Native", "Mencocokkan koordinat latitude/longitude langsung dari chip GPS perangkat pengguna."),
+    ("Network IP Audit", "Mencatat IP publik dan ISP koneksi untuk deteksi anomali tanpa pembatasan kaku."),
+    ("Zero-False Lockout", "Karyawan tidak terblokir saat rotasi ISP, hotspot, atau jaringan seluler resmi."),
+    ("Anti-VPN & Fake GPS Shield", "Mendeteksi manipulasi koordinat fiktif dan langsung menolak proses absensi.")
 ]
 
-for t, d in wifi_pts:
+for t, d in geofence_pts:
     p_b = tf_w.add_paragraph()
     p_b.space_before = Pt(8)
     r1 = p_b.add_run()
@@ -453,7 +453,7 @@ p_d.font.color.rgb = MINT
 
 dinas_pts = [
     ("Kebutuhan Riil Lapangan", "Teknisi dipanggil darurat ke site klien (contoh: Manyar Smelter / Sorowako) tanpa sempat mampir kantor."),
-    ("Bypass Terkendali (Controlled)", "Memungkinkan presensi dari jaringan seluler luar tanpa terikat WiFi kantor DMJ."),
+    ("Bypass Terkendali (Controlled)", "Memungkinkan presensi dari luar radius kantor pusat saat penugasan dinas."),
     ("Wajib Input Data Penugasan", "Karyawan wajib memilih Klien Tujuan, Nomor SPK Proyek, Lokasi Site, dan Alasan Urgensi."),
     ("Routing Otomatis ke Approval", "Presensi dinas luar langsung masuk antrean 'Pending Approval' di portal Manager/Direksi."),
     ("Pencegahan Alpa Salah Catat", "Menghindarkan staf teladan dari hukuman alpa/potongan gaji akibat tugas mendadak.")
@@ -508,7 +508,7 @@ sdm_pts = [
     ("Parameter Kompensasi Gaji", "Gaji Pokok, Tunjangan Jabatan, Tunjangan Harian Makan & Transport, Tunjangan Site Remote."),
     ("Akun Bank Payroll Resmi", "Pencatatan nomor rekening BCA / Mandiri siap ekspor ke format bank transfer otomatis."),
     ("Tracking Saldo Cuti Tahunan", "Monitoring kuota cuti tahunan (12 hari), cuti bersama, dan riwayat pemakaian cuti."),
-    ("Device Hardware Binding", "Perekaman MAC address perangkat seluler dan laptop resmi untuk keamanan otorisasi.")
+    ("Role-Based Access Control", "Manajemen hak akses bertingkat: Staff, Supervisor, HR, Finance, dan Direksi.")
 ]
 
 for t, d in sdm_pts:
@@ -540,7 +540,7 @@ app_pts = [
     ("Disposisi Cuti & Izin Sakit", "Persetujuan atasan langsung yang otomatis memotong kuota cuti atau memverifikasi surat dokter."),
     ("Dispensasi Keterlambatan", "Verifikasi alasan keterlambatan (>08:30) untuk membebaskan penalti potongan gaji staf."),
     ("Validasi Penugasan Dinas Luar", "Pengecekan bukti foto selfie geotag dan SPK penugasan site darurat."),
-    ("Klaim Reimbursement Proyek", "Persetujuan biaya bensin, tol, material darurat, dan uang makan site proyek."),
+    ("Disposisi Lembur & SPK Proyek", "Persetujuan lembur Depnaker dan surat tugas dinas luar mendesak."),
     ("Multi-Level Workflow", "Hierarki berjenjang: Pengajuan Staf -> Review Supervisor -> Approval Manajer/HR.")
 ]
 
@@ -831,7 +831,7 @@ p_sub.font.color.rgb = MINT
 feat_r = [
     "UNLIMITED Karyawan & Multi-Site",
     "Presensi Kamera Watermark Digital",
-    "Termasuk: Sequential WiFi Gate Anti-Fraud",
+    "Termasuk: Multi-Site GPS Geofence",
     "Termasuk: Project Costing & Forecast EAC",
     "Mesin Penggajian Lengkap Depnaker",
     "Dual Dashboard + Multi-Tier Approval Hub",
@@ -860,7 +860,7 @@ p.font.bold = True
 p.font.color.rgb = MINT
 
 addons = [
-    ("Sequential WiFi Gate", "+ Rp 1.000.000"),
+    ("Multi-Site GPS Geofence", "+ Rp 1.000.000"),
     ("Project Cost Accounting", "+ Rp 1.000.000"),
     ("PWA Mobile Android", "+ Rp 750.000"),
     ("Full Source Code", "+ Rp 2.500.000")
@@ -898,8 +898,8 @@ add_header(s10, "Timeline Implementasi", "Jadwal Pelaksanaan Proyek 5 Minggu (Ag
 add_footer(s10, 10)
 
 sprints = [
-    ("MINGGU 1", "Sprint 1: Inception", "• Kick-off meeting & requirement finalize\n• Whitelist SSID WiFi & BSSID kantor DMJ\n• Setup database karyawan, NIK & rekening\n• Konfigurasi domain & server VPS running"),
-    ("MINGGU 2-3", "Sprint 2: Core Development", "• Implementasi kamera viewfinder & watermark\n• Penguncian Sequential WiFi Gateway\n• Integrasi alur bypass Dinas Luar Mendadak\n• Pembangunan mesin payroll lembur Depnaker"),
+    ("MINGGU 1", "Sprint 1: Inception", "• Kick-off meeting & requirement finalize\n• Setup Multi-Site GPS Geofence DMJ\n• Setup database karyawan, NIK & rekening\n• Konfigurasi domain & server VPS running"),
+    ("MINGGU 2-3", "Sprint 2: Core Development", "• Implementasi kamera viewfinder & watermark\n• Kalibrasi Precision Multi-Site Geofence\n• Integrasi alur bypass Dinas Luar Mendadak\n• Pembangunan mesin payroll lembur Depnaker"),
     ("MINGGU 4", "Sprint 3: Testing & UAT", "• User Acceptance Testing (UAT) staf & HR\n• Kalibrasi geofence Manyar JIIPE & Surabaya\n• Pengujian simulasi pembobolan Fake GPS/VPN\n• Verifikasi akurasi potongan BPJS & PPh21"),
     ("MINGGU 5", "Sprint 4: Go-Live Resmi", "• Pelatihan HR Admin & jajaran pimpinan\n• Handover dokumentasi & credential akses\n• Migrasi data absensi aktif PT DMJ\n• Go-Live resmi & aktivasi garansi SLA 12 bln")
 ]

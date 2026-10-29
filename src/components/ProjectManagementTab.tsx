@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Briefcase,
   Plus,
@@ -21,14 +22,17 @@ import {
   Save,
   Check,
   Palmtree,
-  Wifi,
   ChevronRight,
   TrendingUp,
   Award,
   Layers,
   Sparkles,
   Info,
-  Lock
+  Lock,
+  LayoutDashboard,
+  Crown,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import {
   Project,
@@ -42,7 +46,8 @@ import {
   SystemRole,
   getEffectiveSystemRole
 } from '../types';
-import { formatIDR } from '../utils/payrollCalculator';
+import { formatSalaryDisplay } from '../utils/payrollCalculator';
+import { normalizeIndoLat } from './PresensiCameraTab';
 
 interface ProjectManagementTabProps {
   currentUser: Employee;
@@ -52,6 +57,7 @@ interface ProjectManagementTabProps {
   onSaveProject: (project: Project, updatedEmployees?: Employee[]) => void;
   onUpdateEmployee?: (employee: Employee) => void;
   onNavigateToTab?: (tabId: string, projectIdFilter?: string) => void;
+  initialProjectId?: string;
 }
 
 export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
@@ -61,15 +67,19 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
   salaryRules,
   onSaveProject,
   onUpdateEmployee,
-  onNavigateToTab
+  onNavigateToTab,
+  initialProjectId
 }) => {
   const currentRole: SystemRole = getEffectiveSystemRole(currentUser);
-  const canManage = currentRole === 'admin' || currentRole === 'superuser';
+  const canManage = currentRole === 'admin' || currentRole === 'hr' || currentRole === 'superuser';
+  const canViewFinancials = canManage || currentRole === 'finance';
+  const isStaff = !canViewFinancials;
 
   // State Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'PLANNING' | 'COMPLETED'>('ALL');
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [showBudgetNominal, setShowBudgetNominal] = useState<boolean>(false);
 
   // Modal State for Project Editing / Creation
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -85,6 +95,31 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
   // Quick personnel filter inside modal
   const [personnelSearch, setPersonnelSearch] = useState('');
 
+  // Prevent background scroll when modal is open
+  useEffect(() => {
+    if (isModalOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isModalOpen]);
+
+  // Auto-open modal if navigated from ProjectDashboardTab with specific project ID
+  useEffect(() => {
+    if (initialProjectId) {
+      const targetProj = projects.find(p => p.id === initialProjectId);
+      if (targetProj) {
+        const isPm = targetProj.projectManagerId === currentUser.id;
+        if (canManage || isPm) {
+          handleOpenEdit(targetProj, 'schedule');
+        }
+      }
+    }
+  }, [initialProjectId, projects, canManage, currentUser.id]);
+
   // Statistics Calculations
   const stats = useMemo(() => {
     const totalProjects = projects.length;
@@ -92,8 +127,9 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
     const totalBudget = projects.reduce((sum, p) => sum + (p.allocatedBudget || 0), 0);
     const totalLaborCost = projects.reduce((sum, p) => sum + (p.actualLaborCost || 0), 0);
     const assignedCount = employees.filter(e => e.assignedProjectId).length;
+    const activeGeofences = projects.filter(p => p.customRules?.geofence?.enabled).length;
 
-    return { totalProjects, activeProjects, totalBudget, totalLaborCost, assignedCount };
+    return { totalProjects, activeProjects, totalBudget, totalLaborCost, assignedCount, activeGeofences };
   }, [projects, employees]);
 
   // Filtered Projects List
@@ -130,6 +166,7 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
       actualHoursSpent: 0,
       hourlyRateMultiplier: 1.25,
       description: '',
+      projectManagerId: undefined,
       assignedEmployeeIds: [],
       customRules: {
         workSchedule: {
@@ -162,8 +199,7 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
           siteName: '',
           latitude: -7.15,
           longitude: 112.65,
-          radiusMeters: 300,
-          allowedWifiSsid: ''
+          radiusMeters: 300
         }
       }
     };
@@ -175,8 +211,11 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
     setIsCreatingNew(false);
     setModalTab(tab);
 
-    // Compute assigned employees based on both project.assignedEmployeeIds and employee.assignedProjectId
+    // Compute assigned employees based on both project.assignedEmployeeIds, projectManagerId, and employee.assignedProjectId
     const assignedIds = new Set<string>(project.assignedEmployeeIds || []);
+    if (project.projectManagerId) {
+      assignedIds.add(project.projectManagerId);
+    }
     employees.forEach(emp => {
       if (emp.assignedProjectId === project.id) {
         assignedIds.add(emp.id);
@@ -247,6 +286,17 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
       }
     });
 
+    // Normalisasi koordinat geofence (pastikan latitude Indonesia bernilai negatif)
+    if (updatedProject.customRules?.geofence?.latitude) {
+      const normalizedLat = normalizeIndoLat(
+        updatedProject.customRules.geofence.latitude,
+        updatedProject.customRules.geofence.longitude
+      );
+      if (typeof normalizedLat === 'number') {
+        updatedProject.customRules.geofence.latitude = normalizedLat;
+      }
+    }
+
     onSaveProject(updatedProject, updatedEmployeesList);
 
     setSaveSuccessMsg(`Proyek "${updatedProject.name}" dan penugasan ${stagedAssignedEmployeeIds.length} personel berhasil disimpan.`);
@@ -256,9 +306,17 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
     }, 1500);
   };
 
-  // Helper to fetch employee counts for each project
-  const getProjectPersonnel = (projectId: string) => {
-    return employees.filter(e => e.assignedProjectId === projectId);
+  // Helper to fetch employee counts for each project (bidirectional match: assignedProjectId, project.code, assignedEmployeeIds, or projectManagerId)
+  const getProjectPersonnel = (project: Project) => {
+    const assignedIdSet = new Set<string>(project.assignedEmployeeIds || []);
+    if (project.projectManagerId) {
+      assignedIdSet.add(project.projectManagerId);
+    }
+    return employees.filter(e => 
+      e.assignedProjectId === project.id || 
+      e.assignedProjectId === project.code || 
+      assignedIdSet.has(e.id)
+    );
   };
 
   // Employees available to add (not currently staged in this project)
@@ -289,15 +347,28 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
           </div>
         </div>
 
-        {canManage && (
-          <button
-            onClick={handleOpenCreate}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#FF6B00] hover:bg-[#e56000] text-white font-bold text-xs shadow-sm transition-all transform active:scale-95 cursor-pointer whitespace-nowrap"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Tambah Proyek Baru</span>
-          </button>
-        )}
+        <div className="flex items-center gap-2 flex-wrap">
+          {onNavigateToTab && (
+            <button
+              onClick={() => onNavigateToTab('leave_gantt')}
+              className="inline-flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-800 font-bold text-xs shadow-2xs transition-all cursor-pointer whitespace-nowrap"
+              title="Buka visualisasi Gantt Chart jadwal plan & aktual cuti staf non-lokal & lokal"
+            >
+              <Layers className="w-4 h-4 text-[#FF6B00]" />
+              <span>Gantt Chart Cuti Roster</span>
+            </button>
+          )}
+
+          {canManage && (
+            <button
+              onClick={handleOpenCreate}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#FF6B00] hover:bg-[#e56000] text-white font-bold text-xs shadow-sm transition-all transform active:scale-95 cursor-pointer whitespace-nowrap"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Tambah Proyek Baru</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* 4 Crisp Stat Cards */}
@@ -320,39 +391,80 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/80 shadow-xs hover:shadow-md transition-all">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 font-mono-code">
-              Pagu Anggaran
-            </span>
-            <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-              <DollarSign className="w-4 h-4" />
+        {canViewFinancials ? (
+          <>
+            <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/80 shadow-xs hover:shadow-md transition-all">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 font-mono-code">
+                  Pagu Anggaran
+                </span>
+                <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                  <DollarSign className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="text-xl sm:text-2xl font-black text-slate-900 font-mono-code truncate">
+                {stats.totalBudget > 0 ? formatSalaryDisplay(stats.totalBudget, showBudgetNominal) : 'Belum Ditentukan (TBD)'}
+              </div>
+              <div className="mt-2 text-xs text-slate-500">
+                {stats.totalBudget > 0 ? 'Alokasi Tenaga Kerja Disetujui' : 'Menunggu Penetapan Pagu'}
+              </div>
             </div>
-          </div>
-          <div className="text-xl sm:text-2xl font-black text-slate-900 font-mono-code truncate">
-            {formatIDR(stats.totalBudget)}
-          </div>
-          <div className="mt-2 text-xs text-slate-500">
-            Alokasi Tenaga Kerja Disetujui
-          </div>
-        </div>
 
-        <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/80 shadow-xs hover:shadow-md transition-all">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 font-mono-code">
-              Realisasi Upah
-            </span>
-            <div className="w-8 h-8 rounded-xl bg-orange-50 text-[#FF6B00] flex items-center justify-center">
-              <Award className="w-4 h-4" />
+            <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/80 shadow-xs hover:shadow-md transition-all">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 font-mono-code">
+                  Realisasi Upah
+                </span>
+                <div className="w-8 h-8 rounded-xl bg-orange-50 text-[#FF6B00] flex items-center justify-center">
+                  <Award className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="text-xl sm:text-2xl font-black text-[#FF6B00] font-mono-code truncate">
+                {formatSalaryDisplay(stats.totalLaborCost, showBudgetNominal)}
+              </div>
+              <div className="mt-2 text-xs text-emerald-600 font-semibold">
+                {((stats.totalLaborCost / (stats.totalBudget || 1)) * 100).toFixed(1)}% Penyerapan Anggaran
+              </div>
             </div>
-          </div>
-          <div className="text-xl sm:text-2xl font-black text-[#FF6B00] font-mono-code truncate">
-            {formatIDR(stats.totalLaborCost)}
-          </div>
-          <div className="mt-2 text-xs text-emerald-600 font-semibold">
-            {((stats.totalLaborCost / (stats.totalBudget || 1)) * 100).toFixed(1)}% Penyerapan Anggaran
-          </div>
-        </div>
+          </>
+        ) : (
+          <>
+            <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/80 shadow-xs hover:shadow-md transition-all">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 font-mono-code">
+                  Lokasi Presensi GPS
+                </span>
+                <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                  <MapPin className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="text-xl sm:text-2xl font-black text-slate-900 font-mono-code truncate">
+                {stats.activeGeofences} Site Aktif
+              </div>
+              <div className="mt-2 text-xs text-blue-700 font-semibold flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                <span>Validasi Geofence Radius</span>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/80 shadow-xs hover:shadow-md transition-all">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 font-mono-code">
+                  Aturan Kerja Site
+                </span>
+                <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                  <Clock className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="text-xl sm:text-2xl font-black text-amber-700 font-mono-code truncate">
+                Shift & Roster
+              </div>
+              <div className="mt-2 text-xs text-amber-700 font-semibold">
+                Toleransi & Kebijakan Lapangan
+              </div>
+            </div>
+          </>
+        )}
 
         <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/80 shadow-xs hover:shadow-md transition-all">
           <div className="flex items-center justify-between mb-2">
@@ -398,24 +510,41 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
           ))}
         </div>
 
-        {/* Search Input */}
-        <div className="relative w-full sm:w-80">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Cari nama proyek, klien, kode site..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-8 py-2 rounded-xl bg-white border border-slate-200 text-xs font-medium focus:outline-none focus:border-[#FF6B00] text-slate-800 shadow-2xs"
-          />
-          {searchQuery && (
+        {/* Search Input & Privacy Toggle */}
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          {canViewFinancials && (
             <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+              onClick={() => setShowBudgetNominal(prev => !prev)}
+              className={`px-3 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shrink-0 ${
+                showBudgetNominal
+                  ? 'bg-orange-50 text-[#FF6B00] border-orange-200'
+                  : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
+              }`}
+              title="Toggle sensor pagu anggaran & realisasi biaya upah proyek (default: sensor)"
             >
-              <X className="w-3.5 h-3.5" />
+              {showBudgetNominal ? <EyeOff className="w-3.5 h-3.5 text-slate-400" /> : <Eye className="w-3.5 h-3.5 text-[#FF6B00]" />}
+              <span className="hidden sm:inline">{showBudgetNominal ? 'Sembunyikan Anggaran' : 'Tampilkan Anggaran'}</span>
             </button>
           )}
+
+          <div className="relative w-full sm:w-80">
+            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Cari nama proyek, klien, kode site..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-8 py-2 rounded-xl bg-white border border-slate-200 text-xs font-medium focus:outline-none focus:border-[#FF6B00] text-slate-800 shadow-2xs"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -431,16 +560,15 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {filteredProjects.map(proj => {
-            const assignedPeople = getProjectPersonnel(proj.id);
-            const budgetUsedPct = Math.min(100, Math.round(((proj.actualLaborCost || 0) / (proj.allocatedBudget || 1)) * 100));
+            const assignedPeople = getProjectPersonnel(proj);
+            const hasBudget = (proj.allocatedBudget || 0) > 0;
+            const budgetUsedPct = hasBudget ? Math.min(100, Math.round(((proj.actualLaborCost || 0) / proj.allocatedBudget) * 100)) : 0;
 
-            // Sanitize display fields to PRIME standard
-            const cleanCode = proj.code.replace(/^DMJ-/i, 'PRIME-');
-            const cleanName = proj.name.replace(/\bDMJ\b/gi, 'PRIME').replace(/Smelter PRIME/gi, 'Smelter Smelting');
-            const cleanClient = proj.client
-              ? proj.client.replace(/PT Dwi Martha Jaya/gi, 'PT Prime Infinity Systems').replace(/\bDMJ\b/gi, 'PRIME')
-              : 'PT Prime Infinity Systems';
-            const cleanLocation = proj.location ? proj.location.replace(/\bDMJ\b/gi, 'PRIME') : 'Site Proyek';
+            // Display fields - Tampilkan data entitas resmi proyek langsung dari database
+            const cleanCode = proj.code;
+            const cleanName = proj.name;
+            const cleanClient = proj.client || 'PT Dwi Martha Jaya';
+            const cleanLocation = proj.location || 'Site Proyek';
 
             // Custom Rule Flags
             const hasCustomSchedule = proj.customRules?.workSchedule?.enabled;
@@ -450,10 +578,26 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
             const hasCustomAllowance = proj.customRules?.allowance?.enabled;
             const hasGeofence = proj.customRules?.geofence?.enabled;
 
+            // Project Manager (PM) Resolution for This Specific Project
+            const isPmOfThisProject = proj.projectManagerId === currentUser.id;
+            const canViewFinancialsThisProject = canViewFinancials || isPmOfThisProject;
+            const canManageThisProject = canManage || isPmOfThisProject;
+            const pmEmployee = proj.projectManagerId ? employees.find(e => e.id === proj.projectManagerId) : null;
+
             return (
               <div
                 key={proj.id}
-                className="rounded-3xl p-6 bg-white border border-slate-200/80 shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between group"
+                onClick={() => {
+                  if (onNavigateToTab) {
+                    onNavigateToTab('project_dashboard', proj.id);
+                  }
+                }}
+                className={`rounded-3xl p-6 bg-white border shadow-xs hover:shadow-lg transition-all duration-200 flex flex-col justify-between group cursor-pointer ${
+                  isPmOfThisProject 
+                    ? 'border-amber-300/90 ring-1 ring-amber-200 hover:border-amber-400' 
+                    : 'border-slate-200/80 hover:border-[#FF6B00]/50'
+                }`}
+                title={`Buka Dashboard Khusus & Performa untuk ${cleanName}`}
               >
                 <div>
                   {/* Card Top: Code, Status & Pagu Anggaran */}
@@ -473,22 +617,46 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
                       >
                         {proj.status === 'ACTIVE' ? 'BERJALAN / AKTIF' : proj.status === 'PLANNING' ? 'PERENCANAAN' : 'SELESAI'}
                       </span>
+                      {isPmOfThisProject && (
+                        <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 text-[10.5px] font-black flex items-center gap-1 font-mono-code">
+                          <Crown className="w-3 h-3 text-amber-700" />
+                          <span>PROJECT MANAGER</span>
+                        </span>
+                      )}
                     </div>
 
-                    <div className="text-right">
-                      <div className="text-[10px] text-slate-400 font-mono-code font-bold uppercase">Pagu Anggaran</div>
-                      <div className="text-base font-black text-slate-900 font-mono-code">
-                        {formatIDR(proj.allocatedBudget)}
+                    {canViewFinancialsThisProject ? (
+                      <div className="text-right">
+                        <div className="text-[10px] text-slate-400 font-mono-code font-bold uppercase">Pagu Anggaran</div>
+                        <div className="text-base font-black text-slate-900 font-mono-code">
+                          {hasBudget ? (
+                            formatSalaryDisplay(proj.allocatedBudget, showBudgetNominal)
+                          ) : (
+                            <span className="text-xs text-slate-400 font-sans font-medium italic">Belum Ditentukan (TBD)</span>
+                          )}
+                        </div>
                       </div>
-                    </div>
+                    ) : (
+                      <div className="text-right">
+                        <div className="text-[10px] text-slate-400 font-mono-code font-bold uppercase">Radius Presensi</div>
+                        <div className="text-xs font-bold text-emerald-700 flex items-center justify-end gap-1 font-mono-code">
+                          <MapPin className="w-3 h-3 text-emerald-600" />
+                          <span>{hasGeofence ? `${proj.customRules?.geofence?.radiusMeters || 350}m GPS` : 'Site Standar'}</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Project Name */}
-                  <h3 className="text-base sm:text-lg font-black text-slate-900 group-hover:text-[#FF6B00] transition-colors leading-snug my-2">
-                    {cleanName}
+                  <h3 className="text-base sm:text-lg font-black text-slate-900 group-hover:text-[#FF6B00] transition-colors leading-snug my-2 flex items-center justify-between gap-2">
+                    <span>{cleanName}</span>
+                    <span className="text-[11px] font-bold text-[#FF6B00] opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 shrink-0">
+                      <span>{canViewFinancialsThisProject ? 'Buka Dashboard' : 'Lihat Aturan Proyek'}</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </span>
                   </h3>
 
-                  {/* Metadata: Client, Location, Schedule */}
+                  {/* Metadata: Client, Location, Schedule, Project Manager */}
                   <div className="flex flex-col gap-1.5 mt-2.5 text-xs text-slate-600">
                     <div className="flex items-center gap-1.5">
                       <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
@@ -504,26 +672,44 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
                         {proj.startDate} s/d {proj.targetEndDate}
                       </span>
                     </div>
-                  </div>
-
-                  {/* Budget & Cost Progress Bar */}
-                  <div className="mt-4 pt-3 border-t border-slate-100">
-                    <div className="flex justify-between items-center text-xs mb-1.5">
-                      <span className="text-slate-500">Realisasi Biaya Upah:</span>
-                      <span className="font-bold text-slate-900 font-mono-code">
-                        {formatIDR(proj.actualLaborCost || 0)}{' '}
-                        <span className="text-slate-400 font-normal">({budgetUsedPct}%)</span>
+                    <div className="flex items-center gap-1.5 pt-0.5">
+                      <Crown className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                      <span className="text-slate-700">
+                        Leader / PM:{' '}
+                        {pmEmployee ? (
+                          <strong className="text-slate-900 font-bold">{pmEmployee.name}</strong>
+                        ) : (
+                          <span className="text-slate-400 italic">Belum Ditugaskan</span>
+                        )}
+                        {isPmOfThisProject && (
+                          <span className="ml-1.5 text-amber-700 font-extrabold text-[11px]">
+                            (Anda)
+                          </span>
+                        )}
                       </span>
                     </div>
-                    <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-500 ${
-                          budgetUsedPct > 85 ? 'bg-rose-500' : budgetUsedPct > 60 ? 'bg-amber-500' : 'bg-emerald-500'
-                        }`}
-                        style={{ width: `${budgetUsedPct}%` }}
-                      ></div>
-                    </div>
                   </div>
+
+                  {/* Budget & Cost Progress Bar (Visible to managers / finance / PM of project) */}
+                  {canViewFinancialsThisProject && (
+                    <div className="mt-4 pt-3 border-t border-slate-100">
+                      <div className="flex justify-between items-center text-xs mb-1.5">
+                        <span className="text-slate-500">Realisasi Biaya Upah:</span>
+                        <span className="font-bold text-slate-900 font-mono-code">
+                          {formatSalaryDisplay(proj.actualLaborCost || 0, showBudgetNominal)}{' '}
+                          <span className="text-slate-400 font-normal">({hasBudget ? `${budgetUsedPct}%` : 'TBD'})</span>
+                        </span>
+                      </div>
+                      <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ${
+                            budgetUsedPct > 85 ? 'bg-rose-500' : budgetUsedPct > 60 ? 'bg-amber-500' : 'bg-emerald-500'
+                          }`}
+                          style={{ width: `${hasBudget ? budgetUsedPct : 0}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Highlight: Project-Specific Custom Rules Badges */}
                   <div className="mt-4 flex flex-wrap gap-2">
@@ -574,10 +760,10 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
                       )}
                     </div>
 
-                    {/* Geofence / Wifi Site */}
+                    {/* Geofence Site Proyek */}
                     {hasGeofence && (
                       <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-semibold bg-blue-50 text-blue-900 border border-blue-200/80">
-                        <Wifi className="w-3.5 h-3.5 text-blue-600" />
+                        <MapPin className="w-3.5 h-3.5 text-blue-600" />
                         <span>Site Geofence Aktif</span>
                       </div>
                     )}
@@ -590,9 +776,12 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
                         <Users className="w-3.5 h-3.5 text-[#FF6B00]" />
                         <span>Personel Bertugas ({assignedPeople.length} Orang):</span>
                       </span>
-                      {canManage && (
+                      {canManageThisProject && (
                         <button
-                          onClick={() => handleOpenEdit(proj, 'personnel')}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenEdit(proj, 'personnel');
+                          }}
                           className="text-[11px] font-bold text-[#FF6B00] hover:underline cursor-pointer"
                         >
                           + Atur Personel
@@ -607,8 +796,14 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
                         {assignedPeople.slice(0, 5).map(emp => (
                           <div
                             key={emp.id}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-50 text-slate-800 text-xs font-medium border border-slate-200"
-                            title={`${emp.name} - ${emp.position} (${emp.nik.replace(/^DMJ-/i, 'PRIME-')})`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (onNavigateToTab) {
+                                onNavigateToTab('user_performance', proj.id);
+                              }
+                            }}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-50 hover:bg-orange-50 hover:border-orange-200 text-slate-800 text-xs font-medium border border-slate-200 transition-colors"
+                            title={`Klik untuk melihat kinerja ${emp.name} (${emp.position})`}
                           >
                             <img
                               src={emp.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(emp.name)}&background=random`}
@@ -619,7 +814,16 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
                           </div>
                         ))}
                         {assignedPeople.length > 5 && (
-                          <span className="inline-flex items-center px-2 py-1 rounded-full bg-orange-50 text-[#FF6B00] border border-orange-200 text-xs font-bold font-mono-code">
+                          <span
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (onNavigateToTab) {
+                                onNavigateToTab('project_dashboard', proj.id);
+                              }
+                            }}
+                            className="inline-flex items-center px-2 py-1 rounded-full bg-orange-50 hover:bg-orange-100 text-[#FF6B00] border border-orange-200 text-xs font-bold font-mono-code transition-colors"
+                            title="Buka dashboard proyek untuk melihat semua personel"
+                          >
                             +{assignedPeople.length - 5} lainnya
                           </span>
                         )}
@@ -629,30 +833,55 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
                 </div>
 
                 {/* Card Action Buttons */}
-                <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
-                  <button
-                    onClick={() => {
-                      if (onNavigateToTab) {
-                        onNavigateToTab('payroll', proj.id);
-                      }
-                    }}
-                    className="text-xs font-bold text-slate-600 hover:text-[#FF6B00] flex items-center gap-1 cursor-pointer transition-colors"
-                  >
-                    <span>Lihat Payroll Site</span>
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
+                <div className="mt-6 pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-3.5 flex-wrap">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (onNavigateToTab) {
+                          onNavigateToTab('project_dashboard', proj.id);
+                        }
+                      }}
+                      className="text-xs font-bold text-[#FF6B00] hover:text-[#e56000] flex items-center gap-1.5 cursor-pointer transition-colors"
+                    >
+                      <LayoutDashboard className="w-3.5 h-3.5" />
+                      <span>{canViewFinancialsThisProject ? 'Dashboard & Performa' : 'Detail & Aturan Proyek'}</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+
+                    {canViewFinancialsThisProject && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onNavigateToTab) {
+                            onNavigateToTab('payroll', proj.id);
+                          }
+                        }}
+                        className="text-xs font-semibold text-slate-500 hover:text-[#FF6B00] flex items-center gap-1 cursor-pointer transition-colors"
+                      >
+                        <span>Lihat Payroll Site</span>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
 
                   <div className="flex items-center gap-2">
-                    {canManage ? (
+                    {canManageThisProject ? (
                       <button
-                        onClick={() => handleOpenEdit(proj, 'schedule')}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenEdit(proj, 'schedule');
+                        }}
                         className="px-3.5 py-2 rounded-xl bg-orange-50 hover:bg-[#FF6B00] text-[#FF6B00] hover:text-white font-bold text-xs border border-orange-200 shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
                       >
                         <Sliders className="w-3.5 h-3.5" />
                         <span>Kelola Personel & Aturan</span>
                       </button>
                     ) : (
-                      <span className="text-xs text-slate-400 italic">Read-only view</span>
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 text-slate-600 font-bold text-xs border border-slate-200/80">
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Aturan Site Terverifikasi</span>
+                      </span>
                     )}
                   </div>
                 </div>
@@ -662,10 +891,18 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
         </div>
       )}
 
-      {/* MODAL: Project Management & Custom Rules */}
-      {isModalOpen && editingProject && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/60 backdrop-blur-sm overflow-y-auto animate-fadeIn">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden my-auto">
+      {/* MODAL: Project Management & Custom Rules (Portaled to document.body for current viewport centering) */}
+      {isModalOpen && editingProject && typeof document !== 'undefined' && createPortal(
+        <div 
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6 bg-black/60 backdrop-blur-sm overflow-y-auto animate-fadeIn"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsModalOpen(false);
+          }}
+        >
+          <div 
+            className="bg-white dark:bg-slate-900 rounded-3xl max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden my-auto"
+            onClick={e => e.stopPropagation()}
+          >
             {/* Modal Header */}
             <div className="px-6 py-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-gradient-to-r from-slate-900 via-slate-900 to-indigo-950 text-white">
               <div className="flex items-center gap-3">
@@ -765,6 +1002,50 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
                     />
                   </div>
 
+                  {/* Project Manager / Site Leader Selector */}
+                  <div className="p-4 rounded-2xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 space-y-2">
+                    <label className="block text-xs font-bold text-amber-950 dark:text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                      <span className="flex items-center gap-1.5 text-slate-900 dark:text-white">
+                        <Crown className="w-4 h-4 text-amber-600" />
+                        <span>Project Manager (PM) / Site Leader</span>
+                      </span>
+                      <span className="text-[10px] font-mono-code font-normal text-amber-800 dark:text-amber-300">
+                        Memegang hak akses penuh kelola aturan & data finansial proyek
+                      </span>
+                    </label>
+                    <select
+                      value={editingProject.projectManagerId || ''}
+                      onChange={e => {
+                        const newPmId = e.target.value;
+                        setEditingProject({ ...editingProject, projectManagerId: newPmId || undefined });
+                        if (newPmId && !stagedAssignedEmployeeIds.includes(newPmId)) {
+                          setStagedAssignedEmployeeIds(prev => [...prev, newPmId]);
+                        }
+                      }}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 text-sm focus:ring-2 focus:ring-[#FF6B00] font-semibold text-slate-800 dark:text-slate-100"
+                    >
+                      <option value="">-- Belum Ditentukan (Tanpa PM Khusus) --</option>
+                      {employees.map(emp => (
+                        <option key={emp.id} value={emp.id}>
+                          {emp.name} — {emp.position} ({emp.nik})
+                        </option>
+                      ))}
+                    </select>
+                    {editingProject.projectManagerId && (() => {
+                      const pm = employees.find(e => e.id === editingProject.projectManagerId);
+                      return pm ? (
+                        <div className="flex items-center gap-2.5 pt-1 text-xs text-amber-900 dark:text-amber-300 font-medium">
+                          <img
+                            src={pm.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(pm.name)}`}
+                            alt={pm.name}
+                            className="w-6 h-6 rounded-full object-cover border border-amber-300 shrink-0"
+                          />
+                          <span>PM Terpilih: <strong>{pm.name}</strong> ({pm.position} • {pm.department})</span>
+                        </div>
+                      ) : null;
+                    })()}
+                  </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
@@ -787,7 +1068,7 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
                         type="text"
                         value={editingProject.location}
                         onChange={e => setEditingProject({ ...editingProject, location: e.target.value })}
-                        placeholder="Contoh: Manyar, Gresik / Site Pomalaa"
+                        placeholder="Contoh: Surabaya / Sidoarjo / Site Pomalaa"
                         className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm focus:ring-2 focus:ring-orange-500"
                       />
                     </div>
@@ -918,6 +1199,40 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
 
                   {/* Staged Personnel List */}
                   <div>
+                    {/* PM Quick Highlight Card */}
+                    <div className="mb-3.5 p-3.5 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 dark:from-slate-800 dark:to-slate-800 border border-amber-200 dark:border-amber-700/60 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5">
+                        <Crown className="w-5 h-5 text-amber-600 shrink-0" />
+                        <div>
+                          <p className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                            <span>Project Manager (PM):</span>
+                            {editingProject.projectManagerId ? (
+                              <span className="text-amber-800 dark:text-amber-300 font-extrabold">
+                                {employees.find(e => e.id === editingProject.projectManagerId)?.name}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 font-normal italic">Belum Ditentukan</span>
+                            )}
+                          </p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                            {editingProject.projectManagerId
+                              ? 'Memegang hak kendali penuh untuk mengelola aturan proyek & melihat data finansial/payroll tim.'
+                              : 'Klik tombol "Set PM" pada salah satu personel di bawah untuk menunjuk Project Manager.'}
+                          </p>
+                        </div>
+                      </div>
+                      {editingProject.projectManagerId && (
+                        <button
+                          type="button"
+                          onClick={() => setEditingProject({ ...editingProject, projectManagerId: undefined })}
+                          className="px-2.5 py-1 rounded-xl bg-white dark:bg-slate-700 hover:bg-rose-50 text-slate-600 hover:text-rose-600 text-[11px] font-bold border border-slate-200 dark:border-slate-600 transition-colors cursor-pointer shrink-0"
+                          title="Hapus penunjukan PM"
+                        >
+                          Reset PM
+                        </button>
+                      )}
+                    </div>
+
                     <div className="flex items-center justify-between mb-3">
                       <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
                         Daftar Personel Bertugas ({stagedAssignedEmployeeIds.length} Karyawan):
@@ -949,41 +1264,77 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
                             const q = personnelSearch.toLowerCase();
                             return emp!.name.toLowerCase().includes(q) || emp!.nik.toLowerCase().includes(q);
                           })
-                          .map(emp => (
-                            <div
-                              key={emp!.id}
-                              className="flex items-center justify-between p-3 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 hover:border-orange-300 dark:hover:border-orange-700/60 transition-colors"
-                            >
-                              <div className="flex items-center gap-3">
-                                <img
-                                  src={emp!.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(emp!.name)}&background=random`}
-                                  alt={emp!.name}
-                                  className="w-9 h-9 rounded-xl object-cover border border-slate-200 dark:border-slate-700"
-                                />
-                                <div>
-                                  <div className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
-                                    <span>{emp!.name}</span>
-                                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
-                                      {emp!.nik}
-                                    </span>
-                                  </div>
-                                  <div className="text-xs text-slate-500 dark:text-slate-400">
-                                    {emp!.position} • {emp!.department} • <span className="font-semibold">{emp!.employmentType}</span>
+                          .map(emp => {
+                            const isEmpPm = editingProject.projectManagerId === emp!.id;
+                            return (
+                              <div
+                                key={emp!.id}
+                                className={`flex items-center justify-between p-3 rounded-2xl border transition-colors ${
+                                  isEmpPm 
+                                    ? 'bg-amber-50/70 dark:bg-amber-950/30 border-amber-300 dark:border-amber-700/80' 
+                                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700/80 hover:border-orange-300 dark:hover:border-orange-700/60'
+                                }`}
+                              >
+                                <div className="flex items-center gap-3">
+                                  <img
+                                    src={emp!.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(emp!.name)}&background=random`}
+                                    alt={emp!.name}
+                                    className={`w-9 h-9 rounded-xl object-cover border ${isEmpPm ? 'border-amber-400 ring-2 ring-amber-300/50' : 'border-slate-200 dark:border-slate-700'}`}
+                                  />
+                                  <div>
+                                    <div className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
+                                      <span>{emp!.name}</span>
+                                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                                        {emp!.nik}
+                                      </span>
+                                      {isEmpPm && (
+                                        <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-black flex items-center gap-1 font-mono-code">
+                                          <Crown className="w-3 h-3 text-amber-600" />
+                                          <span>PM / LEADER</span>
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                                      {emp!.position} • {emp!.department} • <span className="font-semibold">{emp!.employmentType}</span>
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
 
-                              <button
-                                type="button"
-                                onClick={() => handleUnassignEmployee(emp!.id)}
-                                className="px-3 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 hover:bg-rose-100 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-                                title="Lepas penugasan dari proyek ini"
-                              >
-                                <UserMinus className="w-3.5 h-3.5" />
-                                <span>Lepaskan</span>
-                              </button>
-                            </div>
-                          ))}
+                                <div className="flex items-center gap-2">
+                                  {!isEmpPm ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingProject({ ...editingProject, projectManagerId: emp!.id })}
+                                      className="px-2.5 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 hover:bg-amber-100 text-xs font-bold border border-amber-200/80 flex items-center gap-1 transition-colors cursor-pointer"
+                                      title="Tetapkan karyawan ini sebagai Project Manager proyek"
+                                    >
+                                      <Crown className="w-3.5 h-3.5 text-amber-600" />
+                                      <span>Set PM</span>
+                                    </button>
+                                  ) : (
+                                    <span className="px-2.5 py-1 rounded-xl bg-amber-200/60 text-amber-900 text-[11px] font-black font-mono-code hidden sm:inline">
+                                      LEADER
+                                    </span>
+                                  )}
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (editingProject.projectManagerId === emp!.id) {
+                                        setEditingProject({ ...editingProject, projectManagerId: undefined });
+                                      }
+                                      handleUnassignEmployee(emp!.id);
+                                    }}
+                                    className="px-3 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 hover:bg-rose-100 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                                    title="Lepas penugasan dari proyek ini"
+                                  >
+                                    <UserMinus className="w-3.5 h-3.5" />
+                                    <span>Lepaskan</span>
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
                       </div>
                     )}
                   </div>
@@ -1536,8 +1887,7 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
                               siteName: editingProject.location || 'Site Proyek',
                               latitude: -7.15,
                               longitude: 112.65,
-                              radiusMeters: 300,
-                              allowedWifiSsid: `PRIME-Site-${editingProject.code}`
+                              radiusMeters: 300
                             };
                             setEditingProject({
                               ...editingProject,
@@ -1630,29 +1980,6 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
                           </div>
                         </div>
 
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                            SSID Wi-Fi Lapangan Resmi (Site Office Access Point)
-                          </label>
-                          <input
-                            type="text"
-                            value={editingProject.customRules.geofence.allowedWifiSsid || ''}
-                            onChange={e =>
-                              setEditingProject({
-                                ...editingProject,
-                                customRules: {
-                                  ...editingProject.customRules,
-                                  geofence: {
-                                    ...editingProject.customRules!.geofence!,
-                                    allowedWifiSsid: e.target.value
-                                  }
-                                }
-                              })
-                            }
-                            placeholder="Contoh: PRIME-SiteOffice-Manyar"
-                            className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm focus:ring-2 focus:ring-indigo-500"
-                          />
-                        </div>
                       </div>
                     )}
                   </div>
@@ -1691,7 +2018,8 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

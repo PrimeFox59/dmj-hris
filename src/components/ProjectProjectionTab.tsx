@@ -8,10 +8,12 @@ import {
   Clock,
   Layers,
   ArrowUpRight,
-  ShieldCheck
+  ShieldCheck,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { Project } from '../types';
-import { formatIDR } from '../utils/payrollCalculator';
+import { formatSalaryDisplay } from '../utils/payrollCalculator';
 
 interface ProjectProjectionTabProps {
   projects: Project[];
@@ -20,6 +22,7 @@ interface ProjectProjectionTabProps {
 export const ProjectProjectionTab: React.FC<ProjectProjectionTabProps> = ({ projects }) => {
   const [selectedProject, setSelectedProject] = useState<Project>(projects[0]);
   const [forecastExtraHours, setForecastExtraHours] = useState(150);
+  const [showProjectionNominal, setShowProjectionNominal] = useState<boolean>(false);
 
   // Compute stats for selected project
   const remainingHours = Math.max(0, selectedProject.totalEstimatedHours - selectedProject.actualHoursSpent);
@@ -30,18 +33,18 @@ export const ProjectProjectionTab: React.FC<ProjectProjectionTabProps> = ({ proj
   const adjustedProjectedHours = remainingHours + forecastExtraHours;
   const projectedRemainingCost = adjustedProjectedHours * hourlyCostRate;
   const estimateAtCompletion = selectedProject.actualLaborCost + projectedRemainingCost;
-  const budgetVariance = selectedProject.allocatedBudget - estimateAtCompletion;
-  const isOverBudget = budgetVariance < 0;
+  const hasBudget = (selectedProject.allocatedBudget || 0) > 0;
+  const budgetVariance = hasBudget ? selectedProject.allocatedBudget - estimateAtCompletion : 0;
+  const isOverBudget = hasBudget && budgetVariance < 0;
 
   const progressPercent = Math.min(
     100,
-    Math.round((selectedProject.actualHoursSpent / selectedProject.totalEstimatedHours) * 100)
+    Math.round((selectedProject.actualHoursSpent / (selectedProject.totalEstimatedHours || 1)) * 100)
   );
 
-  const budgetConsumptionPercent = Math.min(
-    100,
-    Math.round((selectedProject.actualLaborCost / selectedProject.allocatedBudget) * 100)
-  );
+  const budgetConsumptionPercent = hasBudget
+    ? Math.min(100, Math.round((selectedProject.actualLaborCost / selectedProject.allocatedBudget) * 100))
+    : 0;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -63,8 +66,21 @@ export const ProjectProjectionTab: React.FC<ProjectProjectionTabProps> = ({ proj
           </p>
         </div>
 
-        {/* Project Selector */}
+        {/* Project Selector & Privacy Toggle */}
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowProjectionNominal(prev => !prev)}
+            className={`px-3 py-2 rounded-2xl border text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+              showProjectionNominal
+                ? 'bg-orange-50 text-[#FF6B00] border-orange-200'
+                : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
+            }`}
+            title="Toggle sensor nilai proyeksi anggaran tenaga kerja (default: sensor)"
+          >
+            {showProjectionNominal ? <EyeOff className="w-3.5 h-3.5 text-slate-400" /> : <Eye className="w-3.5 h-3.5 text-[#FF6B00]" />}
+            <span>{showProjectionNominal ? 'Sembunyikan Nilai' : 'Tampilkan Nilai'}</span>
+          </button>
+
           <select
             value={selectedProject.id}
             onChange={e => {
@@ -87,7 +103,7 @@ export const ProjectProjectionTab: React.FC<ProjectProjectionTabProps> = ({ proj
         <div className="glass-card rounded-3xl p-5 border-l-4 border-l-slate-800 space-y-1">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Anggaran Upah Kontrak</p>
           <p className="text-xl font-black text-slate-900 font-mono-code">
-            {formatIDR(selectedProject.allocatedBudget)}
+            {hasBudget ? formatSalaryDisplay(selectedProject.allocatedBudget, showProjectionNominal) : 'Belum Ditentukan (TBD)'}
           </p>
           <span className="text-[10px] text-slate-500 font-mono-code">
             Target Jam: {selectedProject.totalEstimatedHours} Jam
@@ -98,10 +114,10 @@ export const ProjectProjectionTab: React.FC<ProjectProjectionTabProps> = ({ proj
         <div className="glass-card rounded-3xl p-5 border-l-4 border-l-[#FF6B00] space-y-1">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Realisasi Upah Terpakai (To Date)</p>
           <p className="text-xl font-black text-[#FF6B00] font-mono-code">
-            {formatIDR(selectedProject.actualLaborCost)}
+            {formatSalaryDisplay(selectedProject.actualLaborCost, showProjectionNominal)}
           </p>
           <span className="text-[10px] text-orange-600 font-semibold font-mono-code">
-            Terpakai: {budgetConsumptionPercent}% Anggaran
+            Terpakai: {hasBudget ? `${budgetConsumptionPercent}% Anggaran` : 'TBD'}
           </span>
         </div>
 
@@ -109,10 +125,10 @@ export const ProjectProjectionTab: React.FC<ProjectProjectionTabProps> = ({ proj
         <div className="glass-card rounded-3xl p-5 border-l-4 border-l-emerald-500 space-y-1">
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Proyeksi Total Akhir (EAC)</p>
           <p className="text-xl font-black text-emerald-600 font-mono-code">
-            {formatIDR(estimateAtCompletion)}
+            {formatSalaryDisplay(estimateAtCompletion, showProjectionNominal)}
           </p>
           <span className="text-[10px] text-slate-500 font-mono-code">
-            Burn Rate: {formatIDR(hourlyCostRate)} / Jam
+            Burn Rate: {formatSalaryDisplay(hourlyCostRate, showProjectionNominal)} / Jam
           </span>
         </div>
 
@@ -122,7 +138,7 @@ export const ProjectProjectionTab: React.FC<ProjectProjectionTabProps> = ({ proj
         }`}>
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Variansi Anggaran (Sisa)</p>
           <p className={`text-xl font-black font-mono-code ${isOverBudget ? 'text-rose-600' : 'text-emerald-700'}`}>
-            {isOverBudget ? `Over: ${formatIDR(Math.abs(budgetVariance))}` : `Surplus: ${formatIDR(budgetVariance)}`}
+            {isOverBudget ? `Over: ${formatSalaryDisplay(Math.abs(budgetVariance), showProjectionNominal)}` : `Surplus: ${formatSalaryDisplay(budgetVariance, showProjectionNominal)}`}
           </p>
           <div className="flex items-center gap-1 text-[10px] font-bold">
             {isOverBudget ? (
@@ -179,7 +195,7 @@ export const ProjectProjectionTab: React.FC<ProjectProjectionTabProps> = ({ proj
               <div className="flex justify-between font-semibold">
                 <span className="text-slate-700">Penyerapan Anggaran Gaji Aktual:</span>
                 <span className="font-mono-code font-bold text-slate-900">
-                  {formatIDR(selectedProject.actualLaborCost)} / {formatIDR(selectedProject.allocatedBudget)} ({budgetConsumptionPercent}%)
+                  {formatSalaryDisplay(selectedProject.actualLaborCost, showProjectionNominal)} / {hasBudget ? formatSalaryDisplay(selectedProject.allocatedBudget, showProjectionNominal) : 'TBD'} ({hasBudget ? `${budgetConsumptionPercent}%` : 'TBD'})
                 </span>
               </div>
               <div className="w-full h-3 rounded-full bg-slate-100 overflow-hidden p-0.5 border border-slate-200">
@@ -189,7 +205,7 @@ export const ProjectProjectionTab: React.FC<ProjectProjectionTabProps> = ({ proj
                       ? 'bg-gradient-to-r from-amber-500 to-rose-500'
                       : 'bg-gradient-to-r from-teal-400 to-emerald-500'
                   }`}
-                  style={{ width: `${budgetConsumptionPercent}%` }}
+                  style={{ width: `${hasBudget ? budgetConsumptionPercent : 0}%` }}
                 />
               </div>
             </div>
@@ -262,11 +278,11 @@ export const ProjectProjectionTab: React.FC<ProjectProjectionTabProps> = ({ proj
                   </div>
                   <div className="flex justify-between text-slate-300">
                     <span>Proyeksi Biaya Upah Sisa:</span>
-                    <span className="font-mono-code text-emerald-400">{formatIDR(projectedRemainingCost)}</span>
+                    <span className="font-mono-code text-emerald-400">{formatSalaryDisplay(projectedRemainingCost, showProjectionNominal)}</span>
                   </div>
                   <div className="flex justify-between text-slate-300">
                     <span>Total Proyeksi Akhir (EAC):</span>
-                    <span className="font-mono-code text-white font-bold">{formatIDR(estimateAtCompletion)}</span>
+                    <span className="font-mono-code text-white font-bold">{formatSalaryDisplay(estimateAtCompletion, showProjectionNominal)}</span>
                   </div>
                 </div>
 

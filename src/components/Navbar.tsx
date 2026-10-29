@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Shield, Clock, Sparkles, Wifi, WifiOff, Users, ChevronDown, CheckCircle2, Award, ArrowRight, Globe, Database, Crown, UserCheck, Lock, Bell, Building2, AlertTriangle, Radio, X, MapPin, Laptop, ShieldCheck, Zap, LogOut, Camera, KeyRound, User } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Shield, Clock, Sparkles, Users, ChevronDown, CheckCircle2, Award, ArrowRight, Database, Crown, UserCheck, Lock, Bell, AlertTriangle, X, MapPin, ShieldCheck, Zap, LogOut, Camera, KeyRound, User, Banknote, Search, MessageSquare } from 'lucide-react';
 import { Employee, UserRole, SystemRole, getEffectiveSystemRole, AuthUser } from '../types';
 import { rtcService } from '../services/rtcService';
 import { ProfileSettingsModal, ProfileTabId } from './ProfileSettingsModal';
@@ -9,26 +9,22 @@ interface NavbarProps {
   allUsers: Employee[];
   onSwitchUser: (user: Employee) => void;
   onUpdateEmployee?: (user: Employee) => void;
-  isWifiConnected: boolean;
-  onToggleWifi: () => void;
-  currentWifiSsid: string;
   pendingApprovalsCount: number;
   onStartTour?: () => void;
   onNavigateToTab: (tabId: string) => void;
   onOpenNotificationModal?: () => void;
-  realDetectedIp?: string;
-  realDetectedIsp?: string;
-  realDetectedCity?: string;
-  isOfficeNetwork?: boolean;
-  simulatedNetworkMode?: 'auto' | 'office' | 'remote';
-  onSetSimulatedNetworkMode?: (mode: 'auto' | 'office' | 'remote') => void;
-  onWhitelistCurrentIp?: () => void;
   authUser?: AuthUser | null;
   onLogout?: () => void;
   isProfileModalOpenControlled?: boolean;
   onOpenProfileModalControlled?: (tab?: ProfileTabId) => void;
   onCloseProfileModalControlled?: () => void;
   profileModalInitialTabControlled?: ProfileTabId;
+  realDetectedIp?: string;
+  realDetectedIsp?: string;
+  realDetectedCity?: string;
+  isOfficeNetwork?: boolean;
+  impersonatorUser?: Employee | null;
+  onExitImpersonation?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -36,32 +32,27 @@ export const Navbar: React.FC<NavbarProps> = ({
   allUsers,
   onSwitchUser,
   onUpdateEmployee,
-  isWifiConnected,
-  onToggleWifi,
-  currentWifiSsid,
   pendingApprovalsCount,
   onStartTour,
   onNavigateToTab,
   onOpenNotificationModal,
-  realDetectedIp,
-  realDetectedIsp,
-  realDetectedCity,
-  isOfficeNetwork = true,
-  simulatedNetworkMode = 'auto',
-  onSetSimulatedNetworkMode,
-  onWhitelistCurrentIp,
   authUser,
   onLogout,
   isProfileModalOpenControlled,
   onOpenProfileModalControlled,
   onCloseProfileModalControlled,
-  profileModalInitialTabControlled
+  profileModalInitialTabControlled,
+  realDetectedIp = '103.31.205.218',
+  realDetectedIsp = 'Biznet Dedicated',
+  realDetectedCity = 'Sidoarjo',
+  isOfficeNetwork = true,
+  impersonatorUser,
+  onExitImpersonation
 }) => {
+  const [impersonateSearch, setImpersonateSearch] = useState('');
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
-  const [isNetworkPopoverOpen, setIsNetworkPopoverOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [profileModalInitialTab, setProfileModalInitialTab] = useState<ProfileTabId>('profile');
-  const networkPopoverRef = useRef<HTMLDivElement | null>(null);
 
   const effectiveIsProfileModalOpen = isProfileModalOpenControlled !== undefined ? isProfileModalOpenControlled : isProfileModalOpen;
   const effectiveProfileModalInitialTab = profileModalInitialTabControlled !== undefined ? profileModalInitialTabControlled : profileModalInitialTab;
@@ -82,32 +73,6 @@ export const Navbar: React.FC<NavbarProps> = ({
     } else {
       setIsProfileModalOpen(false);
     }
-  };
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (networkPopoverRef.current && !networkPopoverRef.current.contains(e.target as Node)) {
-        setIsNetworkPopoverOpen(false);
-      }
-    };
-    if (isNetworkPopoverOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isNetworkPopoverOpen]);
-
-  const getCleanIspName = (rawIsp?: string): string => {
-    if (!rawIsp) return 'Koneksi Publik';
-    if (rawIsp.toLowerCase().includes('biznet')) return 'Biznet Gio';
-    if (rawIsp.toLowerCase().includes('telkomsel')) return 'Telkomsel';
-    if (rawIsp.toLowerCase().includes('indihome')) return 'Indihome';
-    if (rawIsp.toLowerCase().includes('iforte')) return 'iForte Fiber';
-    if (rawIsp.toLowerCase().includes('solusinet')) return 'Solusinet';
-    if (rawIsp.toLowerCase().includes('first media')) return 'First Media';
-    if (rawIsp.toLowerCase().includes('xl')) return 'XL Axiata';
-    if (rawIsp.toLowerCase().includes('indosat')) return 'Indosat';
-    if (rawIsp.toLowerCase().includes('telkom')) return 'Telkom';
-    return rawIsp.replace(/^PT\s+/i, '').split(' ').slice(0, 2).join(' ');
   };
 
   const currentRole: SystemRole = getEffectiveSystemRole(currentUser);
@@ -149,189 +114,23 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
 
-        {/* Center / Status info: Clock & Smart Network Gateway */}
-        <div className="hidden md:flex items-center gap-3 motion-fade-in-down">
-          
-          {/* Live Network Gateway Status (Opsi 2: Smart Mapping Status Kantor vs Luar Kantor) */}
-          <div className="relative" ref={networkPopoverRef}>
-            <button
-              id="tour-network-gateway"
-              onClick={() => setIsNetworkPopoverOpen(prev => !prev)}
-              className={`hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-mono-code transition-all cursor-pointer shadow-xs border ${
-                isOfficeNetwork
-                  ? 'bg-emerald-50 hover:bg-emerald-100/80 border-emerald-300 text-emerald-900 shadow-emerald-500/5'
-                  : 'bg-amber-50 hover:bg-amber-100/80 border-amber-300 text-amber-950 shadow-amber-500/5'
-              }`}
-              title="Klik untuk melihat status audit jaringan atau beralih simulasi"
-            >
-              {isOfficeNetwork ? (
-                <>
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                  </span>
-                  <Wifi className="w-3.5 h-3.5 text-emerald-600" />
-                  <span className="font-bold tracking-tight">PRIME Corporate Network</span>
-                  <span className="text-emerald-300">•</span>
-                  <span className="px-1.5 py-0.2 rounded-full bg-emerald-200/80 text-[9.5px] font-black text-emerald-900">
-                    WFO SAH
-                  </span>
-                  <ChevronDown className="w-3 h-3 text-emerald-700/60" />
-                </>
-              ) : (
-                <>
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
-                  </span>
-                  <Globe className="w-3.5 h-3.5 text-amber-600" />
-                  <span className="font-bold tracking-tight">
-                    Jaringan Luar: {getCleanIspName(realDetectedIsp)}
-                  </span>
-                  <span className="text-amber-300">•</span>
-                  <span className="px-1.5 py-0.2 rounded-full bg-amber-200/80 text-[9.5px] font-black text-amber-900">
-                    LUAR KANTOR
-                  </span>
-                  <ChevronDown className="w-3 h-3 text-amber-700/60" />
-                </>
-              )}
-            </button>
 
-            {/* Smart Network Audit Popover */}
-            {isNetworkPopoverOpen && (
-              <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 w-[calc(100vw-2rem)] sm:w-96 max-w-sm bg-white rounded-2xl shadow-2xl border border-slate-200/90 p-4 z-50 text-left font-sans animate-in fade-in zoom-in-95 duration-150">
-                {/* Popover Header */}
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                  <div className="flex items-center gap-2">
-                    <div className={`p-1.5 rounded-xl ${isOfficeNetwork ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'}`}>
-                      {isOfficeNetwork ? <ShieldCheck className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide">
-                        Smart Gateway & Network Audit
-                      </h4>
-                      <p className="text-[11px] text-slate-500 font-mono-code">
-                        PRIME Enterprise • Zero-Trust Geofence
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setIsNetworkPopoverOpen(false)}
-                    className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-
-                {/* Status Card */}
-                <div className="mt-3">
-                  {isOfficeNetwork ? (
-                    <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200/80 text-emerald-900 text-xs">
-                      <div className="flex items-center gap-2 font-bold mb-1">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span>Jaringan Kantor Terverifikasi (WFO Sah)</span>
-                      </div>
-                      <p className="text-[11.5px] text-emerald-800/90 leading-relaxed font-sans">
-                        Koneksi Anda cocok dengan Whitelist Gateway Resmi PRIME Enterprise. Presensi mandiri dinyatakan sah sebagai jam kerja WFO tanpa memerlukan disposisi persetujuan manajer.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="p-3 rounded-xl bg-amber-50 border border-amber-200/80 text-amber-950 text-xs">
-                      <div className="flex items-center gap-2 font-bold mb-1">
-                        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                        <span>Terdeteksi di Luar Jaringan Kantor (Remote)</span>
-                      </div>
-                      <p className="text-[11.5px] text-amber-900/90 leading-relaxed font-sans">
-                        Anda mengakses melalui jaringan publik/seluler eksternal ({getCleanIspName(realDetectedIsp)}). Presensi membutuhkan pengisian form justifikasi <strong>Dinas Luar</strong> agar disetujui atasan.
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Network Parameter Details */}
-                <div className="mt-3 bg-slate-50 rounded-xl p-2.5 border border-slate-200/80 space-y-1.5 text-xs font-mono-code">
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-500 text-[11px]">IP Publik Anda:</span>
-                    <span className="font-bold text-slate-900">{realDetectedIp || '103.31.205.218'}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-500 text-[11px]">Provider / ISP:</span>
-                    <span className="font-bold text-slate-800 text-right truncate max-w-[190px]">
-                      {realDetectedIsp || 'PT Biznet Gio Nusantara'}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-500 text-[11px]">Lokasi Geografis:</span>
-                    <span className="text-slate-700">{realDetectedCity || 'Surabaya / Manyar Site'}</span>
-                  </div>
-                  <div className="flex items-center justify-between pt-1 border-t border-slate-200/70">
-                    <span className="text-slate-500 text-[11px]">Kantor Whitelist:</span>
-                    <span className="text-emerald-700 font-bold">Biznet 103.31.205.218</span>
-                  </div>
-                </div>
-
-                {/* Simulation & Mode Switcher Controls */}
-                <div className="mt-3 pt-3 border-t border-slate-100">
-                  <div className="text-[11px] font-bold text-slate-700 mb-1.5 flex items-center justify-between">
-                    <span>Mode Pengujian & Demo:</span>
-                    <span className="text-[10px] text-orange-600 font-mono-code font-normal">Pilih skenario</span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    <button
-                      onClick={() => onSetSimulatedNetworkMode?.('auto')}
-                      className={`px-2 py-1.5 rounded-xl text-[10.5px] font-bold transition-all cursor-pointer ${
-                        simulatedNetworkMode === 'auto'
-                          ? 'bg-[#FF6B00] text-white shadow-xs'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
-                    >
-                      Otomatis Asli
-                    </button>
-                    <button
-                      onClick={() => onSetSimulatedNetworkMode?.('office')}
-                      className={`px-2 py-1.5 rounded-xl text-[10.5px] font-bold transition-all cursor-pointer ${
-                        simulatedNetworkMode === 'office'
-                          ? 'bg-emerald-600 text-white shadow-xs'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
-                    >
-                      Simulasi WFO
-                    </button>
-                    <button
-                      onClick={() => onSetSimulatedNetworkMode?.('remote')}
-                      className={`px-2 py-1.5 rounded-xl text-[10.5px] font-bold transition-all cursor-pointer ${
-                        simulatedNetworkMode === 'remote'
-                          ? 'bg-amber-600 text-white shadow-xs'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                      }`}
-                    >
-                      Simulasi Luar
-                    </button>
-                  </div>
-
-                  {/* Whitelist Current IP Quick Button */}
-                  {!isOfficeNetwork && onWhitelistCurrentIp && (
-                    <button
-                      onClick={() => {
-                        onWhitelistCurrentIp();
-                        setIsNetworkPopoverOpen(false);
-                      }}
-                      className="mt-2.5 w-full py-1.5 px-3 rounded-xl bg-slate-900 hover:bg-black text-white text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all shadow-xs active:scale-98 cursor-pointer"
-                    >
-                      <Building2 className="w-3.5 h-3.5 text-orange-400" />
-                      <span>Daftarkan IP Ini sebagai Whitelist Kantor Resmi Prime HRIS</span>
-                    </button>
-                  )}
-                </div>
-
-              </div>
-            )}
-          </div>
-
-        </div>
 
         {/* User Switcher Dropdown & Quick Actions */}
         <div className="flex items-center gap-2 sm:gap-3">
+
+          {/* WhatsApp Bot & QR Gateway Quick Button (HR / Finance / Superuser only) */}
+          {currentRole !== 'staff' && (
+            <button
+              id="tour-wa-gateway-btn"
+              onClick={() => onNavigateToTab('wa_gateway')}
+              className="relative px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 transition-colors cursor-pointer shadow-xs active:scale-95 flex items-center gap-1.5"
+              title="WhatsApp Bot & Gateway (Scan QR / Status Bot Baileys)"
+            >
+              <MessageSquare className="w-4 h-4 text-emerald-600" />
+              <span className="hidden sm:inline text-[11px] font-bold font-mono-code">WA BOT</span>
+            </button>
+          )}
 
           {/* Approvals & Notification Hub Trigger */}
           <button
@@ -369,10 +168,15 @@ export const Navbar: React.FC<NavbarProps> = ({
                     <Crown className="w-2.5 h-2.5 text-amber-600" />
                     SUPERUSER
                   </span>
-                ) : currentRole === 'admin' ? (
+                ) : currentRole === 'finance' ? (
+                  <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1 font-mono-code">
+                    <Banknote className="w-2.5 h-2.5 text-emerald-600" />
+                    FINANCE
+                  </span>
+                ) : (currentRole === 'admin' || currentRole === 'hr') ? (
                   <span className="text-[10px] text-blue-600 font-bold flex items-center gap-1 font-mono-code">
                     <Shield className="w-2.5 h-2.5 text-blue-600" />
-                    ADMIN HR
+                    HR
                   </span>
                 ) : (
                   <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1 font-mono-code">
@@ -386,7 +190,12 @@ export const Navbar: React.FC<NavbarProps> = ({
 
             {/* User Profile Settings Dropdown */}
             {userDropdownOpen && (
-              <div className="absolute right-0 mt-2 w-[calc(100vw-1.5rem)] sm:w-84 max-w-sm rounded-3xl bg-white border border-slate-200 shadow-2xl p-3 z-50 animate-in fade-in slide-in-from-top-2">
+              <>
+                <div
+                  className="fixed inset-0 z-40 bg-black/10 backdrop-blur-2xs"
+                  onClick={() => setUserDropdownOpen(false)}
+                />
+                <div className="absolute right-0 mt-2 w-[calc(100vw-1.5rem)] sm:w-84 max-w-sm rounded-3xl bg-white border border-slate-200 shadow-2xl p-3 z-50 animate-in fade-in slide-in-from-top-2">
                 {/* User Identity Banner Card */}
                 <div className="p-3.5 rounded-2xl bg-gradient-to-br from-slate-900 via-slate-850 to-slate-900 text-white mb-2.5 relative overflow-hidden shadow-md">
                   <div className="absolute -top-6 -right-6 w-28 h-28 bg-[#FF6B00]/20 rounded-full blur-xl pointer-events-none" />
@@ -414,11 +223,13 @@ export const Navbar: React.FC<NavbarProps> = ({
                         <span className={`text-[9px] font-black px-2 py-0.2 rounded-full uppercase tracking-wider font-mono-code ${
                           currentRole === 'superuser'
                             ? 'bg-amber-400/20 text-amber-300 border border-amber-400/30'
-                            : currentRole === 'admin'
+                            : currentRole === 'finance'
+                            ? 'bg-emerald-400/20 text-emerald-300 border border-emerald-400/30'
+                            : (currentRole === 'admin' || currentRole === 'hr')
                             ? 'bg-blue-400/20 text-blue-300 border border-blue-400/30'
                             : 'bg-emerald-400/20 text-emerald-300 border border-emerald-400/30'
                         }`}>
-                          {currentRole === 'superuser' ? '👑 SUPERUSER' : currentRole === 'admin' ? '🛡️ ADMIN HR' : '👤 STAFF'}
+                          {currentRole === 'superuser' ? '👑 SUPERUSER' : currentRole === 'finance' ? '💰 FINANCE & PAYROLL' : (currentRole === 'admin' || currentRole === 'hr') ? '🛡️ HR' : '👤 STAFF'}
                         </span>
                         <span className="text-[10px] text-slate-300 font-medium truncate max-w-[110px]">
                           {currentUser.position}
@@ -521,6 +332,112 @@ export const Navbar: React.FC<NavbarProps> = ({
                   </button>
                 </div>
 
+                {/* Persona Switcher / Impersonation Hub: ONLY visible to Superuser or during active Impersonation */}
+                {allUsers && allUsers.length > 0 && onSwitchUser && (currentRole === 'superuser' || Boolean(impersonatorUser)) && (
+                  <div className="pt-2.5 mt-2 border-t border-slate-100">
+                    <div className="px-2 pb-1.5 flex items-center justify-between">
+                      <span className="text-[10px] font-black uppercase text-amber-700 tracking-wider font-mono-code flex items-center gap-1">
+                        <Crown className="w-3 h-3 text-amber-500" />
+                        <span>Impersonasi Akun (Superuser)</span>
+                      </span>
+                      <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 font-bold font-mono-code">
+                        154 SDM
+                      </span>
+                    </div>
+
+                    {/* Active Impersonation Exit Card */}
+                    {impersonatorUser && onExitImpersonation && (
+                      <div className="mb-2 p-2 bg-amber-50/90 border border-amber-300 rounded-xl">
+                        <div className="flex items-center justify-between text-[10.5px] text-amber-950 font-bold mb-1">
+                          <span>🎭 Sedang Impersonate:</span>
+                          <span className="font-mono text-[9.5px] bg-amber-200/80 px-1 rounded">{currentUser.nik}</span>
+                        </div>
+                        <p className="text-[10px] text-amber-800 truncate mb-1.5 font-medium">
+                          {currentUser.name} ({currentUser.position})
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onExitImpersonation();
+                            setUserDropdownOpen(false);
+                          }}
+                          className="w-full py-1.5 px-2 bg-slate-900 hover:bg-slate-800 active:scale-95 text-white font-extrabold text-[10.5px] rounded-lg cursor-pointer transition flex items-center justify-center gap-1.5 shadow-2xs"
+                        >
+                          <span>✕ Kembali ke Akun Superuser</span>
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Instant Search Bar */}
+                    <div className="relative mb-2 px-1">
+                      <Search className="w-3 h-3 absolute left-3 top-2.5 text-slate-400 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={impersonateSearch}
+                        onChange={(e) => setImpersonateSearch(e.target.value)}
+                        placeholder="Cari nama, NIK, divisi..."
+                        className="w-full pl-7 pr-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-orange-500 font-medium"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </div>
+
+                    <div className="space-y-1 max-h-48 overflow-y-auto pr-0.5">
+                      {allUsers
+                        .filter(u => {
+                          if (!impersonateSearch.trim()) return true;
+                          const q = impersonateSearch.toLowerCase();
+                          return (
+                            u.name.toLowerCase().includes(q) ||
+                            u.nik.toLowerCase().includes(q) ||
+                            (Boolean(u.loginId) && u.loginId!.toLowerCase().includes(q)) ||
+                            u.department.toLowerCase().includes(q) ||
+                            u.position.toLowerCase().includes(q)
+                          );
+                        })
+                        .slice(0, impersonateSearch.trim() ? 20 : 6)
+                        .map(user => {
+                          const effRole = getEffectiveSystemRole(user);
+                          const isCurrent = user.id === currentUser.id;
+                          return (
+                            <button
+                              key={user.id}
+                              onClick={() => {
+                                if (window.confirm(`Masuk ke mode impersonasi persona ${user.name} (${user.position})?`)) {
+                                  onSwitchUser(user);
+                                  setUserDropdownOpen(false);
+                                }
+                              }}
+                              className={`w-full flex items-center justify-between p-1.5 rounded-xl text-left transition-all cursor-pointer ${
+                                isCurrent
+                                  ? 'bg-amber-50 border border-amber-300'
+                                  : 'hover:bg-slate-50 border border-transparent'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <img
+                                  src={user.avatar}
+                                  alt={user.name}
+                                  className="w-6 h-6 rounded-full object-cover shrink-0 border border-slate-200"
+                                />
+                                <div className="truncate">
+                                  <p className="text-[11px] font-bold text-slate-900 truncate leading-tight">
+                                    {user.name.split(',')[0]}
+                                  </p>
+                                  <p className="text-[9.5px] text-slate-400 truncate font-mono-code">
+                                    {effRole === 'superuser' ? '👑 Direksi' : effRole === 'finance' ? '💰 Finance' : (effRole === 'admin' || effRole === 'hr') ? '🛡️ HR' : '👤 Staff'} • {user.position}
+                                  </p>
+                                </div>
+                              </div>
+                              {isCurrent && (
+                                <span className="w-2 h-2 rounded-full bg-[#FF6B00] shrink-0 mr-1" />
+                              )}
+                            </button>
+                          );
+                        })}
+                    </div>
+                  </div>
+                )}
+
                 {/* Direct Shortcut to User Performance & Logout */}
                 <div className="pt-2 mt-2 border-t border-slate-100 space-y-1.5">
                   <button
@@ -554,10 +471,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                   )}
                 </div>
               </div>
+              </>
             )}
           </div>
         </div>
-
       </div>
 
       {/* Profile Settings Modal */}

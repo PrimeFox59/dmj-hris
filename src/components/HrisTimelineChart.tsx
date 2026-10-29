@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import React, { useState, useMemo } from 'react';
 import {
   Clock,
@@ -5,7 +6,6 @@ import {
   AlertTriangle,
   Calendar,
   MapPin,
-  Wifi,
   Briefcase,
   Sparkles,
   Info,
@@ -145,9 +145,9 @@ export const HrisTimelineChart: React.FC<HrisTimelineChartProps> = ({
     });
   }, [employees, attendances, approvals, activeDate, projects, salaryRules]);
 
-  // Filtered list with Project and Shift filters
+  // Filtered list with Project and Shift filters (Karyawan yang sudah presensi otomatis tampil di atas berurutan)
   const filteredData = useMemo(() => {
-    return employeeTimelineData.filter(item => {
+    const list = employeeTimelineData.filter(item => {
       if (selectedProjectId !== 'ALL') {
         const pMatch = item.schedule.projectId === selectedProjectId || 
                        item.employee.assignedProjectId === selectedProjectId ||
@@ -159,6 +159,25 @@ export const HrisTimelineChart: React.FC<HrisTimelineChartProps> = ({
       if (activeShiftFilter === 'PAGI' && item.decimalTime && item.decimalTime >= 15) return false;
       if (activeShiftFilter === 'LEMBUR' && item.decimalTime && item.decimalTime < 15) return false;
       return true;
+    });
+
+    return list.sort((a, b) => {
+      const aHasAtt = Boolean(a.attendance && a.attendance.checkInTime);
+      const bHasAtt = Boolean(b.attendance && b.attendance.checkInTime);
+
+      // 1. Karyawan yang sudah presensi selalu tampil di atas
+      if (aHasAtt && !bHasAtt) return -1;
+      if (!aHasAtt && bHasAtt) return 1;
+
+      // 2. Jika keduanya sudah presensi, urutkan berdasarkan waktu kedatangan (earliest check-in first)
+      if (aHasAtt && bHasAtt) {
+        const aTime = a.decimalTime ?? (parseTimeToDecimal(a.attendance?.checkInTime) ?? 999);
+        const bTime = b.decimalTime ?? (parseTimeToDecimal(b.attendance?.checkInTime) ?? 999);
+        if (aTime !== bTime) return aTime - bTime;
+      }
+
+      // 3. Fallback: urutkan alfabetis nama
+      return a.employee.name.localeCompare(b.employee.name);
     });
   }, [employeeTimelineData, selectedProjectId, selectedFilter, activeShiftFilter]);
 
@@ -189,8 +208,8 @@ export const HrisTimelineChart: React.FC<HrisTimelineChartProps> = ({
   return (
     <div className="glass-card rounded-3xl p-4 sm:p-6 border border-slate-200/80 shadow-md space-y-5 motion-fade-in-up w-full max-w-full min-w-0 overflow-hidden">
       {/* Header & Controls */}
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 border-b border-slate-100 pb-3">
-        <div className="flex items-center gap-2.5">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+        <div className="flex items-center gap-2.5 shrink-0">
           <div className="p-2 rounded-xl bg-orange-50 text-[#FF6B00] shrink-0">
             <Clock className="w-5 h-5" />
           </div>
@@ -215,11 +234,11 @@ export const HrisTimelineChart: React.FC<HrisTimelineChartProps> = ({
           </div>
         </div>
 
-        {/* Controls: Date Picker + Filter Pills */}
-        <div className="flex flex-wrap items-center gap-2.5">
+        {/* Controls: Date Picker + Filter Pills (Strictly Single Row) */}
+        <div className="flex items-center gap-2 flex-nowrap overflow-x-auto no-scrollbar shrink-0 py-0.5">
           
-          {/* Interactive Date Filter Control Bar */}
-          <div className="flex items-center gap-1 bg-slate-100/90 p-1 rounded-2xl border border-slate-200/80 shadow-2xs">
+          {/* 1. Interactive Date Filter Control Bar */}
+          <div className="flex items-center gap-1 bg-slate-100/90 p-1 rounded-2xl border border-slate-200/80 shadow-2xs shrink-0">
             <button
               onClick={handlePrevDay}
               title="Hari Sebelumnya (Kemarin)"
@@ -250,22 +269,22 @@ export const HrisTimelineChart: React.FC<HrisTimelineChartProps> = ({
               <button
                 onClick={() => handleDateChange(todayStr)}
                 title="Kembali ke Hari Ini"
-                className="px-2.5 py-1 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-bold shadow-xs transition-all cursor-pointer"
+                className="px-2 py-1 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-[10px] font-bold shadow-xs transition-all cursor-pointer"
               >
                 Hari Ini
               </button>
             )}
           </div>
 
-          {/* Project Site Selector */}
-          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs text-xs">
+          {/* 2. Project Site Selector */}
+          <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs text-xs shrink-0 max-w-[200px] sm:max-w-[230px]">
             <Briefcase className="w-3.5 h-3.5 text-[#FF6B00] shrink-0" />
             <select
               value={selectedProjectId}
               onChange={e => setSelectedProjectId(e.target.value)}
-              className="bg-transparent text-slate-800 font-bold focus:outline-none cursor-pointer pr-1 text-xs"
+              className="bg-transparent text-slate-800 font-bold focus:outline-none cursor-pointer pr-1 text-xs truncate w-full"
             >
-              <option value="ALL">Semua Proyek &amp; Site ({employees.length} Karyawan)</option>
+              <option value="ALL">Semua Proyek ({employees.length})</option>
               {projects.map(p => {
                 const pSched = getEmployeeProjectSchedule({ assignedProjectId: p.id } as any, [p]);
                 const count = employeeTimelineData.filter(d => 
@@ -275,27 +294,27 @@ export const HrisTimelineChart: React.FC<HrisTimelineChartProps> = ({
                 ).length;
                 return (
                   <option key={p.id} value={p.id}>
-                    {p.name.length > 25 ? p.name.slice(0, 25) + '...' : p.name} ({count} org • {pSched.checkInTime}-{pSched.checkOutTime})
+                    {p.name.length > 22 ? p.name.slice(0, 22) + '...' : p.name} ({count} org)
                   </option>
                 );
               })}
             </select>
           </div>
 
-          {/* Compact Status Icon Filter Bar */}
-          <div className="bg-slate-100/90 p-1 rounded-2xl flex items-center gap-1 border border-slate-200/70 shadow-2xs">
+          {/* 3. Compact Status Icon Filter Bar (Tidy & In-line) */}
+          <div className="bg-slate-100/90 p-1 rounded-2xl flex items-center gap-1 border border-slate-200/70 shadow-2xs shrink-0">
             {/* 1. Semua Karyawan */}
             <button
               onClick={() => setSelectedFilter('ALL')}
               title={`Semua Karyawan: ${employees.length} orang`}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
+              className={`flex items-center gap-1 px-2 py-1 rounded-xl font-bold transition-all cursor-pointer ${
                 selectedFilter === 'ALL'
                   ? 'bg-white text-slate-900 shadow-xs'
                   : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/50'
               }`}
             >
               <Users className="w-3.5 h-3.5" />
-              <span className={`text-[11px] font-mono-code px-1.5 py-0.2 rounded-full font-bold ${
+              <span className={`text-[10px] font-mono-code px-1.5 py-0.2 rounded-full font-bold ${
                 selectedFilter === 'ALL'
                   ? 'bg-slate-900 text-white'
                   : 'bg-slate-200/80 text-slate-700'
@@ -308,14 +327,14 @@ export const HrisTimelineChart: React.FC<HrisTimelineChartProps> = ({
             <button
               onClick={() => setSelectedFilter('ON_TIME')}
               title={`Tepat Waktu: ${onTimeCount} karyawan`}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
+              className={`flex items-center gap-1 px-2 py-1 rounded-xl font-bold transition-all cursor-pointer ${
                 selectedFilter === 'ON_TIME'
                   ? 'bg-emerald-600 text-white shadow-xs'
                   : 'text-emerald-700 hover:bg-emerald-50/80'
               }`}
             >
               <CheckCircle2 className="w-3.5 h-3.5" />
-              <span className={`text-[11px] font-mono-code px-1.5 py-0.2 rounded-full font-bold ${
+              <span className={`text-[10px] font-mono-code px-1.5 py-0.2 rounded-full font-bold ${
                 selectedFilter === 'ON_TIME'
                   ? 'bg-white/20 text-white'
                   : 'bg-emerald-100 text-emerald-800'
@@ -328,14 +347,14 @@ export const HrisTimelineChart: React.FC<HrisTimelineChartProps> = ({
             <button
               onClick={() => setSelectedFilter('LATE')}
               title={`Terlambat: ${lateCount} karyawan`}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
+              className={`flex items-center gap-1 px-2 py-1 rounded-xl font-bold transition-all cursor-pointer ${
                 selectedFilter === 'LATE'
                   ? 'bg-rose-600 text-white shadow-xs'
                   : 'text-rose-700 hover:bg-rose-50/80'
               }`}
             >
               <AlertTriangle className="w-3.5 h-3.5" />
-              <span className={`text-[11px] font-mono-code px-1.5 py-0.2 rounded-full font-bold ${
+              <span className={`text-[10px] font-mono-code px-1.5 py-0.2 rounded-full font-bold ${
                 selectedFilter === 'LATE'
                   ? 'bg-white/20 text-white'
                   : 'bg-rose-100 text-rose-800'
@@ -348,14 +367,14 @@ export const HrisTimelineChart: React.FC<HrisTimelineChartProps> = ({
             <button
               onClick={() => setSelectedFilter('DINAS_LUAR')}
               title={`Dinas Luar: ${dinasLuarCount} karyawan`}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
+              className={`flex items-center gap-1 px-2 py-1 rounded-xl font-bold transition-all cursor-pointer ${
                 selectedFilter === 'DINAS_LUAR'
                   ? 'bg-blue-600 text-white shadow-xs'
                   : 'text-blue-700 hover:bg-blue-50/80'
               }`}
             >
               <Briefcase className="w-3.5 h-3.5" />
-              <span className={`text-[11px] font-mono-code px-1.5 py-0.2 rounded-full font-bold ${
+              <span className={`text-[10px] font-mono-code px-1.5 py-0.2 rounded-full font-bold ${
                 selectedFilter === 'DINAS_LUAR'
                   ? 'bg-white/20 text-white'
                   : 'bg-blue-100 text-blue-800'
@@ -607,8 +626,9 @@ export const HrisTimelineChart: React.FC<HrisTimelineChartProps> = ({
           <div className="space-y-3 max-h-[390px] overflow-y-auto pr-1.5 custom-scrollbar">
             {filteredData.map((item, idx) => {
               const { employee, attendance, decimalTime, status } = item;
-              const hasCheckIn = decimalTime !== null;
-              const position = hasCheckIn ? getPositionPercent(decimalTime) : null;
+              const effectiveDecimal = decimalTime !== null ? decimalTime : (attendance?.checkInTime ? parseTimeToDecimal(attendance.checkInTime) : null);
+              const hasCheckIn = Boolean(attendance && attendance.checkInTime);
+              const position = effectiveDecimal !== null ? getPositionPercent(effectiveDecimal) : (hasCheckIn ? 5 : null);
 
               return (
                 <div
@@ -691,7 +711,7 @@ export const HrisTimelineChart: React.FC<HrisTimelineChartProps> = ({
                           <p className="text-slate-300">Proyek: <span className="font-bold text-white">{item.schedule.projectName}</span></p>
                           <p>Masuk: <span className="font-bold">{attendance?.checkInTime} WIB</span> ({status === 'ON_TIME' ? 'Tepat Waktu' : status === 'LATE' ? `Terlambat (Batas: ${item.schedule.cutoffTime})` : status})</p>
                           <p className="text-slate-400">Jadwal Shift: {item.schedule.checkInTime} - {item.schedule.checkOutTime} WIB</p>
-                          {attendance?.wifi?.ssid && <p className="text-slate-400">WiFi: {attendance.wifi.ssid}</p>}
+                          {typeof attendance?.location?.distanceMeters === 'number' && !isNaN(attendance.location.distanceMeters) && <p className="text-slate-400">Geofence: {attendance.location.distanceMeters}m</p>}
                         </div>
                       </div>
                     )}
@@ -766,10 +786,16 @@ export const HrisTimelineChart: React.FC<HrisTimelineChartProps> = ({
         </div>
       </div>
 
-      {/* Modal Detail Rekaman Presensi */}
-      {selectedRecord && (
-        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 relative modal-dialog-animate">
+      {/* Modal Detail Rekaman Presensi (Portal to document.body for guaranteed viewport centering) */}
+      {selectedRecord && typeof document !== 'undefined' && createPortal(
+        <div 
+          className="fixed inset-0 z-[9999] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in"
+          onClick={() => setSelectedRecord(null)}
+        >
+          <div 
+            className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 relative modal-dialog-animate my-auto max-h-[92vh] overflow-y-auto custom-scrollbar"
+            onClick={e => e.stopPropagation()}
+          >
             <button
               onClick={() => setSelectedRecord(null)}
               className="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-all cursor-pointer"
@@ -821,10 +847,10 @@ export const HrisTimelineChart: React.FC<HrisTimelineChartProps> = ({
               </div>
 
               <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
-                <span className="text-slate-500">Koneksi WiFi Kantor:</span>
+                <span className="text-slate-500">Radius & Geofence:</span>
                 <span className="font-mono-code font-semibold text-slate-800 flex items-center gap-1">
-                  <Wifi className="w-3.5 h-3.5 text-[#FF6B00]" />
-                  {selectedRecord.wifi.ssid} ({selectedRecord.wifi.isAuthorized ? 'Terverifikasi Resmi' : 'Jaringan Publik'})
+                  <MapPin className="w-3.5 h-3.5 text-[#FF6B00]" />
+                  {typeof selectedRecord.location.distanceMeters === 'number' && !isNaN(selectedRecord.location.distanceMeters) ? `${selectedRecord.location.distanceMeters}m` : '0m'} ({selectedRecord.location.inGeofence ? 'Area Resmi Valid' : 'Di Luar Geofence'})
                 </span>
               </div>
 
@@ -866,7 +892,8 @@ export const HrisTimelineChart: React.FC<HrisTimelineChartProps> = ({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

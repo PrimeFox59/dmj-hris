@@ -19,12 +19,12 @@ import {
   UserCheck,
   Crown,
   Bell,
-  Wifi,
   Globe,
   Lock,
-  KeyRound
+  KeyRound,
+  HardHat
 } from 'lucide-react';
-import { Employee, getEffectiveSystemRole, SystemRole } from '../types';
+import { Employee, getEffectiveSystemRole, SystemRole, canAccessProjectModule, isProjectManager } from '../types';
 import { ProfileTabId } from './ProfileSettingsModal';
 
 interface MobileBottomNavProps {
@@ -55,12 +55,15 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const currentRole: SystemRole = getEffectiveSystemRole(currentUser);
   const isStaff = currentRole === 'staff';
+  const isFinanceOrSuper = currentRole === 'finance' || currentRole === 'superuser';
+  const canViewProjects = canAccessProjectModule(currentUser);
 
   const isDashboardActive = ['dashboard', 'dashboard_hris', 'dashboard_finance', 'user_performance'].includes(activeTab);
   const isAttendanceActive = activeTab === 'attendance';
   const isApprovalsActive = activeTab === 'approvals';
   const isProjectsActive = activeTab === 'projects';
-  const isSecondaryActive = isDrawerOpen || ['users', 'payroll', 'salary_rules', 'audit', 'proposal'].includes(activeTab);
+  const isPayrollActive = activeTab === 'payroll';
+  const isSecondaryActive = isDrawerOpen || ['users', 'audit', 'proposal'].includes(activeTab);
 
   const handleTabClick = (tabId: string) => {
     onSelectTab(tabId);
@@ -107,11 +110,13 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                     <span className={`text-[9px] font-black px-1.5 py-0.2 rounded-full uppercase font-mono-code ${
                       currentRole === 'superuser'
                         ? 'bg-amber-100 text-amber-900'
-                        : currentRole === 'admin'
+                        : (currentRole === 'admin' || currentRole === 'hr')
                         ? 'bg-blue-100 text-blue-900'
-                        : 'bg-emerald-100 text-emerald-900'
+                        : currentRole === 'finance'
+                        ? 'bg-emerald-100 text-emerald-900'
+                        : 'bg-slate-100 text-slate-800'
                     }`}>
-                      {currentRole === 'superuser' ? '👑 SUPERUSER' : currentRole === 'admin' ? '🛡️ ADMIN HR' : '👤 STAFF'}
+                      {currentRole === 'superuser' ? '👑 SUPERUSER' : (currentRole === 'admin' || currentRole === 'hr') ? '🛡️ HR' : currentRole === 'finance' ? '💰 FINANCE' : '👤 STAFF'}
                     </span>
                   </div>
                 </div>
@@ -159,6 +164,29 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                   Daftar Modul Operasional
                 </span>
                 <div className="grid grid-cols-2 gap-2.5">
+                  
+                  {/* Tab: Presensi Tukang Lapangan */}
+                  <button
+                    onClick={() => handleTabClick('casual_attendance')}
+                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                      activeTab === 'casual_attendance'
+                        ? 'bg-orange-50 border-orange-300 shadow-xs'
+                        : 'bg-slate-50/70 hover:bg-slate-100 border-slate-200/80'
+                    }`}
+                  >
+                    <div className="w-8 h-8 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center mb-2">
+                      <HardHat className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-slate-900 leading-tight">
+                        Tukang Lapangan
+                      </p>
+                      <p className="text-[10px] text-slate-500 mt-0.5 line-clamp-1">
+                        Presensi & foto harian
+                      </p>
+                    </div>
+                  </button>
+
                   {/* Tab: Karyawan / Profil Data Saya */}
                   <button
                     onClick={() => handleTabClick('users')}
@@ -176,7 +204,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                         {isStaff ? 'Profil Data Saya' : 'Data Karyawan'}
                       </p>
                       <p className="text-[10px] text-slate-500 mt-0.5 line-clamp-1">
-                        {isStaff ? 'NIK, kuota cuti & MAC' : 'Master SDM & rekening'}
+                        {isStaff ? 'NIK, kuota cuti & biometrik' : 'Master SDM & rekening'}
                       </p>
                     </div>
                   </button>
@@ -195,37 +223,13 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                     </div>
                     <div>
                       <p className="text-xs font-bold text-slate-900 leading-tight">
-                        {isStaff ? 'Slip Gaji Saya' : 'Payroll & Proyek'}
+                        {isFinanceOrSuper ? 'Payroll & Proyek' : 'Slip Gaji Saya'}
                       </p>
                       <p className="text-[10px] text-slate-500 mt-0.5 line-clamp-1">
-                        {isStaff ? 'Rincian gaji & cetak slip' : 'Rekap lembur & slip resmi'}
+                        {isFinanceOrSuper ? 'Rekap lembur & slip resmi' : 'Rincian gaji & cetak slip'}
                       </p>
                     </div>
                   </button>
-
-                  {/* Tab: Pengaturan & Aturan HR (Admin only) */}
-                  {!isStaff && (
-                    <button
-                      onClick={() => handleTabClick('salary_rules')}
-                      className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
-                        activeTab === 'salary_rules'
-                          ? 'bg-orange-50 border-orange-300 shadow-xs'
-                          : 'bg-slate-50/70 hover:bg-slate-100 border-slate-200/80'
-                      }`}
-                    >
-                      <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center mb-2">
-                        <Sliders className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold text-slate-900 leading-tight">
-                          Pengaturan & Aturan
-                        </p>
-                        <p className="text-[10px] text-slate-500 mt-0.5 line-clamp-1">
-                          Jam kantor, batas cut-off
-                        </p>
-                      </div>
-                    </button>
-                  )}
 
                   {/* Tab: Audit Trail & Log (Admin only) */}
                   {!isStaff && (
@@ -331,11 +335,11 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                 <div className="flex items-center justify-between text-[11px] text-slate-500 font-mono-code">
                   <span className="flex items-center gap-1.5">
                     {isOfficeNetwork ? (
-                      <Wifi className="w-3.5 h-3.5 text-emerald-600" />
+                      <Shield className="w-3.5 h-3.5 text-emerald-600" />
                     ) : (
                       <Globe className="w-3.5 h-3.5 text-amber-600" />
                     )}
-                    <span>{isOfficeNetwork ? 'WFO Kantor Terverifikasi' : 'Jaringan Luar / Remote'}</span>
+                    <span>{isOfficeNetwork ? 'Area Geofence Kantor' : 'Jaringan Luar / Remote'}</span>
                   </span>
                   <span>IP {realDetectedIp}</span>
                 </div>
@@ -417,18 +421,32 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
             </span>
           </button>
 
-          {/* Button 4: Proyek & Site */}
-          <button
-            onClick={() => handleTabClick('projects')}
-            className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-2xl transition-all cursor-pointer min-w-[56px] ${
-              isProjectsActive
-                ? 'text-[#FF6B00] font-black'
-                : 'text-slate-400 hover:text-slate-700 font-medium'
-            }`}
-          >
-            <Briefcase className={`w-5 h-5 mb-0.5 ${isProjectsActive ? 'text-[#FF6B00]' : 'text-slate-400'}`} />
-            <span className="text-[10px] tracking-tight leading-tight">Proyek</span>
-          </button>
+          {/* Button 4: Proyek & Site (PM / Finance / HR) ATAU Slip Gaji (Staff Biasa) */}
+          {canViewProjects ? (
+            <button
+              onClick={() => handleTabClick('projects')}
+              className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-2xl transition-all cursor-pointer min-w-[56px] ${
+                isProjectsActive
+                  ? 'text-[#FF6B00] font-black'
+                  : 'text-slate-400 hover:text-slate-700 font-medium'
+              }`}
+            >
+              <Briefcase className={`w-5 h-5 mb-0.5 ${isProjectsActive ? 'text-[#FF6B00]' : 'text-slate-400'}`} />
+              <span className="text-[10px] tracking-tight leading-tight">Proyek</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => handleTabClick('payroll')}
+              className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-2xl transition-all cursor-pointer min-w-[56px] ${
+                isPayrollActive
+                  ? 'text-[#FF6B00] font-black'
+                  : 'text-slate-400 hover:text-slate-700 font-medium'
+              }`}
+            >
+              <Banknote className={`w-5 h-5 mb-0.5 ${isPayrollActive ? 'text-[#FF6B00]' : 'text-slate-400'}`} />
+              <span className="text-[10px] tracking-tight leading-tight">Slip Gaji</span>
+            </button>
+          )}
 
           {/* Button 5: Menu Lainnya Drawer */}
           <button

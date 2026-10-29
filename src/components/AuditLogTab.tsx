@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   ShieldCheck,
@@ -9,7 +10,6 @@ import {
   Download,
   User,
   MapPin,
-  Wifi,
   CheckCircle2,
   AlertTriangle,
   XCircle,
@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { AuditLogItem, AuditModule, AuditStatus, Employee } from '../types';
 import { api } from '../services/api';
+import { rtcService } from '../services/rtcService';
 
 interface AuditLogTabProps {
   currentUser: Employee;
@@ -52,6 +53,30 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
   const [selectedModule, setSelectedModule] = useState<string>('ALL');
   const [selectedRole, setSelectedRole] = useState<string>('ALL');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
+  const [auditStartDate, setAuditStartDate] = useState<string>('');
+  const [auditEndDate, setAuditEndDate] = useState<string>('');
+  const [auditDatePreset, setAuditDatePreset] = useState<'ALL' | 'TODAY' | 'LAST_7' | 'THIS_MONTH'>('ALL');
+
+  const applyAuditPreset = (preset: 'ALL' | 'TODAY' | 'LAST_7' | 'THIS_MONTH') => {
+    setAuditDatePreset(preset);
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
+    if (preset === 'ALL') {
+      setAuditStartDate('');
+      setAuditEndDate('');
+    } else if (preset === 'TODAY') {
+      setAuditStartDate(todayStr);
+      setAuditEndDate(todayStr);
+    } else if (preset === 'LAST_7') {
+      const d = new Date(now.getTime() - 6 * 24 * 60 * 60 * 1000);
+      setAuditStartDate(d.toISOString().slice(0, 10));
+      setAuditEndDate(todayStr);
+    } else if (preset === 'THIS_MONTH') {
+      const startStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+      setAuditStartDate(startStr);
+      setAuditEndDate(todayStr);
+    }
+  };
 
   // Selected Log for Deep Inspection Modal
   const [selectedLog, setSelectedLog] = useState<AuditLogItem | null>(null);
@@ -70,7 +95,9 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
         search: searchQuery,
         module: selectedModule,
         role: selectedRole,
-        status: selectedStatus
+        status: selectedStatus,
+        startDate: auditStartDate,
+        endDate: auditEndDate
       });
       setLogs(res.logs || []);
       setPage(1);
@@ -83,7 +110,7 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
     } finally {
       setIsLoading(false);
     }
-  }, [searchQuery, selectedModule, selectedRole, selectedStatus]);
+  }, [searchQuery, selectedModule, selectedRole, selectedStatus, auditStartDate, auditEndDate]);
 
   // Fetch next batch of 10 items when user scrolls down
   const loadMoreLogs = useCallback(async () => {
@@ -97,7 +124,9 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
         search: searchQuery,
         module: selectedModule,
         role: selectedRole,
-        status: selectedStatus
+        status: selectedStatus,
+        startDate: auditStartDate,
+        endDate: auditEndDate
       });
       const newItems = res.logs || [];
       if (newItems.length > 0) {
@@ -114,7 +143,7 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
     } finally {
       setIsLoadingMore(false);
     }
-  }, [page, hasMore, isLoadingMore, searchQuery, selectedModule, selectedRole, selectedStatus]);
+  }, [page, hasMore, isLoadingMore, searchQuery, selectedModule, selectedRole, selectedStatus, auditStartDate, auditEndDate]);
 
   // Debounced filter trigger
   useEffect(() => {
@@ -123,6 +152,22 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
     }, 250);
     return () => clearTimeout(timer);
   }, [fetchInitialLogs]);
+
+  // Real-Time Multi-Device Live Stream for Audit Logs
+  useEffect(() => {
+    const unsub = rtcService.subscribe('AUDIT_LOG_ADDED', (packet) => {
+      const newLog = packet.payload;
+      if (!newLog) return;
+      if (page === 1 && !searchQuery && selectedModule === 'ALL' && selectedRole === 'ALL' && selectedStatus === 'ALL') {
+        setLogs(prev => {
+          if (prev.some(l => l.id === newLog.id)) return prev;
+          return [newLog, ...prev];
+        });
+        setTotalRows(prev => prev + 1);
+      }
+    });
+    return () => unsub();
+  }, [page, searchQuery, selectedModule, selectedRole, selectedStatus]);
 
   // Infinite Scroll Observer using IntersectionObserver
   useEffect(() => {
@@ -387,7 +432,7 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
             >
               <option value="ALL">👤 Semua Hak Akses / Role</option>
               <option value="superuser">⚡ Superuser (Direksi / Lead)</option>
-              <option value="admin">🛡️ Admin HR & Proyek</option>
+              <option value="admin">🛡️ HR & Proyek</option>
               <option value="staff">👨‍💼 Staf Karyawan</option>
               <option value="system">🤖 System Daemon / Service</option>
             </select>
@@ -405,6 +450,70 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
               <option value="WARNING">⚠️ Peringatan (Warning)</option>
               <option value="FAILED">❌ Gagal (Failed)</option>
             </select>
+          </div>
+        </div>
+
+        {/* Date Range Filter Bar */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pt-2 border-t border-slate-100">
+          <div className="flex items-center gap-2 flex-wrap text-xs">
+            <span className="font-bold text-slate-700 flex items-center gap-1 font-mono-code text-[11px]">
+              <Calendar className="w-3.5 h-3.5 text-[#FF6B00]" />
+              Filter Rentang Waktu:
+            </span>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="date"
+                value={auditStartDate}
+                onChange={e => {
+                  setAuditStartDate(e.target.value);
+                  setAuditDatePreset('ALL');
+                }}
+                className="px-2.5 py-1 rounded-xl bg-slate-50 border border-slate-200 text-xs font-mono-code text-slate-800 shadow-2xs focus:ring-1 focus:ring-[#FF6B00]"
+                title="Tanggal Mulai"
+              />
+              <span className="text-slate-400 text-xs font-mono-code">s/d</span>
+              <input
+                type="date"
+                value={auditEndDate}
+                onChange={e => {
+                  setAuditEndDate(e.target.value);
+                  setAuditDatePreset('ALL');
+                }}
+                className="px-2.5 py-1 rounded-xl bg-slate-50 border border-slate-200 text-xs font-mono-code text-slate-800 shadow-2xs focus:ring-1 focus:ring-[#FF6B00]"
+                title="Tanggal Akhir"
+              />
+            </div>
+            {(auditStartDate || auditEndDate) && (
+              <button
+                type="button"
+                onClick={() => applyAuditPreset('ALL')}
+                className="px-2.5 py-1 rounded-xl text-[11px] font-bold text-rose-600 hover:bg-rose-50 border border-rose-200/60 transition-colors cursor-pointer"
+              >
+                Reset
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {[
+              { id: 'ALL', label: 'Semua' },
+              { id: 'TODAY', label: 'Hari Ini' },
+              { id: 'LAST_7', label: '7 Hari Terakhir' },
+              { id: 'THIS_MONTH', label: 'Bulan Ini' }
+            ].map(p => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => applyAuditPreset(p.id as any)}
+                className={`px-2.5 py-1 rounded-xl text-[11px] font-bold font-mono-code transition-all cursor-pointer ${
+                  auditDatePreset === p.id && (!auditStartDate || p.id !== 'ALL')
+                    ? 'bg-slate-900 text-white shadow-2xs'
+                    : 'bg-white hover:bg-slate-100 text-slate-600 border border-slate-200/80'
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -498,7 +607,7 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
                     </span>
                     {log.ipAddress && (
                       <span className="flex items-center gap-1 text-slate-500">
-                        <Wifi className="w-3 h-3 text-slate-400" />
+                        <ShieldCheck className="w-3 h-3 text-slate-400" />
                         {log.ipAddress}
                       </span>
                     )}
@@ -555,9 +664,15 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
       {/* =========================================================================
           5. MODAL DETAIL AUDIT LOG (DEEP INSPECTION DIALOG)
          ========================================================================= */}
-      {selectedLog && (
-        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-7 shadow-2xl border border-slate-200 relative my-8 modal-dialog-animate">
+      {selectedLog && typeof document !== 'undefined' && createPortal(
+        <div 
+          className="fixed inset-0 z-[9999] bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in"
+          onClick={() => setSelectedLog(null)}
+        >
+          <div 
+            className="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-7 shadow-2xl border border-slate-200 relative my-auto modal-dialog-animate max-h-[92vh] overflow-y-auto custom-scrollbar"
+            onClick={e => e.stopPropagation()}
+          >
             <button
               onClick={() => setSelectedLog(null)}
               className="absolute top-5 right-5 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-all cursor-pointer"
@@ -664,7 +779,8 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

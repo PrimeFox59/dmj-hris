@@ -29,9 +29,33 @@ dist-ssr
 *.sqlite-wal
 data/*.sqlite*
 data/*.secret
+*.db
+data/backups/
 
-# Temporary scripts
+# Scratch & temporary scripts
 setup-*.js
+scratch_*
+fix_*
+patch_*
+test_*
+check_*
+inspect_*
+extract_*
+download_*
+
+# Media and generated documents
+*.bak
+*.docx
+*.pdf
+*.jpg
+*.jpeg
+*.png
+!public/**
+public/scratch_*
+
+# Python cache
+__pycache__/
+server/__pycache__/
 
 # Environment & credentials
 .env

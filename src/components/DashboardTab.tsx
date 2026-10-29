@@ -1,15 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   User,
   Users,
   Briefcase,
+  LayoutDashboard,
   CheckCircle2,
   Clock,
   AlertTriangle,
   ArrowUpRight,
   TrendingUp,
   MapPin,
-  Wifi,
   ChevronRight,
   Calendar,
   ShieldCheck,
@@ -21,10 +21,12 @@ import {
   Layers,
   ArrowRight,
   Activity,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Eye,
+  EyeOff
 } from 'lucide-react';
-import { Employee, Project, AttendanceRecord, ApprovalItem, SalaryRuleConfig, ReimbursementClaim, getEffectiveSystemRole } from '../types';
-import { formatIDR } from '../utils/payrollCalculator';
+import { Employee, Project, AttendanceRecord, ApprovalItem, SalaryRuleConfig, getEffectiveSystemRole } from '../types';
+import { formatSalaryDisplay } from '../utils/payrollCalculator';
 import { HrisTimelineChart } from './HrisTimelineChart';
 import { FinanceTimelineChart } from './FinanceTimelineChart';
 import { UserPerformanceTab } from './UserPerformanceTab';
@@ -36,12 +38,11 @@ interface DashboardTabProps {
   attendances: AttendanceRecord[];
   approvals: ApprovalItem[];
   salaryRules: SalaryRuleConfig;
-  reimbursements: ReimbursementClaim[];
-  onAddReimbursement: (claim: ReimbursementClaim) => void;
   onSubmitNewLeaveRequest: (item: ApprovalItem) => void;
   onNavigateToTab: (tabId: string, projectIdFilter?: string) => void;
-  currentWifiSsid: string;
   initialSubView?: 'hris' | 'finance' | 'performance';
+  selectedProjectId?: string;
+  onSelectProjectId?: (projectId: string) => void;
 }
 
 export const DashboardTab: React.FC<DashboardTabProps> = ({
@@ -51,50 +52,152 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
   attendances,
   approvals,
   salaryRules,
-  reimbursements,
-  onAddReimbursement,
   onSubmitNewLeaveRequest,
   onNavigateToTab,
-  currentWifiSsid,
-  initialSubView = 'hris'
+  initialSubView = 'hris',
+  selectedProjectId,
+  onSelectProjectId
 }) => {
   const currentRole = getEffectiveSystemRole(currentUser);
   const isStaff = currentRole === 'staff';
+  const isFinance = currentRole === 'finance';
+  const isFinanceOrSuper = isFinance || currentRole === 'superuser';
 
-  // Staff is strictly locked to personal performance view
-  const [subView, setSubView] = useState<'hris' | 'finance' | 'performance'>(isStaff ? 'performance' : initialSubView);
+  const defaultSubView = isStaff ? 'performance' : isFinance ? 'finance' : (initialSubView === 'finance' && !isFinanceOrSuper ? 'hris' : initialSubView);
+  const [subView, setSubView] = useState<'hris' | 'finance' | 'performance'>(defaultSubView);
+  const [showFinanceNominal, setShowFinanceNominal] = useState<boolean>(false);
 
   useEffect(() => {
     if (isStaff) {
       setSubView('performance');
+    } else if (isFinance && !initialSubView) {
+      setSubView('finance');
     } else if (initialSubView) {
-      setSubView(initialSubView);
+      if (initialSubView === 'finance' && !isFinanceOrSuper) {
+        setSubView('hris');
+      } else {
+        setSubView(initialSubView);
+      }
     }
-  }, [initialSubView, isStaff]);
+  }, [initialSubView, isStaff, isFinance, isFinanceOrSuper]);
+
+  // Today date string in local timezone (YYYY-MM-DD)
+  const todayStr = useMemo(() => {
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }, []);
+
+  const [selectedDate, setSelectedDate] = useState<string>(todayStr);
 
   const pendingApprovals = approvals.filter(a => a.status === 'PENDING');
-  const todayAttendances = attendances.slice(0, 4);
+
+  // Active Project Scoping (When navigated from Project Card)
+  const activeSelectedProject = useMemo(() => {
+    if (!selectedProjectId || selectedProjectId === 'ALL') return null;
+    return projects.find(p => p.id === selectedProjectId) || null;
+  }, [projects, selectedProjectId]);
+
+  const scopedEmployees = useMemo(() => {
+    if (!activeSelectedProject) return employees;
+    return employees.filter(e => e.assignedProjectId === activeSelectedProject.id);
+  }, [employees, activeSelectedProject]);
+
+  const scopedEmployeeIds = useMemo(() => {
+    return new Set(scopedEmployees.map(e => e.id));
+  }, [scopedEmployees]);
+
+  const scopedAttendances = useMemo(() => {
+    if (!activeSelectedProject) return attendances;
+    return attendances.filter(a => scopedEmployeeIds.has(a.employeeId));
+  }, [attendances, scopedEmployeeIds, activeSelectedProject]);
+
+  const scopedProjects = useMemo(() => {
+    if (!activeSelectedProject) return projects;
+    return [activeSelectedProject];
+  }, [projects, activeSelectedProject]);
+  
+  // Daily attendances for the selected date
+  const dailyAttendances = useMemo(() => {
+    return scopedAttendances.filter(a => a.date === selectedDate);
+  }, [scopedAttendances, selectedDate]);
+
+  const todayAttendances = dailyAttendances.slice(0, 4);
 
   // Financial aggregates
-  const totalAllocatedBudget = projects.reduce((acc, p) => acc + p.allocatedBudget, 0);
-  const totalActualLaborCost = projects.reduce((acc, p) => acc + p.actualLaborCost, 0);
-  const overallBurnPercentage = Math.round((totalActualLaborCost / totalAllocatedBudget) * 100);
+  const totalAllocatedBudget = scopedProjects.reduce((acc, p) => acc + (p.allocatedBudget || 0), 0);
+  const totalActualLaborCost = scopedProjects.reduce((acc, p) => acc + (p.actualLaborCost || 0), 0);
+  const overallBurnPercentage = totalAllocatedBudget > 0 ? Math.round((totalActualLaborCost / totalAllocatedBudget) * 100) : 0;
 
-  // HR aggregates
-  const onTimeCount = attendances.filter(a => !a.isLate && a.mode === 'WFO').length;
-  const lateCount = attendances.filter(a => a.isLate).length;
-  const dinasCount = attendances.filter(a => a.mode === 'DINAS_LUAR').length;
-  const inGeofenceCount = attendances.filter(a => a.location.inGeofence).length;
+  // HR aggregates for selected date (default: today)
+  const onTimeCount = dailyAttendances.filter(a => !a.isLate && a.mode === 'WFO').length;
+  const lateCount = dailyAttendances.filter(a => a.isLate).length;
+  const dinasCount = dailyAttendances.filter(a => a.mode === 'DINAS_LUAR').length;
+  const inGeofenceCount = dailyAttendances.filter(a => a.location?.inGeofence).length;
 
   // Monthly payroll estimate
-  const totalBaseSalary = employees.reduce((acc, e) => acc + e.baseSalary, 0);
-  const totalAllowances = employees.reduce((acc, e) => acc + e.fixedAllowance + (e.dailyAllowance * 22), 0);
-  const totalOvertimeEst = 4750000;
+  const totalBaseSalary = scopedEmployees.reduce((acc, e) => acc + e.baseSalary, 0);
+  const totalAllowances = scopedEmployees.reduce((acc, e) => acc + e.fixedAllowance + (e.dailyAllowance * 22), 0);
+  const totalOvertimeEst = activeSelectedProject ? Math.round(4750000 * (scopedEmployees.length / (employees.length || 1))) : 4750000;
   const totalGrossPayroll = totalBaseSalary + totalAllowances + totalOvertimeEst;
   const totalNetPayrollDisbursement = Math.round(totalGrossPayroll * 0.91);
 
   return (
     <div className="space-y-6 w-full max-w-full min-w-0">
+      
+      {/* Active Project Filter Capsule (When Navigated from Project Card) */}
+      {activeSelectedProject && (
+        <div className="bg-gradient-to-r from-orange-500/10 via-amber-500/10 to-orange-500/5 border border-orange-300/80 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-2xs motion-fade-in-down">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#FF6B00] text-white flex items-center justify-center shrink-0 shadow-xs">
+              <Briefcase className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] font-black uppercase font-mono-code px-2 py-0.5 rounded-md bg-[#FF6B00] text-white">
+                  {activeSelectedProject.code}
+                </span>
+                <span className="text-sm font-black text-slate-900">
+                  {activeSelectedProject.name}
+                </span>
+                <span className="text-xs font-bold text-slate-500">
+                  • {activeSelectedProject.client || 'PT Dwi Martha Jaya'}
+                </span>
+              </div>
+              <p className="text-xs text-slate-600 mt-0.5">
+                Menampilkan telemetri presensi & analitik kerja untuk <strong>{scopedEmployees.length} personel</strong> bertugas di site {activeSelectedProject.location || 'Lapangan'}.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0 flex-wrap">
+            <button
+              onClick={() => onNavigateToTab('project_dashboard', activeSelectedProject.id)}
+              className="px-3.5 py-1.5 rounded-xl bg-[#FF6B00] hover:bg-[#e56000] text-white text-xs font-bold transition-all cursor-pointer shadow-xs flex items-center gap-1.5"
+            >
+              <LayoutDashboard className="w-3.5 h-3.5" />
+              <span>Buka Dashboard Khusus Proyek</span>
+            </button>
+            <button
+              onClick={() => onNavigateToTab('projects')}
+              className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold border border-slate-200 transition-all cursor-pointer shadow-2xs"
+            >
+              Kembali ke Proyek
+            </button>
+            <button
+              onClick={() => {
+                if (onSelectProjectId) onSelectProjectId('ALL');
+              }}
+              className="px-3.5 py-1.5 rounded-xl bg-orange-100 hover:bg-orange-200 text-[#FF6B00] text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
+              title="Tampilkan seluruh proyek perusahaan"
+            >
+              <span>✕ Semua Proyek</span>
+            </button>
+          </div>
+        </div>
+      )}
       
       {/* Dual Dashboard Segmented Switcher Header */}
       {/* Perspective Switcher */}
@@ -102,13 +205,13 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
         <div className="bg-white/90 backdrop-blur-md px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-2xl border border-slate-200/80 shadow-xs motion-fade-in-down w-full max-w-full min-w-0">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 sm:gap-3">
             <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-[#FF6B00]"></span>
-              <span className="text-xs font-bold text-slate-700">Sudut Pandang:</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span className="text-xs font-black text-slate-800 uppercase tracking-wider font-mono-code">Workspace Portal</span>
             </div>
 
             <div
               id="tour-dashboard-subview"
-              className="grid grid-cols-3 sm:flex sm:items-center gap-1 sm:gap-1.5 bg-slate-100/90 p-1 rounded-xl border border-slate-200/70 w-full sm:w-auto min-w-0"
+              className={`grid ${isFinanceOrSuper ? 'grid-cols-3' : 'grid-cols-2'} sm:flex sm:items-center gap-1 sm:gap-1.5 bg-slate-100/90 p-1 rounded-xl border border-slate-200/70 w-full sm:w-auto min-w-0`}
             >
               {/* Button 1: Operasional SDM */}
               <button
@@ -126,21 +229,23 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                 </span>
               </button>
 
-              {/* Button 2: Finance & Payroll */}
-              <button
-                onClick={() => setSubView('finance')}
-                className={`flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-3.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer text-center ${
-                  subView === 'finance'
-                    ? 'bg-[#FF6B00] text-white shadow-xs font-bold'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60 font-semibold'
-                }`}
-              >
-                <Banknote className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate">
-                  <span className="inline sm:hidden">Finance</span>
-                  <span className="hidden sm:inline">Finance & Payroll</span>
-                </span>
-              </button>
+              {/* Button 2: Finance & Payroll (Only for Finance & Superuser) */}
+              {isFinanceOrSuper && (
+                <button
+                  onClick={() => setSubView('finance')}
+                  className={`flex items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-3.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer text-center ${
+                    subView === 'finance'
+                      ? 'bg-[#FF6B00] text-white shadow-xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60 font-semibold'
+                  }`}
+                >
+                  <Banknote className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">
+                    <span className="inline sm:hidden">Finance</span>
+                    <span className="hidden sm:inline">Finance & Payroll</span>
+                  </span>
+                </button>
+              )}
 
               {/* Button 3: Kinerja Saya (MENONJOL DENGAN AKSEN BIRU) */}
               <button
@@ -163,7 +268,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
       {/* =========================================================================
           VIEW 1: DASHBOARD HRIS & OPERASIONAL SDM
          ========================================================================= */}
-      {subView === 'hris' && (
+      {!isStaff && subView === 'hris' && (
         <div className="space-y-5 motion-fade-in-up">
           
           {/* Compact HRIS Action Bar */}
@@ -178,7 +283,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                 </h1>
                 <p className="text-xs text-slate-400 flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                  <span>Presensi Aktif: {attendances.length} dari {employees.length} staf hadir</span>
+                  <span>Presensi: {dailyAttendances.length} dari {employees.length} staf hadir {selectedDate === todayStr ? 'hari ini' : `(${selectedDate})`}</span>
                 </p>
               </div>
             </div>
@@ -230,7 +335,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                 </div>
               </div>
               <div className="text-2xl font-black text-slate-900 font-mono-code">
-                {attendances.length} / {employees.length}
+                {dailyAttendances.length} / {employees.length}
               </div>
               <div className="mt-1 flex items-center gap-2 text-xs text-emerald-700 font-semibold">
                 <span>{onTimeCount} Tepat Waktu</span>
@@ -239,18 +344,18 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
               </div>
             </div>
 
-            {/* Metric 3: Kepatuhan Geofence & WiFi */}
+            {/* Metric 3: Kepatuhan Lokasi & Geofence */}
             <div className="glass-card rounded-2xl p-4 sm:p-5 hover:shadow-lg transition-all border border-slate-200/80 card-interactive">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono-code">
                   Kepatuhan Lokasi
                 </span>
                 <div className="w-8 h-8 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center">
-                  <Wifi className="w-4 h-4" />
+                  <MapPin className="w-4 h-4" />
                 </div>
               </div>
               <div className="text-2xl font-black text-teal-700 font-mono-code">
-                {attendances.length > 0 ? Math.round((inGeofenceCount / attendances.length) * 100) : 100}%
+                {dailyAttendances.length > 0 ? Math.round((inGeofenceCount / dailyAttendances.length) * 100) : 100}%
               </div>
             </div>
 
@@ -274,11 +379,15 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
           {/* INTERACTIVE TIMELINE CHART FOR HRIS */}
           <div id="tour-dashboard-charts">
             <HrisTimelineChart
-            employees={employees}
-            attendances={attendances}
-            approvals={approvals}
-            onNavigateToTab={onNavigateToTab}
-          />
+              employees={employees}
+              projects={projects}
+              salaryRules={salaryRules}
+              attendances={attendances}
+              approvals={approvals}
+              onNavigateToTab={onNavigateToTab}
+              selectedDate={selectedDate}
+              onDateChange={setSelectedDate}
+            />
           </div>
 
           {/* Operational Feeds: 2 Columns */}
@@ -302,7 +411,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {employees.map((emp, idx) => {
+                {employees.slice(0, 6).map((emp) => {
                   const assignedProj = projects.find(p => p.id === emp.assignedProjectId);
                   return (
                     <div
@@ -329,6 +438,19 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                     </div>
                   );
                 })}
+              </div>
+
+              {/* Footer Summary & Link to User Management */}
+              <div className="pt-2 flex items-center justify-between border-t border-slate-100 text-xs">
+                <span className="text-slate-400 font-mono-code text-[11px]">
+                  Menampilkan 3 baris ({Math.min(6, employees.length)} dari {employees.length} staf)
+                </span>
+                <button
+                  onClick={() => onNavigateToTab('users')}
+                  className="font-bold text-[#FF6B00] hover:underline cursor-pointer flex items-center gap-1"
+                >
+                  Lihat Semua Karyawan ({employees.length}) <ArrowRight className="w-3 h-3" />
+                </button>
               </div>
             </div>
 
@@ -410,8 +532,8 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                           </span>
                         </div>
                         <p className="text-[10px] text-slate-500 truncate flex items-center gap-1 mt-0.5">
-                          <Wifi className="w-3 h-3 text-[#FF6B00]" />
-                          {item.wifi.ssid}
+                          <MapPin className="w-3 h-3 text-[#FF6B00]" />
+                          {typeof item.location.distanceMeters === 'number' && !isNaN(item.location.distanceMeters) ? `${item.location.distanceMeters}m Geofence` : 'Geofence Valid'}
                         </p>
                       </div>
                     </div>
@@ -429,7 +551,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
       {/* =========================================================================
           VIEW 2: DASHBOARD FINANCE & AKUNTANSI PROYEK
          ========================================================================= */}
-      {subView === 'finance' && (
+      {!isStaff && subView === 'finance' && isFinanceOrSuper && (
         <div className="space-y-6 motion-fade-in-up">
           
           {/* Executive Compact Action Bar for Finance */}
@@ -453,6 +575,19 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
 
             <div className="flex flex-wrap items-center gap-2.5">
               <button
+                onClick={() => setShowFinanceNominal(prev => !prev)}
+                className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer ${
+                  showFinanceNominal
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                    : 'bg-white/10 hover:bg-white/15 text-white border-white/20'
+                }`}
+                title="Toggle visibilitas angka nominal finansial (default: sensor)"
+              >
+                {showFinanceNominal ? <EyeOff className="w-3.5 h-3.5 text-amber-300" /> : <Eye className="w-3.5 h-3.5 text-[#00E2B0]" />}
+                <span>{showFinanceNominal ? 'Sembunyikan Nominal' : 'Tampilkan Nominal'}</span>
+              </button>
+
+              <button
                 onClick={() => onNavigateToTab('payroll')}
                 className="px-4 py-2 rounded-xl bg-[#FF6B00] hover:bg-[#e56000] text-white text-xs font-bold shadow-sm transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer"
               >
@@ -460,11 +595,11 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                 Payroll Hub
               </button>
               <button
-                onClick={() => onNavigateToTab('salary_rules')}
+                onClick={() => onNavigateToTab('projects')}
                 className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-bold border border-white/20 transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer"
               >
                 <Sparkles className="w-3.5 h-3.5 text-[#00E2B0]" />
-                Aturan Gaji
+                Biaya Proyek
               </button>
             </div>
           </div>
@@ -483,7 +618,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                 </div>
               </div>
               <div className="text-xl sm:text-2xl font-black text-emerald-700 font-mono-code">
-                {formatIDR(totalNetPayrollDisbursement)}
+                {formatSalaryDisplay(totalNetPayrollDisbursement, showFinanceNominal)}
               </div>
               <div className="mt-2 text-xs text-slate-500 flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
@@ -502,7 +637,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                 </div>
               </div>
               <div className="text-xl sm:text-2xl font-black text-orange-600 font-mono-code">
-                {formatIDR(totalOvertimeEst)}
+                {formatSalaryDisplay(totalOvertimeEst, showFinanceNominal)}
               </div>
               <div className="mt-2 text-xs text-slate-500">
                 Formula 1/173 x Upah Pokok Jam Kerja
@@ -520,10 +655,10 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                 </div>
               </div>
               <div className="text-xl sm:text-2xl font-black text-slate-900 font-mono-code">
-                {formatIDR(totalAllocatedBudget)}
+                {totalAllocatedBudget > 0 ? formatSalaryDisplay(totalAllocatedBudget, showFinanceNominal) : 'Belum Ditentukan (TBD)'}
               </div>
               <div className="mt-2 text-xs text-slate-500">
-                Terbagi ke 4 Proyek Operasional Aktif
+                Terbagi ke {projects.length} Proyek Operasional Aktif
               </div>
             </div>
 
@@ -538,10 +673,12 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                 </div>
               </div>
               <div className="text-xl sm:text-2xl font-black text-[#FF6B00] font-mono-code">
-                {overallBurnPercentage}%
+                {totalAllocatedBudget > 0 ? `${overallBurnPercentage}%` : '0% (TBD)'}
               </div>
-              <div className="mt-2 text-xs text-emerald-600 font-semibold">
-                Sisa Cadangan: {formatIDR(totalAllocatedBudget - totalActualLaborCost)}
+              <div className="mt-2 text-xs text-slate-500 font-semibold">
+                {totalAllocatedBudget > 0
+                  ? `Sisa Cadangan: ${formatSalaryDisplay(totalAllocatedBudget - totalActualLaborCost, showFinanceNominal)}`
+                  : 'Sisa Cadangan: Menunggu Penetapan Nilai Kontrak'}
               </div>
             </div>
 
@@ -577,8 +714,9 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {projects.map((proj) => {
-                  const burn = Math.round((proj.actualLaborCost / proj.allocatedBudget) * 100);
-                  const isOverrunRisk = proj.projectedLaborCost > proj.allocatedBudget;
+                  const hasBudget = (proj.allocatedBudget || 0) > 0;
+                  const burn = hasBudget ? Math.round((proj.actualLaborCost / proj.allocatedBudget) * 100) : 0;
+                  const isOverrunRisk = hasBudget && proj.projectedLaborCost > proj.allocatedBudget;
 
                   return (
                     <div
@@ -590,9 +728,13 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                           {proj.code}
                         </span>
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                          isOverrunRisk ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'
+                          !hasBudget
+                            ? 'bg-slate-100 text-slate-600 border border-slate-200'
+                            : isOverrunRisk
+                            ? 'bg-rose-100 text-rose-800'
+                            : 'bg-emerald-100 text-emerald-800'
                         }`}>
-                          {isOverrunRisk ? 'Risiko Overrun' : 'On Track'}
+                          {!hasBudget ? 'Pagu TBD' : isOverrunRisk ? 'Risiko Overrun' : 'On Track'}
                         </span>
                       </div>
 
@@ -601,11 +743,13 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                       <div className="space-y-1.5 pt-1 text-xs">
                         <div className="flex justify-between">
                           <span className="text-slate-500">Budget Awal:</span>
-                          <span className="font-bold text-slate-800 font-mono-code">{formatIDR(proj.allocatedBudget)}</span>
+                          <span className="font-bold text-slate-800 font-mono-code">
+                            {hasBudget ? formatSalaryDisplay(proj.allocatedBudget, showFinanceNominal) : <span className="text-slate-400 font-sans italic text-[11px]">Belum Ditentukan (TBD)</span>}
+                          </span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-slate-500">Realisasi Saat Ini:</span>
-                          <span className="font-black text-emerald-700 font-mono-code">{formatIDR(proj.actualLaborCost)}</span>
+                          <span className="font-black text-emerald-700 font-mono-code">{formatSalaryDisplay(proj.actualLaborCost, showFinanceNominal)}</span>
                         </div>
                       </div>
 
@@ -613,14 +757,14 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                       <div className="space-y-1 pt-1">
                         <div className="flex justify-between text-[10px] font-mono-code text-slate-500">
                           <span>Burn Rate Anggaran</span>
-                          <span className="font-bold text-slate-800">{burn}%</span>
+                          <span className="font-bold text-slate-800">{hasBudget ? `${burn}%` : 'TBD'}</span>
                         </div>
                         <div className="w-full h-1.5 rounded-full bg-slate-200 overflow-hidden">
                           <div
                             className={`h-full rounded-full transition-all ${
                               burn > 85 ? 'bg-rose-500' : burn > 60 ? 'bg-amber-500' : 'bg-[#00E2B0]'
                             }`}
-                            style={{ width: `${burn}%` }}
+                            style={{ width: `${hasBudget ? Math.min(burn, 100) : 0}%` }}
                           />
                         </div>
                       </div>
@@ -652,23 +796,23 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                 <div className="space-y-2 text-xs">
                   <div className="flex justify-between items-center py-1 border-b border-slate-100">
                     <span className="text-slate-600">Gaji Pokok Karyawan</span>
-                    <span className="font-bold text-slate-900 font-mono-code">{formatIDR(totalBaseSalary)}</span>
+                    <span className="font-bold text-slate-900 font-mono-code">{formatSalaryDisplay(totalBaseSalary, showFinanceNominal)}</span>
                   </div>
                   <div className="flex justify-between items-center py-1 border-b border-slate-100">
                     <span className="text-slate-600">Tunjangan Tetap & Jabatan</span>
-                    <span className="font-bold text-slate-900 font-mono-code">{formatIDR(employees.reduce((acc, e) => acc + e.fixedAllowance, 0))}</span>
+                    <span className="font-bold text-slate-900 font-mono-code">{formatSalaryDisplay(employees.reduce((acc, e) => acc + e.fixedAllowance, 0), showFinanceNominal)}</span>
                   </div>
                   <div className="flex justify-between items-center py-1 border-b border-slate-100">
                     <span className="text-slate-600">Uang Makan / Harian</span>
-                    <span className="font-bold text-slate-900 font-mono-code">{formatIDR(employees.reduce((acc, e) => acc + (e.dailyAllowance * 22), 0))}</span>
+                    <span className="font-bold text-slate-900 font-mono-code">{formatSalaryDisplay(employees.reduce((acc, e) => acc + (e.dailyAllowance * 22), 0), showFinanceNominal)}</span>
                   </div>
                   <div className="flex justify-between items-center py-1 border-b border-slate-100">
                     <span className="text-slate-600">Upah Lembur Depnaker</span>
-                    <span className="font-bold text-orange-600 font-mono-code">+{formatIDR(totalOvertimeEst)}</span>
+                    <span className="font-bold text-orange-600 font-mono-code">+{formatSalaryDisplay(totalOvertimeEst, showFinanceNominal)}</span>
                   </div>
                   <div className="flex justify-between items-center py-1.5 font-black text-slate-900 text-xs">
                     <span>Total Beban Bruto</span>
-                    <span className="font-mono-code">{formatIDR(totalGrossPayroll)}</span>
+                    <span className="font-mono-code">{formatSalaryDisplay(totalGrossPayroll, showFinanceNominal)}</span>
                   </div>
                 </div>
               </div>
@@ -690,10 +834,10 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                   </button>
 
                   <button
-                    onClick={() => onNavigateToTab('salary_rules')}
+                    onClick={() => onNavigateToTab('payroll')}
                     className="w-full px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs transition-all flex items-center justify-between cursor-pointer"
                   >
-                    <span>Konfigurasi Tarif BPJS & Lembur</span>
+                    <span>Atur Gaji Karyawan & Cutoff</span>
                     <ArrowRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -709,18 +853,18 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
       {/* =========================================================================
           VIEW 3: DASHBOARD USER PERFORMANCE & PORTAL KARYAWAN
          ========================================================================= */}
-      {subView === 'performance' && (
+      {(isStaff || subView === 'performance') && (
         <UserPerformanceTab
           currentUser={currentUser}
-          employees={employees}
+          employees={isStaff ? [currentUser] : scopedEmployees}
+          allEmployees={isStaff ? [currentUser] : employees}
           projects={projects}
-          attendances={attendances}
-          approvals={approvals}
+          attendances={isStaff ? scopedAttendances.filter(a => a.employeeId === currentUser.id) : scopedAttendances}
+          approvals={isStaff ? approvals.filter(a => a.employeeId === currentUser.id) : approvals}
           salaryRules={salaryRules}
-          reimbursements={reimbursements}
-          onAddReimbursement={onAddReimbursement}
           onSubmitNewLeaveRequest={onSubmitNewLeaveRequest}
           onNavigateToTab={onNavigateToTab}
+          selectedProjectId={selectedProjectId}
         />
       )}
 

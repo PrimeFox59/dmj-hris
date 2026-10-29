@@ -9,7 +9,6 @@ import {
   saveEmployee,
   saveProject,
   saveSalaryRules,
-  saveReimbursement,
   resetDatabase,
   getDbInfo,
   addAuditLog,
@@ -105,14 +104,7 @@ export function sqliteApiPlugin(): Plugin {
             return sendJson(200, result);
           }
 
-          // 6. Save Reimbursement Claim
-          if (cleanUrl === '/api/reimbursement' && method === 'POST') {
-            const body = await readBody();
-            const result = saveReimbursement(body);
-            return sendJson(200, result);
-          }
-
-          // 7. Save Salary Rules & IP Networks
+          // 7. Save Salary Rules & Geofence
           if (cleanUrl === '/api/salary-rules' && (method === 'PUT' || method === 'POST')) {
             const body = await readBody();
             const result = saveSalaryRules(body);

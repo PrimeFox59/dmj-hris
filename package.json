@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "deploy": "node deploy_to_poco.js"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
@@ -16,18 +17,25 @@
     "canvas-confetti": "^1.9.4",
     "clsx": "^2.1.1",
     "lucide-react": "^1.42.0",
+    "nodemailer": "^10.1.0",
     "qrcode": "^1.5.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "tailwind-merge": "^3.6.0",
-    "tailwindcss": "^4.3.3"
+    "tailwindcss": "^4.3.3",
+    "ws": "^8.22.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
+    "@types/nodemailer": "^8.0.2",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
+    "@types/ws": "^8.18.2",
     "@vitejs/plugin-react": "^6.1.0",
+    "jpeg-js": "^0.4.4",
     "oxlint": "^1.79.0",
+    "pngjs": "^7.0.0",
     "typescript": "~6.0.2",
     "vite": "^8.2.2"
   }
