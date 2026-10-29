@@ -85,13 +85,21 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
   const getEmployeeTargetGeofence = (emp: any) => {
     if (emp?.assignedProjectId && projects.length > 0) {
       const proj = projects.find(p => p.id === emp.assignedProjectId);
-      if (proj && proj.geofence) {
-        return {
-          name: proj.geofence.name || proj.name,
-          lat: proj.geofence.lat,
-          lng: proj.geofence.lng,
-          radiusMeters: proj.geofence.radiusMeters || 350
-        };
+      if (proj) {
+        const geo = proj.customRules?.geofence || proj.geofence;
+        if (geo) {
+          const rawLat = geo.lat ?? geo.latitude;
+          const rawLng = geo.lng ?? geo.longitude;
+          if (typeof rawLat === 'number' && typeof rawLng === 'number') {
+            const fitLat = rawLat > 0 && rawLat < 15 ? -rawLat : rawLat;
+            return {
+              name: geo.siteName || geo.name || proj.name,
+              lat: fitLat,
+              lng: rawLng,
+              radiusMeters: geo.radiusMeters || 350
+            };
+          }
+        }
       }
     }
     if (officeGeofence) {

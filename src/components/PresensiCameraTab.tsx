@@ -2316,8 +2316,21 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                       <div className="text-[10px] text-slate-500 font-mono-code">{item.employeeNik} • {item.department}</div>
                     </td>
                     <td className="py-3 px-3">
-                      <div className="font-bold text-slate-800 font-mono-code">{item.checkInTime} WIB</div>
-                      <div className="text-[10px] text-slate-400">{item.date}</div>
+                      <div className="flex flex-col gap-0.5 font-mono-code">
+                        <div className="font-bold text-slate-800 text-[11px]">
+                          Masuk: {item.checkInTime} WIB
+                        </div>
+                        {item.checkOutTime ? (
+                          <div className="font-bold text-emerald-600 text-[11px]">
+                            Pulang: {item.checkOutTime} WIB
+                          </div>
+                        ) : (
+                          <div className="text-[10px] text-slate-400 italic">
+                            Belum Pulang
+                          </div>
+                        )}
+                        <div className="text-[10px] text-slate-400">{item.date}</div>
+                      </div>
                     </td>
                     <td className="py-3 px-3">
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
