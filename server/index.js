@@ -2,25 +2,72 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
+import { WebSocketServer, WebSocket } from 'ws';
 import {
   getAllData,
   saveAttendance,
   updateApproval,
+  saveApproval,
   saveEmployee,
   saveProject,
   saveSalaryRules,
-  saveReimbursement,
   resetDatabase,
   getDbInfo,
   authenticateUser,
+  generateTemporaryPassword,
   getCurrentUserFromToken,
+  generateToken,
   changeUserPassword,
+  resetEmployeePassword,
+  saveEmployeeBiometric,
+  deleteEmployeeBiometric,
   listUserAccounts,
   verifyToken,
   addAuditLog,
-  getAuditLogsPaginated
+  getAuditLogsPaginated,
+  getPublicKioskEmployees,
+  getEnrolledBiometricGallery,
+  authenticateByBiometric,
+  getWaNotificationLogs,
+  getWaOptIns,
+  recordWaOptIn,
+  getEmailNotificationLogs,
+  getWorkCalendarConfig,
+  saveWorkCalendarConfig,
+  getDatabase,
+  getCasualWorkers,
+  saveCasualWorker,
+  getCasualAttendances,
+  saveCasualAttendance,
+  deleteCasualAttendance,
+  deleteAttendance,
+  getAttendancePhoto
 } from './db.js';
+import {
+  getGatewayStatus,
+  sendWhatsAppMessage,
+  notifyAttendanceSuccess,
+  notifyAttendanceLate,
+  notifyApprovalSubmitted,
+  notifyApprovalDecision,
+  blastUnrecordedEmployees,
+  startWaBackgroundScheduler,
+  restartGatewayClient,
+  logoutGatewayClient
+} from './whatsappService.js';
+import {
+  getSmtpConfig,
+  verifySmtp,
+  sendEmailNotification,
+  notifyAttendanceSuccessEmail,
+  notifyAttendanceLateEmail,
+  notifyApprovalSubmittedEmail,
+  notifyApprovalDecisionEmail,
+  sendTestEmail,
+  blastUnrecordedEmployeesEmail
+} from './emailService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -44,18 +91,33 @@ const MIME_TYPES = {
 };
 
 // ==========================================
-// REAL-TIME COMMUNICATION (SSE ENGINE)
+// REAL-TIME COMMUNICATION (WEBSOCKET & SSE ENGINE)
 // ==========================================
 const sseClients = new Set();
+const wsClients = new Set();
 
 function broadcastRealtimeEvent(type, payload) {
-  const packet = JSON.stringify({
+  const packetObj = {
     type,
     payload,
     serverTimeMs: Date.now(),
     serverTimestamp: new Date().toISOString()
-  });
-  const sseMessage = `event: message\ndata: ${packet}\n\n`;
+  };
+  const packetStr = JSON.stringify(packetObj);
+
+  // 1. Broadcast to WebSocket Clients
+  for (const client of wsClients) {
+    try {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(packetStr);
+      }
+    } catch (err) {
+      wsClients.delete(client);
+    }
+  }
+
+  // 2. Broadcast to SSE Clients
+  const sseMessage = `event: message\ndata: ${packetStr}\n\n`;
   for (const client of sseClients) {
     try {
       client.write(sseMessage);
@@ -65,8 +127,9 @@ function broadcastRealtimeEvent(type, payload) {
   }
 }
 
-// Keep-alive heartbeat ping every 25 seconds for Cloudflare Tunnel / proxies
+// Keep-alive heartbeat ping every 25 seconds for Cloudflare Tunnel / proxies / WS
 setInterval(() => {
+  // SSE Ping
   for (const client of sseClients) {
     try {
       client.write(':ping\n\n');
@@ -74,22 +137,267 @@ setInterval(() => {
       sseClients.delete(client);
     }
   }
+
+  // WebSocket Heartbeat Ping
+  const pingStr = JSON.stringify({ type: 'HEARTBEAT_PING', serverTimeMs: Date.now() });
+  for (const client of wsClients) {
+    try {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(pingStr);
+      }
+    } catch (err) {
+      wsClients.delete(client);
+    }
+  }
 }, 25000);
+
+// ==========================================
+// WHATSAPP BAILEYS EVENT TRIGGER HOOKS
+// ==========================================
+async function triggerAttendanceWaNotification(attendanceRecord) {
+  try {
+    if (!attendanceRecord || !attendanceRecord.employeeId) return;
+    const db = getDatabase();
+    const empRow = db.prepare("SELECT data_json FROM employees WHERE id = ?").get(attendanceRecord.employeeId);
+    if (!empRow) return;
+    const emp = JSON.parse(empRow.data_json);
+    if (!emp || !emp.phone) return;
+
+    let salaryRules = null;
+    try {
+      const rulesRow = db.prepare("SELECT config_json FROM salary_rules WHERE id = 'default'").get();
+      if (rulesRow) salaryRules = JSON.parse(rulesRow.config_json);
+    } catch (e) {}
+
+    const waConfig = salaryRules?.whatsappConfig;
+    if (waConfig && waConfig.enabled === false) return;
+
+    const isLate = attendanceRecord.status === 'LATE' || (attendanceRecord.lateMinutes && attendanceRecord.lateMinutes > 0);
+    if (isLate && (waConfig?.notifyAttendanceLate !== false)) {
+      await notifyAttendanceLate(emp, attendanceRecord, salaryRules);
+    } else if (!isLate && (waConfig?.notifyAttendanceSuccess !== false)) {
+      await notifyAttendanceSuccess(emp, attendanceRecord);
+    }
+  } catch (err) {
+    console.error('[WA Trigger Attendance Error]', err);
+  }
+}
+
+async function triggerApprovalSubmitWaNotification(approvalItem) {
+  try {
+    if (!approvalItem || !approvalItem.employeeId) return;
+    const db = getDatabase();
+    const empRow = db.prepare("SELECT data_json FROM employees WHERE id = ?").get(approvalItem.employeeId);
+    if (!empRow) return;
+    const emp = JSON.parse(empRow.data_json);
+
+    let targetApprover = null;
+    const approverId = approvalItem.targetApproverId || approvalItem.projectManagerId;
+    if (approverId) {
+      const appRow = db.prepare("SELECT data_json FROM employees WHERE id = ?").get(approverId);
+      if (appRow) targetApprover = JSON.parse(appRow.data_json);
+    }
+
+    if (!targetApprover && approvalItem.projectId) {
+      try {
+        const projRow = db.prepare("SELECT data_json FROM projects WHERE id = ?").get(approvalItem.projectId);
+        if (projRow) {
+          const proj = JSON.parse(projRow.data_json);
+          if (proj.projectManagerId) {
+            const pmRow = db.prepare("SELECT data_json FROM employees WHERE id = ?").get(proj.projectManagerId);
+            if (pmRow) targetApprover = JSON.parse(pmRow.data_json);
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (!targetApprover) {
+      try {
+        const hrRow = db.prepare("SELECT data_json FROM employees WHERE role = 'hr' OR role = 'HR' OR position LIKE '%HR%' LIMIT 1").get();
+        if (hrRow) targetApprover = JSON.parse(hrRow.data_json);
+      } catch (e) {}
+    }
+
+    await notifyApprovalSubmitted(approvalItem, emp, targetApprover);
+  } catch (err) {
+    console.error('[WA Trigger Approval Submit Error]', err);
+  }
+}
+
+async function triggerApprovalDecisionWaNotification(approvalId, status, reviewNote, reviewedBy) {
+  try {
+    const db = getDatabase();
+    const row = db.prepare("SELECT data_json FROM approvals WHERE id = ?").get(approvalId);
+    if (!row) return;
+    const item = JSON.parse(row.data_json);
+    if (!item || !item.employeeId) return;
+
+    const empRow = db.prepare("SELECT data_json FROM employees WHERE id = ?").get(item.employeeId);
+    if (!empRow) return;
+    const emp = JSON.parse(empRow.data_json);
+
+    const mergedItem = {
+      ...item,
+      status: status || item.status,
+      reviewNote: reviewNote || item.reviewNote,
+      reviewedBy: reviewedBy || item.reviewedBy
+    };
+
+    await notifyApprovalDecision(mergedItem, emp);
+  } catch (err) {
+    console.error('[WA Trigger Approval Decision Error]', err);
+  }
+}
+
+// ==========================================
+// EMAIL SMTP (GMAIL) EVENT TRIGGER HOOKS
+// ==========================================
+async function triggerAttendanceEmailNotification(attendanceRecord) {
+  try {
+    if (!attendanceRecord || !attendanceRecord.employeeId) return;
+    const db = getDatabase();
+    const empRow = db.prepare("SELECT data_json FROM employees WHERE id = ?").get(attendanceRecord.employeeId);
+    if (!empRow) return;
+    const emp = JSON.parse(empRow.data_json);
+    if (!emp || !emp.email) return;
+
+    let salaryRules = null;
+    try {
+      const rulesRow = db.prepare("SELECT config_json FROM salary_rules WHERE id = 'default'").get();
+      if (rulesRow) salaryRules = JSON.parse(rulesRow.config_json);
+    } catch (e) {}
+
+    const smtpConfig = salaryRules?.smtpConfig;
+    if (!smtpConfig || smtpConfig.enabled === false) return;
+
+    const isLate = attendanceRecord.status === 'LATE' || (attendanceRecord.lateMinutes && attendanceRecord.lateMinutes > 0);
+    if (isLate && (smtpConfig.notifyAttendanceLate !== false)) {
+      await notifyAttendanceLateEmail(emp, attendanceRecord, salaryRules);
+    } else if (!isLate && (smtpConfig.notifyAttendanceSuccess !== false)) {
+      await notifyAttendanceSuccessEmail(emp, attendanceRecord);
+    }
+  } catch (err) {
+    console.error('[Email Trigger Attendance Error]', err);
+  }
+}
+
+async function triggerApprovalSubmitEmailNotification(approvalItem) {
+  try {
+    if (!approvalItem || !approvalItem.employeeId) return;
+    const db = getDatabase();
+    const empRow = db.prepare("SELECT data_json FROM employees WHERE id = ?").get(approvalItem.employeeId);
+    if (!empRow) return;
+    const emp = JSON.parse(empRow.data_json);
+
+    let targetApprover = null;
+    const approverId = approvalItem.targetApproverId || approvalItem.projectManagerId;
+    if (approverId) {
+      const appRow = db.prepare("SELECT data_json FROM employees WHERE id = ?").get(approverId);
+      if (appRow) targetApprover = JSON.parse(appRow.data_json);
+    }
+
+    if (!targetApprover && approvalItem.projectId) {
+      try {
+        const projRow = db.prepare("SELECT data_json FROM projects WHERE id = ?").get(approvalItem.projectId);
+        if (projRow) {
+          const proj = JSON.parse(projRow.data_json);
+          if (proj.projectManagerId) {
+            const pmRow = db.prepare("SELECT data_json FROM employees WHERE id = ?").get(proj.projectManagerId);
+            if (pmRow) targetApprover = JSON.parse(pmRow.data_json);
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (!targetApprover) {
+      try {
+        const hrRow = db.prepare("SELECT data_json FROM employees WHERE role = 'hr' OR role = 'HR' OR position LIKE '%HR%' LIMIT 1").get();
+        if (hrRow) targetApprover = JSON.parse(hrRow.data_json);
+      } catch (e) {}
+    }
+
+    let salaryRules = null;
+    try {
+      const rulesRow = db.prepare("SELECT config_json FROM salary_rules WHERE id = 'default'").get();
+      if (rulesRow) salaryRules = JSON.parse(rulesRow.config_json);
+    } catch (e) {}
+
+    const smtpConfig = salaryRules?.smtpConfig;
+    if (!smtpConfig || smtpConfig.enabled === false) return;
+
+    await notifyApprovalSubmittedEmail(approvalItem, emp, targetApprover);
+  } catch (err) {
+    console.error('[Email Trigger Approval Submit Error]', err);
+  }
+}
+
+async function triggerApprovalDecisionEmailNotification(approvalId, status, reviewNote, reviewedBy) {
+  try {
+    const db = getDatabase();
+    const row = db.prepare("SELECT data_json FROM approvals WHERE id = ?").get(approvalId);
+    if (!row) return;
+    const item = JSON.parse(row.data_json);
+    if (!item || !item.employeeId) return;
+
+    const empRow = db.prepare("SELECT data_json FROM employees WHERE id = ?").get(item.employeeId);
+    if (!empRow) return;
+    const emp = JSON.parse(empRow.data_json);
+    if (!emp || !emp.email) return;
+
+    let salaryRules = null;
+    try {
+      const rulesRow = db.prepare("SELECT config_json FROM salary_rules WHERE id = 'default'").get();
+      if (rulesRow) salaryRules = JSON.parse(rulesRow.config_json);
+    } catch (e) {}
+
+    const smtpConfig = salaryRules?.smtpConfig;
+    if (!smtpConfig || smtpConfig.enabled === false) return;
+
+    const mergedItem = {
+      ...item,
+      status: status || item.status,
+      reviewNote: reviewNote || item.reviewNote,
+      reviewedBy: reviewedBy || item.reviewedBy
+    };
+
+    await notifyApprovalDecisionEmail(mergedItem, emp);
+  } catch (err) {
+    console.error('[Email Trigger Approval Decision Error]', err);
+  }
+}
 
 const server = http.createServer(async (req, res) => {
   const url = req.url || '';
   const cleanUrl = url.split('?')[0];
   const method = req.method?.toUpperCase() || 'GET';
 
-  // Helper for JSON
+  // Helper for JSON with Automatic GZIP Compression
   const sendJson = (status, data) => {
-    res.writeHead(status, {
-      'Content-Type': 'application/json',
+    const jsonStr = typeof data === 'string' ? data : JSON.stringify(data);
+    const acceptEncoding = req.headers['accept-encoding'] || '';
+    const headers = {
+      'Content-Type': 'application/json; charset=utf-8',
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization'
-    });
-    res.end(JSON.stringify(data));
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Vary': 'Accept-Encoding'
+    };
+
+    if (acceptEncoding.includes('gzip') && jsonStr.length > 1024) {
+      try {
+        const gzipped = zlib.gzipSync(Buffer.from(jsonStr));
+        headers['Content-Encoding'] = 'gzip';
+        headers['Content-Length'] = gzipped.length;
+        res.writeHead(status, headers);
+        return res.end(gzipped);
+      } catch (err) {
+        // Fallback to uncompressed if gzip encounters an issue
+      }
+    }
+
+    headers['Content-Length'] = Buffer.byteLength(jsonStr);
+    res.writeHead(status, headers);
+    res.end(jsonStr);
   };
 
   if (method === 'OPTIONS') {
@@ -139,13 +447,227 @@ const server = http.createServer(async (req, res) => {
         return sendJson(200, result);
       }
 
+      // 0-forgot. Forgot Password Notification Dispatcher (HP / Email / Username)
+      if (cleanUrl === '/api/auth/forgot-password' && method === 'POST') {
+        const body = await readBody();
+        const identifier = body.identifier || body.username || body.email || body.phone;
+        if (!identifier || !String(identifier).trim()) {
+          return sendJson(400, { success: false, error: 'Nomor HP, Email, atau ID/Username wajib diisi' });
+        }
+
+        const resetRes = generateTemporaryPassword(identifier);
+        if (!resetRes.success) {
+          return sendJson(400, resetRes);
+        }
+
+        const { tempPassword, username, displayName, targetPhone, targetEmail, employeeId } = resetRes;
+
+        const maskPhone = (p) => {
+          if (!p) return null;
+          const clean = String(p).trim();
+          if (clean.length < 8) return clean;
+          return clean.slice(0, 4) + '****' + clean.slice(-4);
+        };
+
+        const maskEmail = (em) => {
+          if (!em || !em.includes('@')) return null;
+          const [n, dom] = em.split('@');
+          if (n.length <= 2) return `${n}***@${dom}`;
+          return `${n.slice(0, 2)}***@${dom}`;
+        };
+
+        let waSent = false;
+        let emailSent = false;
+        let waError = null;
+        let emailError = null;
+
+        // 1. WhatsApp Notification
+        if (targetPhone) {
+          const waMessage = `*🔐 KATA SANDI SEMENTARA - PRIME HRIS*\n\nHalo *${displayName}*,\nPermintaan reset kata sandi akun PRIME HRIS Anda telah berhasil diproses.\n\nBerikut kredensial login sementara Anda:\n👤 *ID / Username:* \`${username}\`\n🔑 *Password Sementara:* \`${tempPassword}\`\n🌐 *Portal Login:* https://hris.primeprojectx.net\n\n⚠️ *Penting:* Demi keamanan data akun, segera ubah kata sandi ini setelah berhasil masuk.\n\n_Pesan otomatis • Security Gateway PRIME HRIS_`;
+          try {
+            const wRes = await sendWhatsAppMessage(targetPhone, waMessage, {
+              recipientId: employeeId,
+              recipientName: displayName,
+              eventType: 'PASSWORD_RESET_NOTIFICATION',
+              title: 'Reset Password Akun'
+            });
+            waSent = wRes?.success === true;
+            if (!waSent) waError = wRes?.error;
+          } catch (we) {
+            waError = we.message;
+          }
+        }
+
+        // 2. Email Notification
+        if (targetEmail && targetEmail.includes('@')) {
+          const emailHtml = `
+            <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 540px; margin: 0 auto; padding: 24px; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0;">
+              <div style="text-align: center; margin-bottom: 24px;">
+                <h2 style="color: #1e3a8a; margin: 0 0 6px 0; font-size: 20px;">PRIME HRIS ENTERPRISE</h2>
+                <p style="color: #64748b; font-size: 13px; margin: 0;">Sistem Manajemen SDM & Penggajian Terpadu</p>
+              </div>
+
+              <div style="background: #f8fafc; border-left: 4px solid #0066FF; padding: 16px; border-radius: 6px; margin-bottom: 20px;">
+                <h3 style="margin: 0 0 8px 0; color: #0f172a; font-size: 15px;">Permintaan Pemulihan Kata Sandi</h3>
+                <p style="margin: 0; color: #334155; font-size: 13px; line-height: 1.5;">
+                  Halo <strong>${displayName}</strong>, sistem telah menerbitkan kata sandi sementara untuk akun Anda.
+                </p>
+              </div>
+
+              <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
+                <tr>
+                  <td style="padding: 10px 12px; background: #f1f5f9; color: #475569; font-size: 13px; font-weight: bold; width: 40%; border-radius: 6px 0 0 6px;">ID / Username:</td>
+                  <td style="padding: 10px 12px; background: #f8fafc; color: #0f172a; font-size: 14px; font-family: monospace; font-weight: bold; border-radius: 0 6px 6px 0;">${username}</td>
+                </tr>
+                <tr><td colspan="2" style="height: 8px;"></td></tr>
+                <tr>
+                  <td style="padding: 12px; background: #eff6ff; color: #1e40af; font-size: 13px; font-weight: bold; border-radius: 6px 0 0 6px;">Password Sementara:</td>
+                  <td style="padding: 12px; background: #dbeafe; color: #1d4ed8; font-size: 17px; font-family: monospace; font-weight: 800; letter-spacing: 1px; border-radius: 0 6px 6px 0;">${tempPassword}</td>
+                </tr>
+              </table>
+
+              <div style="text-align: center; margin-bottom: 24px;">
+                <a href="https://hris.primeprojectx.net" style="display: inline-block; padding: 12px 28px; background: #0066FF; color: #ffffff; text-decoration: none; font-weight: bold; font-size: 13px; border-radius: 8px;">Buka Halaman Login</a>
+              </div>
+
+              <div style="border-top: 1px solid #e2e8f0; padding-top: 16px; font-size: 11.5px; color: #94a3b8; line-height: 1.5;">
+                <p style="margin: 0 0 4px 0;"><strong>Catatan Keamanan:</strong></p>
+                <p style="margin: 0;">Demi keamanan data akun, segera ubah kata sandi ini setelah login melalui menu pengaturan profil.</p>
+              </div>
+            </div>
+          `;
+
+          try {
+            const emRes = await sendEmailNotification({
+              to: targetEmail,
+              toName: displayName,
+              subject: `🔐 Password Sementara Akun PRIME HRIS - ${username}`,
+              html: emailHtml,
+              text: `Password sementara untuk ${username} adalah: ${tempPassword}. Silakan login di https://hris.primeprojectx.net`,
+              eventType: 'PASSWORD_RESET_NOTIFICATION',
+              recipientId: employeeId,
+              bypassEnabledCheck: true
+            });
+            emailSent = emRes?.success === true;
+            if (!emailSent) emailError = emRes?.error;
+          } catch (eme) {
+            emailError = eme.message;
+          }
+        }
+
+        return sendJson(200, {
+          success: true,
+          message: 'Kata sandi sementara telah berhasil dikirimkan.',
+          username,
+          displayName,
+          targetPhone: maskPhone(targetPhone),
+          targetEmail: maskEmail(targetEmail),
+          channels: {
+            whatsapp: waSent,
+            email: emailSent
+          },
+          tempPassword: (!waSent && !emailSent) ? tempPassword : undefined
+        });
+      }
+
+      // 0a. Native Server Biometric Frame Verification (Ultra-Fast YuNet + SFace on Central VPS)
+      if (cleanUrl === '/api/auth/biometric-verify' && method === 'POST') {
+        const body = await readBody();
+        const { image } = body || {};
+        if (!image) {
+          return sendJson(400, { success: false, error: 'image base64 diperlukan' });
+        }
+
+        try {
+          const resp = await fetch('http://103.31.205.218:8599/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ image })
+          });
+          const data = await resp.json();
+
+          if (data.matched && data.employeeId && data.score >= 70) {
+            // Dapatkan data profil karyawan dari SQLite
+            let emp = null;
+            try {
+              const db = getDatabase();
+              const row = db.prepare('SELECT data_json FROM employees WHERE id = ?;').get(data.employeeId);
+              if (row && row.data_json) {
+                emp = JSON.parse(row.data_json);
+              }
+            } catch (e) {}
+
+            const authResult = authenticateByBiometric(data.employeeId, {
+              matchScore: data.score,
+              matchedPose: 'front',
+              cosineSimilarity: data.cosine_similarity
+            });
+
+            const finalEmployee = emp || authResult.employee || authResult.user?.employee;
+
+            return sendJson(200, {
+              success: true,
+              matched: true,
+              status: 'MATCHED',
+              score: data.score,
+              cosineSimilarity: data.cosine_similarity,
+              proc_time_ms: data.proc_time_ms,
+              message: data.message,
+              employee: finalEmployee,
+              user: authResult.user || null,
+              token: authResult.token || null
+            });
+          } else {
+            return sendJson(200, {
+              success: false,
+              matched: false,
+              status: data.status || 'DENIED',
+              score: data.score || 0,
+              confidenceMargin: data.confidence_margin,
+              secondEmployeeName: data.secondEmployeeName,
+              message: data.message || 'Wajah tidak dikenali di sistem',
+              proc_time_ms: data.proc_time_ms
+            });
+          }
+        } catch (err) {
+          console.error('[NATIVE FACE ENGINE ERROR]', err.message);
+          return sendJson(500, { success: false, error: 'Gagal menghubungi Native Face Engine: ' + err.message });
+        }
+      }
+
+      // 0b. Biometric 1:N Facial Recognition Login
+      if (cleanUrl === '/api/auth/biometric-login' && method === 'POST') {
+        const body = await readBody();
+        const { employeeId, biometricVerification } = body || {};
+        if (!employeeId) {
+          return sendJson(400, { success: false, error: 'employeeId diperlukan' });
+        }
+        const result = authenticateByBiometric(employeeId, biometricVerification);
+        if (!result.success) {
+          return sendJson(401, result);
+        }
+        return sendJson(200, result);
+      }
+
+      // 0c. Ultra-Fast Enrolled Biometric Gallery Directory (< 80 KB)
+      if ((cleanUrl === '/api/biometric/gallery' || cleanUrl === '/api/auth/biometric/gallery') && method === 'GET') {
+        const gallery = getEnrolledBiometricGallery();
+        return sendJson(200, {
+          success: true,
+          employees: gallery,
+          count: gallery.length
+        });
+      }
+
       if (cleanUrl === '/api/auth/me' && method === 'GET') {
         const token = getAuthToken();
         const user = getCurrentUserFromToken(token);
         if (!user) {
           return sendJson(401, { success: false, error: 'Unauthorized or session expired' });
         }
-        return sendJson(200, { success: true, user });
+        // Sliding session: return renewed token with fresh 30 days expiration window
+        const renewedToken = generateToken(user);
+        return sendJson(200, { success: true, user, token: renewedToken });
       }
 
       if (cleanUrl === '/api/auth/logout' && method === 'POST') {
@@ -172,11 +694,82 @@ const server = http.createServer(async (req, res) => {
         return sendJson(200, { success: true, accounts: listUserAccounts() });
       }
 
+      if ((cleanUrl === '/api/auth/reset-employee-password' || cleanUrl.match(/^\/api\/employees\/([^\/]+)\/reset-password$/)) && method === 'POST') {
+        const token = getAuthToken();
+        const user = getCurrentUserFromToken(token);
+        if (!user || (user.systemRole !== 'admin' && user.systemRole !== 'superuser')) {
+          return sendJson(403, { success: false, error: 'Forbidden: Hak akses Admin atau Superuser diperlukan' });
+        }
+        const body = await readBody();
+        const match = cleanUrl.match(/^\/api\/employees\/([^\/]+)\/reset-password$/);
+        const employeeId = match ? match[1] : body.employeeId;
+        const newPassword = body.newPassword || 'zzz';
+        const result = resetEmployeePassword(employeeId, newPassword, user);
+        return sendJson(result.success ? 200 : 400, result);
+      }
+
+      if (cleanUrl.match(/^\/api\/employees\/([^\/]+)\/biometric$/) && method === 'POST') {
+        const token = getAuthToken();
+        const user = getCurrentUserFromToken(token);
+        const match = cleanUrl.match(/^\/api\/employees\/([^\/]+)\/biometric$/);
+        const employeeId = match ? match[1] : null;
+
+        const isSelf = user && (user.employeeId === employeeId || user.id === employeeId);
+        const isPrivileged = user && (user.systemRole === 'admin' || user.systemRole === 'superuser');
+        if (!isSelf && !isPrivileged) {
+          return sendJson(403, { success: false, error: 'Unauthorized: Hanya karyawan bersangkutan atau HR Admin yang dapat mendaftarkan biometrik' });
+        }
+
+        const body = await readBody();
+        const result = saveEmployeeBiometric(employeeId, body.biometric, body.updateAvatarAsWell, user);
+        if (result.success) {
+          broadcastRealtimeEvent('EMPLOYEE_UPDATED', result.employee);
+          // Auto-sinkronisasi ke Native Face Engine VPS
+          try {
+            const samples = body.biometric?.samples || {};
+            const sampleImages = [samples.front, samples.smile, samples.right, samples.left].filter(Boolean);
+            if (sampleImages.length > 0) {
+              fetch('http://103.31.205.218:8599/enroll', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  employeeId: employeeId,
+                  name: result.employee?.name || employeeId,
+                  images: sampleImages
+                })
+              }).catch(err => console.warn('[VPS AUTO-ENROLL WARN]', err.message));
+            }
+          } catch (e) {}
+        }
+        return sendJson(result.success ? 200 : 400, result);
+      }
+
+      if (cleanUrl.match(/^\/api\/employees\/([^\/]+)\/biometric$/) && method === 'DELETE') {
+        const token = getAuthToken();
+        const user = getCurrentUserFromToken(token);
+        const match = cleanUrl.match(/^\/api\/employees\/([^\/]+)\/biometric$/);
+        const employeeId = match ? match[1] : null;
+
+        const isSelf = user && (user.employeeId === employeeId || user.id === employeeId);
+        const isPrivileged = user && (user.systemRole === 'admin' || user.systemRole === 'superuser');
+        if (!isSelf && !isPrivileged) {
+          return sendJson(403, { success: false, error: 'Unauthorized' });
+        }
+
+        const result = deleteEmployeeBiometric(employeeId, user);
+        if (result.success && result.employee) {
+          broadcastRealtimeEvent('EMPLOYEE_UPDATED', result.employee);
+        }
+        return sendJson(result.success ? 200 : 400, result);
+      }
+
       // 1. Health check
       if (cleanUrl === '/api/health' && method === 'GET') {
         return sendJson(200, {
           status: 'online',
-          rtcLiveConnectedClients: sseClients.size,
+          rtcLiveConnectedClients: wsClients.size + sseClients.size,
+          wsClientsCount: wsClients.size,
+          sseClientsCount: sseClients.size,
           ...getDbInfo()
         });
       }
@@ -245,37 +838,203 @@ const server = http.createServer(async (req, res) => {
 
       // 5. Bootstrap all data from SQLite
       if (cleanUrl === '/api/bootstrap' && method === 'GET') {
-        return sendJson(200, getAllData());
+        const token = getAuthToken();
+        const user = token ? getCurrentUserFromToken(token) : null;
+        let data = getAllData();
+        if (user && user.systemRole === 'staff' && user.employeeId) {
+          data.employees = (data.employees || []).filter(e => e.id === user.employeeId);
+          data.attendances = (data.attendances || []).filter(a => a.employeeId === user.employeeId);
+          data.approvals = (data.approvals || []).filter(a => a.employeeId === user.employeeId);
+        }
+        return sendJson(200, data);
       }
 
-      // 6. Save Attendance with Server RTC Time Lock & Instant Broadcast
-      if (cleanUrl === '/api/attendance' && method === 'POST') {
-        const body = await readBody();
-        const serverNow = new Date();
-        const serverWibTime = serverNow.toLocaleTimeString('id-ID', {
-          timeZone: 'Asia/Jakarta',
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-          hour12: false
+      // 5b. Public Kiosk Safe Directory (Tanpa Login)
+      if (cleanUrl === '/api/public-kiosk/employees' && method === 'GET') {
+        const kioskData = getPublicKioskEmployees();
+        return sendJson(200, {
+          success: true,
+          employees: kioskData.employees,
+          projects: kioskData.projects,
+          officeGeofence: kioskData.officeGeofence,
+          todayAttendances: kioskData.todayAttendances
         });
-        const serverDate = serverNow.toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+      }
 
-        // Enforce Server RTC Authoritative Time (Anti-Tamper)
-        body.serverVerifiedTime = serverWibTime;
-        body.serverVerifiedDate = serverDate;
-        body.serverTimeMs = serverNow.getTime();
+      // 6. Save Attendance with Server RTC Time Lock & Instant Broadcast (Auth / Normal)
+      if (cleanUrl === '/api/attendance' && method === 'POST') {
+        try {
+          const body = await readBody();
+          const serverNow = new Date();
+          const serverWibTime = serverNow.toLocaleTimeString('id-ID', {
+            timeZone: 'Asia/Jakarta',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false
+          }).replace(/\./g, ':');
+          const serverDate = serverNow.toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+
+          // Enforce Server RTC Authoritative Time (Anti-Tamper)
+          body.serverVerifiedTime = serverWibTime;
+          body.serverVerifiedDate = serverDate;
+          body.serverTimeMs = serverNow.getTime();
+          if (body.checkInTime) body.checkInTime = body.checkInTime.replace(/\./g, ':');
+          if (body.checkOutTime) body.checkOutTime = body.checkOutTime.replace(/\./g, ':');
+
+          const clientIp = req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || req.socket.remoteAddress || '103.31.205.218';
+          body.ipAddress = clientIp;
+
+          const result = saveAttendance(body);
+          const savedRecord = result.record || body;
+          broadcastRealtimeEvent('ATTENDANCE_SAVED', savedRecord);
+          triggerAttendanceWaNotification(savedRecord).catch(err => console.error('[WA Trigger Attendance Error]', err));
+          triggerAttendanceEmailNotification(savedRecord).catch(err => console.error('[Email Trigger Attendance Error]', err));
+          return sendJson(200, result);
+        } catch (err) {
+          console.error('[SERVER ERROR /api/attendance]', err);
+          return sendJson(500, { success: false, error: err.message || 'Internal Server Error' });
+        }
+      }
+
+      // 6b. Public Kiosk Direct Attendance (Tanpa Login)
+      if (cleanUrl === '/api/public-attendance' && method === 'POST') {
+        try {
+          const body = await readBody();
+          const serverNow = new Date();
+          const serverWibTime = serverNow.toLocaleTimeString('id-ID', {
+            timeZone: 'Asia/Jakarta',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false
+          }).replace(/\./g, ':');
+          const serverDate = serverNow.toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+
+          // Enforce Server RTC Authoritative Time
+          body.serverVerifiedTime = serverWibTime;
+          body.serverVerifiedDate = serverDate;
+          body.serverTimeMs = serverNow.getTime();
+          if (body.checkInTime) body.checkInTime = body.checkInTime.replace(/\./g, ':');
+          if (body.checkOutTime) body.checkOutTime = body.checkOutTime.replace(/\./g, ':');
+
+        const clientIp = req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+        body.ipAddress = clientIp;
 
         const result = saveAttendance(body);
-        broadcastRealtimeEvent('ATTENDANCE_SAVED', result.record || body);
-        return sendJson(200, result);
+        const savedRecord = result.record || body;
+
+        // Audit Trail khusus presensi cepat Kiosk
+        addAuditLog({
+          action: 'PUBLIC_KIOSK_ATTENDANCE',
+          entity: 'attendances',
+          entityId: body.id,
+          userName: body.employeeName,
+          userNik: body.employeeNik,
+          userRole: 'staff',
+          module: 'ATTENDANCE_KIOSK',
+          ipAddress: clientIp,
+          status: 'SUCCESS',
+          details: `Presensi Kiosk Publik (Zero-Login) untuk ${body.employeeName} (${body.employeeNik}) berhasil dicatat. Biometrik: ${body.biometricVerification?.matchScore ? body.biometricVerification.matchScore + '%' : 'Manual'}.`
+        });
+
+        broadcastRealtimeEvent('ATTENDANCE_SAVED', savedRecord);
+        triggerAttendanceWaNotification(savedRecord).catch(err => console.error('[WA Trigger Attendance Error]', err));
+        triggerAttendanceEmailNotification(savedRecord).catch(err => console.error('[Email Trigger Attendance Error]', err));
+        return sendJson(200, { success: true, record: savedRecord });
+      } catch (err) {
+        console.error('[SERVER ERROR /api/public-attendance]', err);
+        return sendJson(500, { success: false, error: err.message || 'Internal Server Error' });
+      }
+    }
+
+      // 6c. Delete Attendance Record (Superuser Direct Deletion for Testing / Trial)
+      if ((cleanUrl.match(/^\/api\/attendance\/([^\/]+)$/) && method === 'DELETE') || (cleanUrl === '/api/attendance/delete' && method === 'POST')) {
+        const token = getAuthToken();
+        const user = getCurrentUserFromToken(token);
+        if (!user || (user.systemRole !== 'superuser' && user.role !== 'SUPERUSER' && user.role !== 'Director')) {
+          return sendJson(403, { success: false, error: 'Forbidden: Hanya Superuser yang dapat menghapus data presensi' });
+        }
+        let id = null;
+        if (method === 'POST') {
+          const body = await readBody();
+          id = body?.id;
+        } else {
+          const match = cleanUrl.match(/^\/api\/attendance\/([^\/]+)$/);
+          id = match ? decodeURIComponent(match[1]) : null;
+        }
+        if (!id) return sendJson(400, { success: false, error: 'ID presensi tidak valid' });
+
+        try {
+          const result = deleteAttendance(id, user);
+          if (result.success) {
+            broadcastRealtimeEvent('ATTENDANCE_DELETED', { id: result.id || id, linkedApprovalIds: result.linkedApprovalIds });
+          }
+          return sendJson(result.success ? 200 : 400, result);
+        } catch (err) {
+          console.error('[DELETE_ATTENDANCE_ERROR]', err);
+          return sendJson(500, { success: false, error: err.message || 'Gagal memproses penghapusan presensi' });
+        }
+      }
+
+      // 6d. Stream Attendance Photo Binary with Instant Cache (Zero-lag Hydration)
+      const photoMatch = cleanUrl.match(/^\/api\/attendance\/([^\/]+)\/photo$/);
+      if (photoMatch && method === 'GET') {
+        const id = decodeURIComponent(photoMatch[1]);
+        const photoUrl = getAttendancePhoto(id);
+        if (photoUrl) {
+          if (photoUrl.startsWith('data:image/')) {
+            const matches = photoUrl.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+            if (matches && matches.length === 3) {
+              const mimeType = matches[1];
+              const buffer = Buffer.from(matches[2], 'base64');
+              res.writeHead(200, {
+                'Content-Type': mimeType,
+                'Content-Length': buffer.length,
+                'Cache-Control': 'public, max-age=86400, immutable',
+                'Access-Control-Allow-Origin': '*'
+              });
+              return res.end(buffer);
+            }
+          } else if (photoUrl.startsWith('http')) {
+            res.writeHead(302, { Location: photoUrl, 'Access-Control-Allow-Origin': '*' });
+            return res.end();
+          }
+        }
+        res.writeHead(404, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        return res.end(JSON.stringify({ error: 'Photo not found' }));
       }
 
       // 7. Update Approval with Instant Broadcast
       if (cleanUrl === '/api/approval' && (method === 'PUT' || method === 'POST')) {
         const body = await readBody();
         const result = updateApproval(body.id, body.status, body.reviewNote, body.reviewedBy);
-        broadcastRealtimeEvent('APPROVAL_UPDATED', { id: body.id, status: body.status, reviewNote: body.reviewNote, reviewedBy: body.reviewedBy });
+        broadcastRealtimeEvent('APPROVAL_UPDATED', {
+          id: body.id,
+          status: body.status,
+          reviewNote: body.reviewNote,
+          reviewedBy: body.reviewedBy,
+          item: result.item
+        });
+        if (result.updatedAttendance) {
+          broadcastRealtimeEvent('ATTENDANCE_SAVED', result.updatedAttendance);
+        }
+        if (result.updatedEmployee) {
+          broadcastRealtimeEvent('EMPLOYEE_UPDATED', result.updatedEmployee);
+        }
+        triggerApprovalDecisionWaNotification(body.id, body.status, body.reviewNote, body.reviewedBy).catch(err => console.error('[WA Trigger Approval Decision Error]', err));
+        triggerApprovalDecisionEmailNotification(body.id, body.status, body.reviewNote, body.reviewedBy).catch(err => console.error('[Email Trigger Approval Decision Error]', err));
+        return sendJson(200, result);
+      }
+
+      // 7b. Submit New Approval Request (Leave, Permit, etc.)
+      if (cleanUrl === '/api/approval/submit' && method === 'POST') {
+        const body = await readBody();
+        const result = saveApproval(body);
+        const savedItem = result.item || body;
+        broadcastRealtimeEvent('APPROVAL_SUBMITTED', savedItem);
+        triggerApprovalSubmitWaNotification(savedItem).catch(err => console.error('[WA Trigger Approval Submit Error]', err));
+        triggerApprovalSubmitEmailNotification(savedItem).catch(err => console.error('[Email Trigger Approval Submit Error]', err));
         return sendJson(200, result);
       }
 
@@ -295,20 +1054,178 @@ const server = http.createServer(async (req, res) => {
         return sendJson(200, result);
       }
 
-      // 9. Save Reimbursement with Broadcast
-      if (cleanUrl === '/api/reimbursement' && method === 'POST') {
-        const body = await readBody();
-        const result = saveReimbursement(body);
-        broadcastRealtimeEvent('REIMBURSEMENT_SAVED', result.claim || body);
-        return sendJson(200, result);
-      }
-
       // 10. Update Salary Rules with Broadcast
       if (cleanUrl === '/api/salary-rules' && (method === 'PUT' || method === 'POST')) {
         const body = await readBody();
         const result = saveSalaryRules(body);
         broadcastRealtimeEvent('SALARY_RULES_UPDATED', body);
         return sendJson(200, result);
+      }
+
+      // 10b. Work Calendar & Annual Cut-Off Settings
+      if (cleanUrl === '/api/work-calendar' && method === 'GET') {
+        const urlObj = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+        const year = parseInt(urlObj.searchParams.get('year') || String(new Date().getFullYear()), 10);
+        const calendar = getWorkCalendarConfig(year);
+        return sendJson(200, { success: true, calendar });
+      }
+
+      if (cleanUrl === '/api/work-calendar' && (method === 'POST' || method === 'PUT')) {
+        const token = getAuthToken();
+        const user = getCurrentUserFromToken(token);
+        if (!user || !['admin', 'superuser', 'hr'].includes(user.systemRole)) {
+          return sendJson(403, { success: false, error: 'Forbidden: Admin atau HR diperlukan untuk mengatur kalender kerja' });
+        }
+        const body = await readBody();
+        const calendar = saveWorkCalendarConfig(body, user);
+        broadcastRealtimeEvent('WORK_CALENDAR_UPDATED', calendar);
+        return sendJson(200, { success: true, calendar });
+      }
+
+      if (cleanUrl.match(/^\/api\/work-calendar\/period\/([^\/]+)\/toggle$/) && (method === 'PUT' || method === 'POST')) {
+        const match = cleanUrl.match(/^\/api\/work-calendar\/period\/([^\/]+)\/toggle$/);
+        const periodId = match ? match[1] : null;
+        const token = getAuthToken();
+        const user = getCurrentUserFromToken(token);
+        if (!user || !['admin', 'superuser', 'hr'].includes(user.systemRole)) {
+          return sendJson(403, { success: false, error: 'Forbidden: Admin atau HR diperlukan untuk mengubah status cut-off presensi' });
+        }
+        const body = await readBody();
+        const isOpen = body.isOpen !== undefined ? Boolean(body.isOpen) : true;
+        const currentYear = new Date().getFullYear();
+        const current = getWorkCalendarConfig(currentYear);
+        const updatedPeriods = (current.periods || []).map(p => {
+          if (p.id === periodId) {
+            return { ...p, isAttendanceOpen: isOpen, status: isOpen ? 'OPEN' : 'LOCKED' };
+          }
+          return p;
+        });
+        const updatedConfig = { ...current, periods: updatedPeriods };
+        const saved = saveWorkCalendarConfig(updatedConfig, user);
+        broadcastRealtimeEvent('WORK_CALENDAR_PERIOD_TOGGLED', { periodId, isOpen });
+        return sendJson(200, { success: true, periodId, isOpen, calendar: saved });
+      }
+
+
+      // =======================================================================
+      // CASUAL FIELD WORKER ATTENDANCE (PRESENSI TUKANG LAPANGAN)
+      // =======================================================================
+      if (cleanUrl === '/api/casual-workers' && method === 'GET') {
+        const urlObj = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+        let projectId = urlObj.searchParams.get('projectId');
+        const token = getAuthToken();
+        const user = token ? getCurrentUserFromToken(token) : null;
+
+        // STRICT PM SCOPING: If user is staff / PM, strictly lock to their assigned project!
+        if (user && user.systemRole === 'staff') {
+          const userProj = user.employee?.assignedProjectId || user.assignedProjectId;
+          if (userProj) {
+            projectId = userProj;
+          }
+        }
+
+        const workers = getCasualWorkers(projectId);
+        return sendJson(200, { success: true, workers, count: workers.length, projectId });
+      }
+
+      if (cleanUrl === '/api/casual-workers' && method === 'POST') {
+        const body = await readBody();
+        const token = getAuthToken();
+        const user = token ? getCurrentUserFromToken(token) : null;
+
+        // Strict PM Scoping: Always bind to PM's assigned project
+        if (user && user.systemRole === 'staff') {
+          const userProj = user.employee?.assignedProjectId || user.assignedProjectId;
+          if (userProj) {
+            body.projectId = userProj;
+          }
+        }
+
+        if (!body.name || !body.projectId) {
+          return sendJson(400, { success: false, error: 'Nama tukang dan projectId wajib diisi' });
+        }
+
+        if (user) {
+          body.createdBy = user.id;
+          body.createdByName = user.employee?.name || user.username;
+        }
+
+        const savedWorker = saveCasualWorker(body);
+        broadcastRealtimeEvent('CASUAL_WORKER_SAVED', savedWorker);
+        return sendJson(200, { success: true, worker: savedWorker });
+      }
+
+      if (cleanUrl === '/api/casual-attendances' && method === 'GET') {
+        const urlObj = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+        let projectId = urlObj.searchParams.get('projectId');
+        const date = urlObj.searchParams.get('date');
+        const startDate = urlObj.searchParams.get('startDate');
+        const endDate = urlObj.searchParams.get('endDate');
+        const limit = urlObj.searchParams.get('limit') || 200;
+
+        const token = getAuthToken();
+        const user = token ? getCurrentUserFromToken(token) : null;
+
+        // STRICT PM SCOPING: If PM, lock to assigned project!
+        if (user && user.systemRole === 'staff') {
+          const userProj = user.employee?.assignedProjectId || user.assignedProjectId;
+          if (userProj) {
+            projectId = userProj;
+          }
+        }
+
+        const attendances = getCasualAttendances({ projectId, date, startDate, endDate, limit });
+        return sendJson(200, { success: true, attendances, count: attendances.length, projectId });
+      }
+
+      if (cleanUrl === '/api/casual-attendances' && method === 'POST') {
+        const body = await readBody();
+        const token = getAuthToken();
+        const user = token ? getCurrentUserFromToken(token) : null;
+
+        // Strict PM Scoping
+        if (user && user.systemRole === 'staff') {
+          const userProj = user.employee?.assignedProjectId || user.assignedProjectId;
+          if (userProj) {
+            body.projectId = userProj;
+          }
+        }
+
+        if (!body.workerName || !body.projectId || !body.photoUrl) {
+          return sendJson(400, { success: false, error: 'workerName, projectId, dan photoUrl wajib disertakan' });
+        }
+
+        body.verifiedByPmId = user?.id || 'PM-SYS';
+        body.verifiedByPmName = user?.employee?.name || user?.username || 'Project Manager';
+
+        const clientIp = req.headers['cf-connecting-ip'] || req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+        const saved = saveCasualAttendance(body);
+
+        // Audit Trail
+        addAuditLog({
+          action: 'CASUAL_ATTENDANCE_RECORDED',
+          entity: 'casual_worker_attendances',
+          entityId: saved.id,
+          userName: body.verifiedByPmName,
+          userRole: user?.systemRole || 'staff',
+          module: 'CASUAL_ATTENDANCE',
+          ipAddress: clientIp,
+          status: 'SUCCESS',
+          details: `Presensi Tukang "${body.workerName}" di Proyek ${body.projectId} diverifikasi oleh PM ${body.verifiedByPmName}.`
+        });
+
+        // Broadcast to live connected clients
+        broadcastRealtimeEvent('CASUAL_ATTENDANCE_RECORDED', saved);
+
+        return sendJson(200, { success: true, attendance: saved });
+      }
+
+      if (cleanUrl.match(/^\/api\/casual-attendances\/([^\/]+)$/) && method === 'DELETE') {
+        const match = cleanUrl.match(/^\/api\/casual-attendances\/([^\/]+)$/);
+        const id = match ? match[1] : null;
+        deleteCasualAttendance(id);
+        broadcastRealtimeEvent('CASUAL_ATTENDANCE_DELETED', { id });
+        return sendJson(200, { success: true, message: 'Presensi tukang berhasil dihapus' });
       }
 
       // 11. Audit Logs (Paginated & Filterable with 10-Item Load)
@@ -321,7 +1238,9 @@ const server = http.createServer(async (req, res) => {
         const role = urlObj.searchParams.get('role') || '';
         const status = urlObj.searchParams.get('status') || '';
 
-        const result = getAuditLogsPaginated({ page, limit, search, module, role, status });
+        const startDate = urlObj.searchParams.get('startDate') || '';
+        const endDate = urlObj.searchParams.get('endDate') || '';
+        const result = getAuditLogsPaginated({ page, limit, search, module, role, status, startDate, endDate });
         return sendJson(200, result);
       }
 
@@ -338,6 +1257,148 @@ const server = http.createServer(async (req, res) => {
         });
         broadcastRealtimeEvent('AUDIT_LOG_ADDED', body);
         return sendJson(200, { success: true });
+      }
+
+      // 11b. WhatsApp Baileys Gateway & Control Endpoints
+      if (cleanUrl === '/api/wa/status' && method === 'GET') {
+        const status = await getGatewayStatus();
+        return sendJson(200, { success: true, ...status });
+      }
+
+      if (cleanUrl === '/api/wa/logs' && method === 'GET') {
+        const urlObj = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+        const limit = parseInt(urlObj.searchParams.get('limit') || '50', 10);
+        const logs = getWaNotificationLogs(limit);
+        return sendJson(200, { success: true, logs });
+      }
+
+      // WhatsApp Opt-In / Active Contacts Registry
+      if (cleanUrl === '/api/wa/opt-ins' && method === 'GET') {
+        const optIns = getWaOptIns();
+        return sendJson(200, { success: true, optIns, count: optIns.length });
+      }
+
+      // Webhook for incoming WhatsApp message from gateway
+      if (cleanUrl === '/api/wa/incoming' && method === 'POST') {
+        const body = await readBody();
+        const result = recordWaOptIn(body.phone, body.message, body.pushName);
+        if (result) {
+          broadcastRealtimeEvent('WA_OPT_IN_RECEIVED', result);
+        }
+        return sendJson(200, { success: true, result });
+      }
+
+      if (cleanUrl === '/api/wa/test' && method === 'POST') {
+        const token = getAuthToken();
+        const user = getCurrentUserFromToken(token);
+        if (!user || !['admin', 'superuser', 'hr', 'finance'].includes(user.systemRole)) {
+          return sendJson(403, { success: false, error: 'Forbidden: Admin, HR, Finance, atau Superuser diperlukan' });
+        }
+        const body = await readBody();
+        if (!body.phone) {
+          return sendJson(400, { success: false, error: 'Nomor telepon penerima wajib diisi' });
+        }
+        const testMsg = body.message || `*TES NOTIFIKASI WHATSAPP - PRIME HRIS*\nKoneksi bot WhatsApp Baileys Gateway berhasil terhubung secara real-time!\nWaktu: ${new Date().toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta' })} WIB`;
+        const resWa = await sendWhatsAppMessage(body.phone, testMsg, {
+          eventType: 'TEST_MANUAL',
+          title: 'Uji Coba Pesan Manual HR',
+          recipientName: body.recipientName || user.name || 'Tester',
+          force: Boolean(body.force)
+        });
+        return sendJson(resWa.success ? 200 : 500, resWa);
+      }
+
+      if (cleanUrl === '/api/wa/blast-unrecorded' && method === 'POST') {
+        const token = getAuthToken();
+        const user = getCurrentUserFromToken(token);
+        if (!user || !['admin', 'superuser', 'hr', 'finance'].includes(user.systemRole)) {
+          return sendJson(403, { success: false, error: 'Forbidden: Admin, HR, Finance, atau Superuser diperlukan' });
+        }
+        const body = await readBody();
+        const result = await blastUnrecordedEmployees(body.date);
+        return sendJson(200, { success: true, ...result });
+      }
+
+      if (cleanUrl === '/api/wa/restart' && method === 'POST') {
+        const token = getAuthToken();
+        const user = getCurrentUserFromToken(token);
+        if (!user || !['admin', 'superuser', 'hr', 'finance'].includes(user.systemRole)) {
+          return sendJson(403, { success: false, error: 'Forbidden: Admin, HR, Finance, atau Superuser diperlukan' });
+        }
+        const resRestart = await restartGatewayClient();
+        return sendJson(resRestart.ok ? 200 : 500, resRestart.data || { success: resRestart.ok, error: resRestart.error });
+      }
+
+      if (cleanUrl === '/api/wa/logout' && method === 'POST') {
+        const token = getAuthToken();
+        const user = getCurrentUserFromToken(token);
+        if (!user || !['admin', 'superuser', 'hr', 'finance'].includes(user.systemRole)) {
+          return sendJson(403, { success: false, error: 'Forbidden: Admin, HR, Finance, atau Superuser diperlukan' });
+        }
+        const resLogout = await logoutGatewayClient();
+        return sendJson(resLogout.ok ? 200 : 500, resLogout.data || { success: resLogout.ok, error: resLogout.error });
+      }
+
+      // 11c. Email SMTP (Gmail) Configuration, Test & Log Endpoints
+      if (cleanUrl === '/api/email/status' && method === 'GET') {
+        const config = getSmtpConfig();
+        const verification = await verifySmtp(config);
+        return sendJson(200, {
+          success: true,
+          enabled: config.enabled,
+          host: config.host,
+          port: config.port,
+          secure: config.secure,
+          user: config.user,
+          fromName: config.fromName,
+          fromEmail: config.fromEmail,
+          verified: verification.success,
+          statusMessage: verification.message || verification.error
+        });
+      }
+
+      if (cleanUrl === '/api/email/verify' && method === 'POST') {
+        const token = getAuthToken();
+        const user = getCurrentUserFromToken(token);
+        if (!user || !['admin', 'superuser', 'hr', 'finance'].includes(user.systemRole)) {
+          return sendJson(403, { success: false, error: 'Forbidden: Admin, HR, Finance, atau Superuser diperlukan' });
+        }
+        const body = await readBody();
+        const resVerify = await verifySmtp(body);
+        return sendJson(resVerify.success ? 200 : 400, resVerify);
+      }
+
+      if (cleanUrl === '/api/email/test' && method === 'POST') {
+        const token = getAuthToken();
+        const user = getCurrentUserFromToken(token);
+        if (!user || !['admin', 'superuser', 'hr', 'finance'].includes(user.systemRole)) {
+          return sendJson(403, { success: false, error: 'Forbidden: Admin, HR, Finance, atau Superuser diperlukan' });
+        }
+        const body = await readBody();
+        const targetEmail = body.to || user.email || body.email;
+        if (!targetEmail) {
+          return sendJson(400, { success: false, error: 'Alamat email penerima uji coba wajib diisi' });
+        }
+        const resTest = await sendTestEmail(targetEmail, body.customConfig || null);
+        return sendJson(resTest.success ? 200 : 500, resTest);
+      }
+
+      if (cleanUrl === '/api/email/logs' && method === 'GET') {
+        const urlObj = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+        const limit = parseInt(urlObj.searchParams.get('limit') || '50', 10);
+        const logs = getEmailNotificationLogs(limit);
+        return sendJson(200, { success: true, logs });
+      }
+
+      if (cleanUrl === '/api/email/blast-unrecorded' && method === 'POST') {
+        const token = getAuthToken();
+        const user = getCurrentUserFromToken(token);
+        if (!user || !['admin', 'superuser', 'hr', 'finance'].includes(user.systemRole)) {
+          return sendJson(403, { success: false, error: 'Forbidden: Admin, HR, Finance, atau Superuser diperlukan' });
+        }
+        const body = await readBody();
+        const result = await blastUnrecordedEmployeesEmail(body.date);
+        return sendJson(200, { success: true, ...result });
       }
 
       // 12. Reset Database with Broadcast
@@ -417,7 +1478,7 @@ const server = http.createServer(async (req, res) => {
     }
     const headers = { 'Content-Type': contentType };
     if (ext === '.html') {
-      headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
+      headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0';
       headers['Pragma'] = 'no-cache';
       headers['Expires'] = '0';
     } else {
@@ -428,7 +1489,59 @@ const server = http.createServer(async (req, res) => {
   });
 });
 
+// ==========================================
+// NATIVE WEBSOCKET SERVER ATTACHMENT
+// ==========================================
+const wss = new WebSocketServer({ server });
+
+wss.on('connection', (ws, req) => {
+  wsClients.add(ws);
+  const clientIp = req.headers['cf-connecting-ip'] || 
+                   req.headers['x-real-ip'] || 
+                   (req.headers['x-forwarded-for'] ? req.headers['x-forwarded-for'].split(',')[0].trim() : null) || 
+                   req.socket.remoteAddress || 
+                   '127.0.0.1';
+
+  console.log(`[WebSocket] Client connected from ${clientIp}. Total active WS: ${wsClients.size}`);
+
+  const welcomePacket = JSON.stringify({
+    type: 'CONNECTED',
+    payload: {
+      connected: true,
+      protocol: 'websocket',
+      clientsCount: wsClients.size,
+      serverTimeMs: Date.now(),
+      serverTimestamp: new Date().toISOString(),
+      timeZone: 'Asia/Jakarta (WIB)'
+    }
+  });
+  ws.send(welcomePacket);
+
+  ws.on('message', (message) => {
+    try {
+      const parsed = JSON.parse(message.toString());
+      if (parsed.type === 'PING') {
+        ws.send(JSON.stringify({ type: 'PONG', serverTimeMs: Date.now() }));
+      }
+    } catch (e) {
+      // ignore
+    }
+  });
+
+  ws.on('close', () => {
+    wsClients.delete(ws);
+    console.log(`[WebSocket] Client disconnected. Remaining WS: ${wsClients.size}`);
+  });
+
+  ws.on('error', (err) => {
+    wsClients.delete(ws);
+    console.warn(`[WebSocket Client Error]`, err?.message);
+  });
+});
+
 server.listen(PORT, () => {
   console.log(`[Prime HRIS SQLite Server] Berjalan di http://localhost:${PORT}`);
   console.log(`[Database] File: ${dbPath}`);
+  console.log(`[Realtime Engine] WebSocket & SSE aktif`);
+  startWaBackgroundScheduler();
 });

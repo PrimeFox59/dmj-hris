@@ -8,16 +8,14 @@ import {
   INITIAL_PROJECTS,
   INITIAL_ATTENDANCE,
   INITIAL_APPROVALS,
-  INITIAL_SALARY_RULES,
-  INITIAL_REIMBURSEMENTS
+  INITIAL_SALARY_RULES
 } from '../src/data/mockData.ts';
 import type {
   Employee,
   Project,
   AttendanceRecord,
   ApprovalItem,
-  SalaryRuleConfig,
-  ReimbursementClaim
+  SalaryRuleConfig
 } from '../src/types/index.ts';
 
 // Determine root directory
@@ -161,33 +159,7 @@ function initializeSchema(db: DatabaseSync) {
     );
   `);
 
-  // 5. Reimbursements Table
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS reimbursements (
-      id TEXT PRIMARY KEY,
-      employeeId TEXT NOT NULL,
-      employeeName TEXT NOT NULL,
-      employeeNik TEXT NOT NULL,
-      category TEXT NOT NULL,
-      title TEXT NOT NULL,
-      description TEXT,
-      amount REAL NOT NULL,
-      date TEXT NOT NULL,
-      receiptAttachment TEXT,
-      projectId TEXT,
-      projectName TEXT,
-      status TEXT NOT NULL,
-      submittedAt TEXT NOT NULL,
-      reviewedBy TEXT,
-      reviewedAt TEXT,
-      rejectReason TEXT,
-      data_json TEXT NOT NULL,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-
-  // 6. Salary Rules Config Table
+  // 5. Salary Rules Config Table
   db.exec(`
     CREATE TABLE IF NOT EXISTS salary_rules (
       id TEXT PRIMARY KEY,
@@ -212,6 +184,17 @@ function initializeSchema(db: DatabaseSync) {
       status TEXT DEFAULT 'SUCCESS',
       metadata TEXT,
       timestamp TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS wa_opt_ins (
+      phone TEXT PRIMARY KEY,
+      employee_id TEXT,
+      employee_name TEXT,
+      first_message TEXT,
+      first_message_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      last_message TEXT,
+      last_message_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      message_count INTEGER DEFAULT 1
     );
   `);
 
@@ -328,7 +311,7 @@ export function seedInitialData(db: DatabaseSync) {
       att.employeeNik,
       att.department,
       att.date,
-      att.checkInTime,
+      att.checkInTime || null,
       att.checkOutTime || null,
       att.mode,
       att.status,
@@ -372,39 +355,7 @@ export function seedInitialData(db: DatabaseSync) {
     );
   }
 
-  // 5. Seed Reimbursements
-  const insertReimb = db.prepare(`
-    INSERT OR REPLACE INTO reimbursements (
-      id, employeeId, employeeName, employeeNik, category,
-      title, description, amount, date, receiptAttachment,
-      projectId, projectName, status, submittedAt,
-      reviewedBy, reviewedAt, rejectReason, data_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-  `);
-  for (const reimb of INITIAL_REIMBURSEMENTS) {
-    insertReimb.run(
-      reimb.id,
-      reimb.employeeId,
-      reimb.employeeName,
-      reimb.employeeNik,
-      reimb.category,
-      reimb.title,
-      reimb.description,
-      reimb.amount,
-      reimb.date,
-      reimb.receiptAttachment || null,
-      reimb.projectId || null,
-      reimb.projectName || null,
-      reimb.status,
-      reimb.submittedAt,
-      reimb.reviewedBy || null,
-      reimb.reviewedAt || null,
-      reimb.rejectReason || null,
-      JSON.stringify(reimb)
-    );
-  }
-
-  // 6. Seed Salary Rules
+  // 5. Seed Salary Rules
   const insertRules = db.prepare(`
     INSERT OR REPLACE INTO salary_rules (id, config_json, updated_at)
     VALUES (?, ?, CURRENT_TIMESTAMP);
@@ -434,19 +385,36 @@ export function getAllData() {
   const db = getDatabase();
 
   const employees: Employee[] = (db.prepare('SELECT data_json FROM employees ORDER BY name ASC;').all() as any[])
-    .map(row => JSON.parse(row.data_json));
+    .map(row => {
+      const emp = JSON.parse(row.data_json);
+      if (emp.biometric && emp.biometric.samples) {
+        const { samples, ...cleanBiometric } = emp.biometric;
+        emp.biometric = { ...cleanBiometric, hasSamples: true };
+      }
+      return emp;
+    });
 
   const projects: Project[] = (db.prepare('SELECT data_json FROM projects ORDER BY code ASC;').all() as any[])
     .map(row => JSON.parse(row.data_json));
 
-  const attendances: AttendanceRecord[] = (db.prepare('SELECT data_json FROM attendances ORDER BY date DESC, checkInTime DESC;').all() as any[])
-    .map(row => JSON.parse(row.data_json));
+  const attendances: AttendanceRecord[] = (db.prepare('SELECT id, data_json FROM attendances ORDER BY date DESC, checkInTime DESC LIMIT 200;').all() as any[])
+    .map(row => {
+      const item = JSON.parse(row.data_json);
+      if (item.photoUrl && item.photoUrl.startsWith('data:image')) {
+        item.photoUrl = `/api/attendance/${item.id || row.id}/photo`;
+      }
+      return item;
+    });
 
-  const approvals: ApprovalItem[] = (db.prepare('SELECT data_json FROM approvals ORDER BY submittedAt DESC;').all() as any[])
-    .map(row => JSON.parse(row.data_json));
-
-  const reimbursements: ReimbursementClaim[] = (db.prepare('SELECT data_json FROM reimbursements ORDER BY submittedAt DESC;').all() as any[])
-    .map(row => JSON.parse(row.data_json));
+  const approvals: ApprovalItem[] = (db.prepare('SELECT id, data_json FROM approvals ORDER BY submittedAt DESC LIMIT 300;').all() as any[])
+    .map(row => {
+      const item = JSON.parse(row.data_json);
+      if (item.proofAttachment && item.proofAttachment.startsWith('data:image')) {
+        item.hasAttachment = true;
+        delete item.proofAttachment;
+      }
+      return item;
+    });
 
   const rulesRow = db.prepare('SELECT config_json FROM salary_rules WHERE id = ?;').get('default') as any;
   const salaryRules: SalaryRuleConfig = rulesRow ? JSON.parse(rulesRow.config_json) : INITIAL_SALARY_RULES;
@@ -456,10 +424,21 @@ export function getAllData() {
     projects,
     attendances,
     approvals,
-    reimbursements,
     salaryRules,
     dbInfo: getDbInfo()
   };
+}
+
+export function getAttendancePhoto(id: string): string | null {
+  const db = getDatabase();
+  try {
+    const row = db.prepare('SELECT data_json FROM attendances WHERE id = ?').get(id) as any;
+    if (!row) return null;
+    const item = JSON.parse(row.data_json);
+    return item.photoUrl || null;
+  } catch (e) {
+    return null;
+  }
 }
 
 export function saveAttendance(record: AttendanceRecord): { success: boolean; record: AttendanceRecord } {
@@ -480,7 +459,7 @@ export function saveAttendance(record: AttendanceRecord): { success: boolean; re
     record.employeeNik,
     record.department,
     record.date,
-    record.checkInTime,
+    record.checkInTime || null,
     record.checkOutTime || null,
     record.mode,
     record.status,
@@ -493,7 +472,7 @@ export function saveAttendance(record: AttendanceRecord): { success: boolean; re
   );
 
   // If this attendance needs approval (Dinas Luar or Late), create approval item in SQLite
-  if (record.approvalStatus === 'PENDING') {
+  if (record.approvalStatus === 'PENDING' && record.attendanceType !== 'CHECK_OUT') {
     const isDinasLuar = record.mode === 'DINAS_LUAR';
     const approvalId = `APPR-${record.id}`;
     const approvalItem: ApprovalItem = {
@@ -645,6 +624,21 @@ export function saveEmployee(emp: Employee) {
     JSON.stringify(emp)
   );
 
+  // Synchronize active/inactive status and system_role/role to user_accounts
+  const userAccountStatus = emp.status === 'INACTIVE' ? 'inactive' : 'active';
+  const targetSysRole = emp.id === 'EMP-001' ? 'superuser' : (emp.systemRole === 'admin' ? 'hr' : emp.systemRole || 'staff');
+  const targetRole = emp.role || 'Employee';
+
+  try {
+    db.prepare(`
+      UPDATE user_accounts 
+      SET system_role = ?, role = ?, status = ?, updated_at = CURRENT_TIMESTAMP 
+      WHERE employee_id = ?;
+    `).run(targetSysRole, targetRole, userAccountStatus, emp.id);
+  } catch (err) {
+    console.error('Error syncing user_accounts status & system_role for employee', emp.id, err);
+  }
+
   db.prepare(`
     INSERT INTO audit_logs (action, entity, entityId, details)
     VALUES (?, ?, ?, ?);
@@ -705,53 +699,12 @@ export function saveSalaryRules(rules: SalaryRuleConfig) {
   return { success: true, rules };
 }
 
-export function saveReimbursement(claim: ReimbursementClaim) {
-  const db = getDatabase();
-  const insert = db.prepare(`
-    INSERT OR REPLACE INTO reimbursements (
-      id, employeeId, employeeName, employeeNik, category,
-      title, description, amount, date, receiptAttachment,
-      projectId, projectName, status, submittedAt,
-      reviewedBy, reviewedAt, rejectReason, data_json, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP);
-  `);
-
-  insert.run(
-    claim.id,
-    claim.employeeId,
-    claim.employeeName,
-    claim.employeeNik,
-    claim.category,
-    claim.title,
-    claim.description,
-    claim.amount,
-    claim.date,
-    claim.receiptAttachment || null,
-    claim.projectId || null,
-    claim.projectName || null,
-    claim.status,
-    claim.submittedAt,
-    claim.reviewedBy || null,
-    claim.reviewedAt || null,
-    claim.rejectReason || null,
-    JSON.stringify(claim)
-  );
-
-  db.prepare(`
-    INSERT INTO audit_logs (action, entity, entityId, details)
-    VALUES (?, ?, ?, ?);
-  `).run('SAVE_REIMBURSEMENT', 'reimbursements', claim.id, `Reimbursement ${claim.title} (Rp ${claim.amount}) disimpan ke SQLite`);
-
-  return { success: true, claim };
-}
-
 export function resetDatabase() {
   const db = getDatabase();
   db.exec('DELETE FROM employees;');
   db.exec('DELETE FROM projects;');
   db.exec('DELETE FROM attendances;');
   db.exec('DELETE FROM approvals;');
-  db.exec('DELETE FROM reimbursements;');
   db.exec('DELETE FROM salary_rules;');
   db.exec('DELETE FROM audit_logs;');
   seedInitialData(db);
@@ -802,7 +755,7 @@ export function seedRealisticAuditLogs(db: DatabaseSync) {
       details: 'Presensi On-Site WFO shift pagi berhasil diverifikasi di kantor pusat.',
       ipAddress: '103.31.205.218',
       status: 'SUCCESS',
-      metadata: JSON.stringify({ wifi: 'PRIME-Corporate-5G' })
+      metadata: JSON.stringify({ locationMode: 'OFFICE_GEOFENCE' })
     },
     {
       timestamp: '2026-09-07 09:00:15',
@@ -868,11 +821,11 @@ export function seedRealisticAuditLogs(db: DatabaseSync) {
       action: 'APPROVAL_REJECTED',
       module: 'APPROVALS',
       entity: 'approvals',
-      entityId: 'REIMB-9021',
-      details: 'Menolak klaim reimbursement REIMB-9021. Alasan: Nota kuitansi tidak memiliki stempel resmi vendor.',
+      entityId: 'JUSTIF-9021',
+      details: 'Menolak justifikasi keterlambatan JUSTIF-9021. Alasan: Bukti kendala di perjalanan tidak disertai dokumentasi valid.',
       ipAddress: '103.31.205.218',
       status: 'FAILED',
-      metadata: JSON.stringify({ reason: 'Nota kuitansi tidak memiliki stempel resmi vendor', amount: 180000 })
+      metadata: JSON.stringify({ reason: 'Bukti kendala di perjalanan tidak valid', lateMinutes: 45 })
     },
     {
       timestamp: '2026-09-08 17:10:00',
@@ -900,7 +853,7 @@ export function seedRealisticAuditLogs(db: DatabaseSync) {
       details: 'Presensi On-Site WFO berhasil divalidasi. Kamera cerdas mendeteksi wajah dengan rasio 1:1.',
       ipAddress: '103.31.205.218',
       status: 'SUCCESS',
-      metadata: JSON.stringify({ distanceMeters: 14, wifi: 'PRIME-Corporate-5G' })
+      metadata: JSON.stringify({ distanceMeters: 14, geofenceStatus: 'VALID' })
     },
     {
       timestamp: '2026-09-09 08:35:12',
@@ -911,10 +864,10 @@ export function seedRealisticAuditLogs(db: DatabaseSync) {
       module: 'ATTENDANCE',
       entity: 'attendances',
       entityId: 'ATT-20260909-006',
-      details: 'Presensi terlambat 5 menit. Alasan: Kemacetan perlintasan jalur logistik industri Manyar.',
+      details: 'Presensi terlambat 5 menit. Alasan: Kemacetan perlintasan jalur logistik industri Sidoarjo.',
       ipAddress: '103.31.205.218',
       status: 'WARNING',
-      metadata: JSON.stringify({ lateMinutes: 5, reason: 'Kemacetan perlintasan jalur logistik industri Manyar' })
+      metadata: JSON.stringify({ lateMinutes: 5, reason: 'Kemacetan perlintasan jalur logistik industri Sidoarjo' })
     },
     {
       timestamp: '2026-09-09 10:05:18',
@@ -925,10 +878,10 @@ export function seedRealisticAuditLogs(db: DatabaseSync) {
       module: 'HR_RULES',
       entity: 'salary_rules',
       entityId: 'default',
-      details: 'Pembaruan titik koordinat Geofence: Lat -7.118942, Lng 112.584319, radius 350 meter (Kawasan Kantor Pusat & Hub PRIME).',
+      details: 'Pembaruan titik koordinat Geofence: Lat -7.395625, Lng 112.717574, radius 350 meter (Kawasan Kantor Pusat & Hub PRIME).',
       ipAddress: '103.31.205.218',
       status: 'SUCCESS',
-      metadata: JSON.stringify({ lat: -7.118942, lng: 112.584319, radiusMeters: 350 })
+      metadata: JSON.stringify({ lat: -7.395625, lng: 112.717574, radiusMeters: 350 })
     },
     {
       timestamp: '2026-09-09 11:20:45',
@@ -953,10 +906,10 @@ export function seedRealisticAuditLogs(db: DatabaseSync) {
       module: 'APPROVALS',
       entity: 'approvals',
       entityId: 'APPR-002',
-      details: 'Menyetujui klaim reimbursement konsumsi lembur proyek PT Freeport Indonesia sebesar Rp 375.000.',
+      details: 'Menyetujui permohonan lembur shift malam proyek PT Freeport Indonesia durasi 4 jam.',
       ipAddress: '192.168.3.122',
       status: 'SUCCESS',
-      metadata: JSON.stringify({ amount: 375000, project: 'PT Freeport Indonesia' })
+      metadata: JSON.stringify({ overtimeHours: 4, project: 'PT Freeport Indonesia' })
     },
     {
       timestamp: '2026-09-09 15:40:22',
@@ -967,24 +920,24 @@ export function seedRealisticAuditLogs(db: DatabaseSync) {
       module: 'EMPLOYEES',
       entity: 'employees',
       entityId: 'EMP-007',
-      details: 'Pembaruan nomor rekening bank & validasi MAC Address hardware (FC:FB:FB:12:34:56) untuk karyawan Doni Prasetyo.',
+      details: 'Pembaruan nomor rekening bank & verifikasi biometrik wajah untuk karyawan Doni Prasetyo.',
       ipAddress: '103.31.205.218',
       status: 'SUCCESS',
-      metadata: JSON.stringify({ employeeId: 'EMP-007', macAddress: 'FC:FB:FB:12:34:56' })
+      metadata: JSON.stringify({ employeeId: 'EMP-007', biometricStatus: 'VERIFIED' })
     },
     {
       timestamp: '2026-09-09 16:30:00',
       userName: 'Rahmat Hidayat',
       userNik: 'PRIME-2023-014',
       userRole: 'staff',
-      action: 'SUBMIT_REIMBURSEMENT',
-      module: 'PAYROLL',
-      entity: 'reimbursements',
-      entityId: 'REIMB-4412',
-      details: 'Mengajukan klaim reimbursement: "BBM Mobil Operasional Kunjungan Smelter Manyar" sebesar Rp 250.000 (Proyek PRIME-ENG-01).',
+      action: 'SUBMIT_LEAVE',
+      module: 'APPROVALS',
+      entity: 'approvals',
+      entityId: 'LEAVE-4412',
+      details: 'Mengajukan cuti tahunan: "Urusan Keluarga & Mudik" durasi 2 hari kerja.',
       ipAddress: '103.31.205.218',
       status: 'SUCCESS',
-      metadata: JSON.stringify({ amount: 250000, category: 'TRANSPORT_BBM', project: 'PRIME-ENG-01' })
+      metadata: JSON.stringify({ days: 2, leaveType: 'ANNUAL_LEAVE' })
     },
     {
       timestamp: '2026-09-09 17:05:12',
@@ -1026,7 +979,7 @@ export function seedRealisticAuditLogs(db: DatabaseSync) {
       details: 'Presensi On-Site WFO berhasil divalidasi melalui Gateway Utama PRIME. Koordinat GPS akurat (akurasi 5.2m).',
       ipAddress: '103.31.205.218',
       status: 'SUCCESS',
-      metadata: JSON.stringify({ distanceMeters: 15, wifi: 'PRIME-Corporate-5G', auditHash: '#901233' })
+      metadata: JSON.stringify({ distanceMeters: 15, geofenceStatus: 'VALID', auditHash: '#901233' })
     },
     {
       timestamp: '2026-09-10 08:18:02',
@@ -1040,7 +993,7 @@ export function seedRealisticAuditLogs(db: DatabaseSync) {
       details: 'Presensi selfie WFO berhasil diverifikasi. Watermark audit hash #789211 terekam dalam database.',
       ipAddress: '103.31.205.218',
       status: 'SUCCESS',
-      metadata: JSON.stringify({ distanceMeters: 28, wifi: 'PRIME-Corporate-5G', auditHash: '#789211' })
+      metadata: JSON.stringify({ distanceMeters: 28, geofenceStatus: 'VALID', auditHash: '#789211' })
     },
     {
       timestamp: '2026-09-10 08:25:44',
@@ -1051,10 +1004,10 @@ export function seedRealisticAuditLogs(db: DatabaseSync) {
       module: 'ATTENDANCE',
       entity: 'attendances',
       entityId: 'ATT-20260910-003',
-      details: 'Presensi selfie WFO berhasil diverifikasi. Jarak GPS: 42 meter dari pusat Geofence kantor. SSID: PRIME-Corporate-5G.',
+      details: 'Presensi selfie WFO berhasil diverifikasi. Jarak GPS: 42 meter dari pusat Geofence kantor.',
       ipAddress: '103.31.205.218',
       status: 'SUCCESS',
-      metadata: JSON.stringify({ distanceMeters: 42, wifi: 'PRIME-Corporate-5G', auditHash: '#892144' })
+      metadata: JSON.stringify({ distanceMeters: 42, geofenceStatus: 'VALID', auditHash: '#892144' })
     },
     {
       timestamp: '2026-09-10 08:32:10',

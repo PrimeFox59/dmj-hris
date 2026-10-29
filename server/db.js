@@ -44,12 +44,12 @@ export function verifyPassword(password, hash, salt) {
 export function generateToken(user) {
   const payload = {
     userId: user.id,
-    employeeId: user.employee_id,
+    employeeId: user.employee_id || user.employeeId,
     role: user.role,
-    systemRole: user.system_role,
+    systemRole: user.system_role || user.systemRole,
     username: user.username,
     email: user.email,
-    exp: Date.now() + (7 * 24 * 60 * 60 * 1000) // 7 days expiration
+    exp: Date.now() + (30 * 24 * 60 * 60 * 1000) // 30 days persistent session
   };
   const json = Buffer.from(JSON.stringify(payload)).toString('base64url');
   const sig = crypto.createHmac('sha256', AUTH_SECRET).update(json).digest('base64url');
@@ -97,6 +97,47 @@ export function getDbInfo() {
 }
 
 function initializeSchema(db) {
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS casual_workers (
+      id TEXT PRIMARY KEY,
+      projectId TEXT NOT NULL,
+      name TEXT NOT NULL,
+      status TEXT DEFAULT 'active',
+      createdBy TEXT,
+      createdByName TEXT,
+      createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
+      updatedAt TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS casual_worker_attendances (
+      id TEXT PRIMARY KEY,
+      workerId TEXT NOT NULL,
+      workerName TEXT NOT NULL,
+      projectId TEXT NOT NULL,
+      date TEXT NOT NULL,
+      checkInTime TEXT NOT NULL,
+      photoUrl TEXT,
+      latitude REAL,
+      longitude REAL,
+      address TEXT,
+      notes TEXT,
+      verifiedByPmId TEXT NOT NULL,
+      verifiedByPmName TEXT NOT NULL,
+      createdAt TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_cwa_proj_date ON casual_worker_attendances (projectId, date);
+    CREATE INDEX IF NOT EXISTS idx_cw_proj ON casual_workers (projectId);
+  `);
+
+  try {
+    db.exec('ALTER TABLE approvals ADD COLUMN attendanceRecordId TEXT;');
+  } catch (e) {}
+try {
+    db.exec('ALTER TABLE attendances ADD COLUMN updated_at TEXT;');
+  } catch (e) {}
+
   db.exec('PRAGMA journal_mode = WAL;');
   db.exec('PRAGMA synchronous = NORMAL;');
   db.exec('PRAGMA foreign_keys = ON;');
@@ -167,7 +208,8 @@ function initializeSchema(db) {
       lateReason TEXT,
       approvalStatus TEXT DEFAULT 'NOT_REQUIRED',
       data_json TEXT NOT NULL,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
   `);
 
@@ -197,35 +239,24 @@ function initializeSchema(db) {
   `);
 
   db.exec(`
-    CREATE TABLE IF NOT EXISTS reimbursements (
+    CREATE TABLE IF NOT EXISTS salary_rules (
       id TEXT PRIMARY KEY,
-      employeeId TEXT NOT NULL,
-      employeeName TEXT NOT NULL,
-      employeeNik TEXT NOT NULL,
-      category TEXT NOT NULL,
-      title TEXT NOT NULL,
-      description TEXT,
-      amount REAL NOT NULL,
-      date TEXT NOT NULL,
-      receiptAttachment TEXT,
-      projectId TEXT,
-      projectName TEXT,
-      status TEXT NOT NULL,
-      submittedAt TEXT NOT NULL,
-      reviewedBy TEXT,
-      reviewedAt TEXT,
-      rejectReason TEXT,
-      data_json TEXT NOT NULL,
-      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      config_json TEXT NOT NULL,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
   `);
 
   db.exec(`
-    CREATE TABLE IF NOT EXISTS salary_rules (
+    CREATE TABLE IF NOT EXISTS annual_work_calendar (
       id TEXT PRIMARY KEY,
-      config_json TEXT NOT NULL,
-      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      year INTEGER NOT NULL,
+      weeklyOffDays TEXT NOT NULL,
+      defaultCutoffStartDay INTEGER DEFAULT 21,
+      defaultCutoffEndDay INTEGER DEFAULT 20,
+      defaultPaydayDate INTEGER DEFAULT 25,
+      periods_json TEXT NOT NULL,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_by TEXT
     );
   `);
 
@@ -285,19 +316,89 @@ function initializeSchema(db) {
     );
   `);
 
-  // Ensure systemRole is populated in existing employees data_json
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS wa_notifications (
+      id TEXT PRIMARY KEY,
+      recipient_id TEXT,
+      recipient_name TEXT,
+      recipient_phone TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      title TEXT,
+      message TEXT NOT NULL,
+      status TEXT DEFAULT 'SENT',
+      error_msg TEXT,
+      metadata TEXT,
+      sent_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS wa_opt_ins (
+      phone TEXT PRIMARY KEY,
+      employee_id TEXT,
+      employee_name TEXT,
+      first_message TEXT,
+      first_message_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      last_message TEXT,
+      last_message_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      message_count INTEGER DEFAULT 1
+    );
+
+    CREATE TABLE IF NOT EXISTS email_notifications (
+      id TEXT PRIMARY KEY,
+      recipient_id TEXT,
+      recipient_name TEXT,
+      recipient_email TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      html_body TEXT,
+      text_body TEXT,
+      status TEXT DEFAULT 'SENT',
+      error_msg TEXT,
+      metadata TEXT,
+      sent_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  // Ensure systemRole is populated & normalized in existing employees data_json
   try {
     const rows = db.prepare('SELECT id, data_json FROM employees;').all();
     const updateEmpStmt = db.prepare('UPDATE employees SET data_json = ? WHERE id = ?;');
     for (const r of rows) {
       let parsed = JSON.parse(r.data_json);
-      if (!parsed.systemRole) {
-        if (parsed.id === 'EMP-001') parsed.systemRole = 'superuser';
-        else if (parsed.id === 'EMP-002' || parsed.id === 'EMP-003') parsed.systemRole = 'admin';
-        else parsed.systemRole = 'staff';
+      if (!parsed.systemRole || parsed.systemRole === 'manager') {
+        const pos = (parsed.position || '').toUpperCase();
+        const dept = (parsed.department || '').toUpperCase();
+        if (parsed.id === 'EMP-001') {
+          parsed.systemRole = 'superuser';
+        } else if (pos.includes('HR') || pos.includes('HRD') || dept.includes('HR') || dept.includes('HRD')) {
+          parsed.systemRole = 'hr';
+        } else if (
+          pos.includes('FINANCE') || pos.includes('ACCOUNTING') || pos.includes('PAJAK') || pos.includes('TAX') || pos.includes('FAT') ||
+          dept.includes('FINANCE') || dept.includes('ACCOUNTING') || dept.includes('FAT')
+        ) {
+          parsed.systemRole = 'finance';
+        } else {
+          parsed.systemRole = 'staff';
+        }
         updateEmpStmt.run(JSON.stringify(parsed), r.id);
       }
     }
+    // Synchronize user_accounts.system_role from employee's canonical systemRole
+    db.prepare(`
+      UPDATE user_accounts 
+      SET system_role = (
+        SELECT json_extract(e.data_json, '$.systemRole')
+        FROM employees e 
+        WHERE e.id = user_accounts.employee_id
+      )
+      WHERE employee_id IS NOT NULL 
+        AND employee_id != 'EMP-001'
+        AND EXISTS (
+          SELECT 1 FROM employees e 
+          WHERE e.id = user_accounts.employee_id 
+            AND json_extract(e.data_json, '$.systemRole') IS NOT NULL
+        );
+    `).run();
+    db.prepare("UPDATE user_accounts SET system_role = 'superuser' WHERE employee_id = 'EMP-001' OR username IN ('admin', 'galih');").run();
   } catch (e) {
     console.warn('[SQLite] Failed migration of systemRole in employees', e);
   }
@@ -401,27 +502,7 @@ export function seedInitialData(db) {
     );
   }
 
-  // 5. Reimbursements
-  const insertReimb = db.prepare(`
-    INSERT OR REPLACE INTO reimbursements (
-      id, employeeId, employeeName, employeeNik, category,
-      title, description, amount, date, receiptAttachment,
-      projectId, projectName, status, submittedAt,
-      reviewedBy, reviewedAt, rejectReason, data_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-  `);
-  for (const reimb of seed.INITIAL_REIMBURSEMENTS || []) {
-    insertReimb.run(
-      reimb.id, reimb.employeeId, reimb.employeeName, reimb.employeeNik,
-      reimb.category, reimb.title, reimb.description, reimb.amount,
-      reimb.date, reimb.receiptAttachment || null, reimb.projectId || null,
-      reimb.projectName || null, reimb.status, reimb.submittedAt,
-      reimb.reviewedBy || null, reimb.reviewedAt || null,
-      reimb.rejectReason || null, JSON.stringify(reimb)
-    );
-  }
-
-  // 6. Salary Rules
+  // 5. Salary Rules
   if (seed.INITIAL_SALARY_RULES) {
     db.prepare(`
       INSERT OR REPLACE INTO salary_rules (id, config_json, updated_at)
@@ -440,27 +521,173 @@ export function seedInitialData(db) {
 
 export function getAllData() {
   const db = getDatabase();
-  const employees = db.prepare('SELECT data_json FROM employees ORDER BY name ASC;').all().map(r => JSON.parse(r.data_json));
+  const userMap = new Map();
+  const userRoleMap = new Map();
+  try {
+    const userRows = db.prepare('SELECT employee_id, username, system_role, role FROM user_accounts;').all();
+    for (const u of userRows) {
+      if (u.employee_id && !userMap.has(u.employee_id)) {
+        userMap.set(u.employee_id, u.username);
+        userRoleMap.set(u.employee_id, { systemRole: u.system_role, role: u.role });
+      }
+    }
+  } catch (e) {}
+
+  const employees = db.prepare('SELECT id, assignedProjectId, data_json FROM employees ORDER BY name ASC;').all().map(r => {
+    let emp = {};
+    try { emp = JSON.parse(r.data_json); } catch (e) {}
+    if (r.assignedProjectId && (!emp.assignedProjectId || emp.assignedProjectId !== r.assignedProjectId)) {
+      emp.assignedProjectId = r.assignedProjectId;
+    }
+    if (userRoleMap.has(r.id)) {
+      const uInfo = userRoleMap.get(r.id);
+      if (uInfo.systemRole) emp.systemRole = uInfo.systemRole;
+      if (uInfo.role && (!emp.role || emp.role === 'Employee')) emp.role = uInfo.role;
+    }
+    if (!emp.loginId) {
+      if (emp.id === 'EMP-001') emp.loginId = 'admin';
+      else if (userMap.has(emp.id)) emp.loginId = userMap.get(emp.id);
+      else emp.loginId = `d${String(emp.id.replace(/\D/g, '')).padStart(3, '0')}`;
+    }
+    // REA Optimization: Strip heavy 4-pose base64 biometric samples from general bootstrap
+    // Keep enrollment status and quality score. Samples are fetched on-demand via gallery API.
+    if (emp.biometric && emp.biometric.samples) {
+      const { samples, ...cleanBiometric } = emp.biometric;
+      emp.biometric = {
+        ...cleanBiometric,
+        hasSamples: true
+      };
+    }
+    return emp;
+  });
   const projects = db.prepare('SELECT data_json FROM projects ORDER BY code ASC;').all().map(r => JSON.parse(r.data_json));
-  const attendances = db.prepare('SELECT data_json FROM attendances ORDER BY date DESC, checkInTime DESC;').all().map(r => JSON.parse(r.data_json));
-  const approvals = db.prepare('SELECT data_json FROM approvals ORDER BY submittedAt DESC;').all().map(r => JSON.parse(r.data_json));
-  const reimbursements = db.prepare('SELECT data_json FROM reimbursements ORDER BY submittedAt DESC;').all().map(r => JSON.parse(r.data_json));
+
+  // REA Optimization: Streamline attendances and convert inline base64 to /api/attendance/:id/photo
+  const attendances = db.prepare('SELECT id, data_json FROM attendances ORDER BY date DESC, checkInTime DESC LIMIT 200;').all().map(r => {
+    let item = {};
+    try { item = JSON.parse(r.data_json); } catch (e) {}
+    if (item.photoUrl && item.photoUrl.startsWith('data:image')) {
+      item.photoUrl = `/api/attendance/${item.id || r.id}/photo`;
+    }
+    return item;
+  });
+
+  // REA Optimization: Strip heavy base64 proof attachments from historical approvals
+  const approvals = db.prepare('SELECT id, data_json FROM approvals ORDER BY submittedAt DESC LIMIT 300;').all().map(r => {
+    let item = {};
+    try { item = JSON.parse(r.data_json); } catch (e) {}
+    if (item.proofAttachment && item.proofAttachment.startsWith('data:image')) {
+      item.hasAttachment = true;
+      delete item.proofAttachment;
+    }
+    return item;
+  });
   const rulesRow = db.prepare('SELECT config_json FROM salary_rules WHERE id = ?;').get('default');
   const salaryRules = rulesRow ? JSON.parse(rulesRow.config_json) : null;
+
+  const currentYear = new Date().getFullYear();
+  const workCalendar = getWorkCalendarConfig(currentYear);
 
   return {
     employees,
     projects,
     attendances,
     approvals,
-    reimbursements,
     salaryRules,
+    workCalendar,
     dbInfo: getDbInfo()
   };
 }
 
+export function getAttendancePhoto(id) {
+  const db = getDatabase();
+  try {
+    const row = db.prepare('SELECT data_json FROM attendances WHERE id = ?').get(id);
+    if (!row) return null;
+    const item = JSON.parse(row.data_json);
+    return item.photoUrl || null;
+  } catch (e) {
+    return null;
+  }
+}
+
 export function saveAttendance(record) {
   const db = getDatabase();
+
+  if (record.checkInTime) record.checkInTime = record.checkInTime.replace(/\./g, ':');
+  if (record.checkOutTime) record.checkOutTime = record.checkOutTime.replace(/\./g, ':');
+
+  // Smart Attendance Merge: Cek apakah karyawan sudah memiliki presensi pada tanggal yang sama
+  const existing = db.prepare('SELECT id, data_json, checkInTime, checkOutTime, isLate, lateMinutes, status, approvalStatus FROM attendances WHERE employeeId = ? AND date = ?;').get(record.employeeId, record.date);
+
+  const attType = record.attendanceType || (record.checkOutTime ? 'CHECK_OUT' : 'CHECK_IN');
+
+  let targetId = record.id || `ATT-${Date.now()}`;
+  let finalCheckIn = (record.checkInTime || (attType === 'CHECK_OUT' ? (record.checkOutTime || '08:00:00') : '08:00:00')).replace(/\./g, ':');
+  let finalCheckOut = record.checkOutTime ? record.checkOutTime.replace(/\./g, ':') : null;
+  let finalStatus = record.status || 'ON_TIME';
+  let finalIsLate = record.isLate ? 1 : 0;
+  let finalLateMinutes = record.lateMinutes || 0;
+  let finalLateReason = record.lateReason || null;
+  let finalApprovalStatus = record.approvalStatus || 'APPROVED';
+  let mergedData = { ...record };
+
+  if (existing) {
+    targetId = existing.id;
+    let prevData = {};
+    try { prevData = JSON.parse(existing.data_json); } catch (e) {}
+
+    if (attType === 'CHECK_IN') {
+      // MODE PRESENSI MASUK: Hanya set/perbarui jam masuk, jangan pernah set jam pulang
+      finalCheckIn = (record.checkInTime || existing.checkInTime || '').replace(/\./g, ':');
+      finalCheckOut = existing.checkOutTime ? existing.checkOutTime.replace(/\./g, ':') : null;
+      finalStatus = record.status || existing.status;
+      finalIsLate = record.isLate !== undefined ? (record.isLate ? 1 : 0) : existing.isLate;
+      finalLateMinutes = record.lateMinutes !== undefined ? record.lateMinutes : (existing.lateMinutes || 0);
+      finalLateReason = record.lateReason || existing.lateReason || null;
+      finalApprovalStatus = record.approvalStatus || existing.approvalStatus || 'APPROVED';
+
+      mergedData = {
+        ...prevData,
+        ...record,
+        id: targetId,
+        checkInTime: finalCheckIn,
+        checkOutTime: finalCheckOut,
+        status: finalStatus,
+        isLate: Boolean(finalIsLate),
+        lateMinutes: finalLateMinutes,
+        lateReason: finalLateReason,
+        approvalStatus: finalApprovalStatus,
+        photoUrl: record.photoUrl || prevData.photoUrl
+      };
+    } else {
+      // MODE PRESENSI PULANG: Pertahankan jam masuk awal, set jam pulang ke waktu sekarang
+      finalCheckIn = (existing.checkInTime || record.checkInTime || '08:00:00').replace(/\./g, ':');
+      finalCheckOut = (record.checkOutTime || record.checkInTime || '').replace(/\./g, ':');
+      finalStatus = existing.status || (record.status === 'LATE' ? 'ON_TIME' : record.status);
+      finalIsLate = existing.isLate !== undefined ? existing.isLate : 0;
+      finalLateMinutes = existing.lateMinutes !== undefined ? existing.lateMinutes : 0;
+      finalLateReason = existing.lateReason || null;
+      finalApprovalStatus = existing.approvalStatus || record.approvalStatus || 'APPROVED';
+
+      mergedData = {
+        ...prevData,
+        ...record,
+        id: targetId,
+        checkInTime: finalCheckIn,
+        checkOutTime: finalCheckOut,
+        status: finalStatus,
+        isLate: Boolean(finalIsLate),
+        lateMinutes: finalLateMinutes,
+        lateReason: finalLateReason,
+        approvalStatus: finalApprovalStatus,
+        checkOutPhotoUrl: record.photoUrl,
+        checkOutLocation: record.location,
+        checkOutBiometric: record.biometricVerification
+      };
+    }
+  }
+
   db.prepare(`
     INSERT OR REPLACE INTO attendances (
       id, employeeId, employeeName, employeeNik, department,
@@ -469,31 +696,65 @@ export function saveAttendance(record) {
       approvalStatus, data_json
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
   `).run(
-    record.id, record.employeeId, record.employeeName, record.employeeNik,
-    record.department, record.date, record.checkInTime, record.checkOutTime || null,
-    record.mode, record.status, record.photoUrl, record.isLate ? 1 : 0,
-    record.lateMinutes, record.lateReason || null, record.approvalStatus,
-    JSON.stringify(record)
+    targetId,
+    record.employeeId,
+    record.employeeName,
+    record.employeeNik,
+    record.department || 'Engineering',
+    record.date,
+    finalCheckIn || '08:00:00',
+    finalCheckOut || null,
+    record.mode || 'WFO',
+    finalStatus || 'ON_TIME',
+    record.photoUrl || null,
+    finalIsLate ? 1 : 0,
+    finalLateMinutes || 0,
+    finalLateReason || null,
+    finalApprovalStatus || 'APPROVED',
+    JSON.stringify(mergedData)
   );
+
+  // Sync return values back to record object
+  record.id = targetId;
+  record.checkInTime = finalCheckIn;
+  record.checkOutTime = finalCheckOut;
+  record.status = finalStatus;
+  record.isLate = Boolean(finalIsLate);
+  record.lateMinutes = finalLateMinutes;
+  record.approvalStatus = finalApprovalStatus;
 
   if (record.approvalStatus === 'PENDING') {
     const isDinasLuar = record.mode === 'DINAS_LUAR';
+    const isOutOfGeofence = record.status === 'OUT_OF_GEOFENCE';
+    // Absen Pulang (CHECK_OUT) TIDAK PERNAH membuat pengajuan LATE_JUSTIFICATION
+    if (!isDinasLuar && !isOutOfGeofence && attType === 'CHECK_OUT') {
+      // Skip late justification approval saat absen pulang
+    } else {
     const approvalId = `APPR-${record.id}`;
+    const approvalType = isDinasLuar ? 'DINAS_LUAR' : isOutOfGeofence ? 'OUT_OF_GEOFENCE' : 'LATE_JUSTIFICATION';
+    const distText = record.location?.distanceMeters ? ` (${record.location.distanceMeters >= 1000 ? (record.location.distanceMeters / 1000).toFixed(1) + ' km' : record.location.distanceMeters + 'm'})` : '';
+    const approvalTitle = isDinasLuar
+      ? `Pengajuan Dinas Luar Mendadak: ${record.dinasLuarDetails?.clientName || 'Klien Luar'}`
+      : isOutOfGeofence
+      ? `Persetujuan Presensi Luar Area${distText}`
+      : `Justifikasi Keterlambatan (${record.lateMinutes} Menit)`;
+    const approvalDesc = isDinasLuar
+      ? `Tujuan: ${record.dinasLuarDetails?.destination} | Alasan: ${record.dinasLuarDetails?.purpose}`
+      : isOutOfGeofence
+      ? `Catatan Luar Area${distText}: ${record.outOfRangeReason || record.note || 'Presensi di luar radius resmi'}`
+      : `Alasan Keterlambatan: ${record.lateReason || 'Keterlambatan operasional'}`;
+
     const approvalItem = {
       id: approvalId,
-      type: isDinasLuar ? 'DINAS_LUAR' : 'LATE_JUSTIFICATION',
+      type: approvalType,
       employeeId: record.employeeId,
       employeeName: record.employeeName,
       employeeNik: record.employeeNik,
       department: record.department,
-      title: isDinasLuar
-        ? `Pengajuan Dinas Luar Mendadak: ${record.dinasLuarDetails?.clientName || 'Klien Luar'}`
-        : `Justifikasi Keterlambatan (${record.lateMinutes} Menit)`,
-      description: isDinasLuar
-        ? `Tujuan: ${record.dinasLuarDetails?.destination} | Alasan: ${record.dinasLuarDetails?.purpose}`
-        : `Alasan Keterlambatan: ${record.lateReason}`,
+      title: approvalTitle,
+      description: approvalDesc,
       startDate: record.date,
-      lateMinutes: record.lateMinutes,
+      lateMinutes: isOutOfGeofence ? 0 : (record.lateMinutes || 0),
       attendanceRecordId: record.id,
       proofAttachment: record.photoUrl,
       status: 'PENDING',
@@ -513,6 +774,7 @@ export function saveAttendance(record) {
       null, null, approvalItem.lateMinutes || null, approvalItem.status,
       approvalItem.submittedAt, null, null, null, JSON.stringify(approvalItem)
     );
+    }
   }
 
   addAuditLog({
@@ -529,12 +791,68 @@ export function saveAttendance(record) {
     metadata: {
       location: record.location,
       checkInTime: record.checkInTime,
-      wifiSsid: record.wifiSsid,
+      networkAudit: record.networkAudit,
       hasPhoto: Boolean(record.photoUrl)
     }
   });
 
   return { success: true, record };
+}
+
+export function deleteAttendance(id, operatorUser = null) {
+  const db = getDatabase();
+  let existing = db.prepare('SELECT id, employeeId, employeeName, employeeNik, date, data_json FROM attendances WHERE id = ?;').get(id);
+  if (!existing) {
+    // Resilient fallback: match by json_extract or partial id
+    existing = db.prepare("SELECT id, employeeId, employeeName, employeeNik, date, data_json FROM attendances WHERE json_extract(data_json, '$.id') = ? OR id LIKE ?;").get(id, `%${id}%`);
+  }
+  if (!existing) {
+    return { success: false, error: 'Rekaman presensi tidak ditemukan di basis data' };
+  }
+
+  const targetId = existing.id;
+
+  // 1. Delete attendance record
+  db.prepare('DELETE FROM attendances WHERE id = ?;').run(targetId);
+
+  // 2. Also delete any linked approvals for this attendance record
+  let linkedApprovals = [];
+  try {
+    linkedApprovals = db.prepare(`
+      SELECT id FROM approvals 
+      WHERE id = ? 
+         OR id = ? 
+         OR id = ? 
+         OR json_extract(data_json, '$.attendanceRecordId') = ?
+         OR json_extract(data_json, '$.attendanceRecordId') = ?;
+    `).all(id, `APPR-${id}`, `APP-GEO-${id}`, id, targetId);
+    for (const app of linkedApprovals) {
+      db.prepare('DELETE FROM approvals WHERE id = ?;').run(app.id);
+    }
+  } catch (e) {
+    console.warn('[DELETE_ATTENDANCE_APPROVALS_WARN]', e.message);
+  }
+
+  // 3. Add audit log
+  addAuditLog({
+    action: 'ATTENDANCE_DELETED',
+    entity: 'attendances',
+    entityId: targetId,
+    userName: operatorUser?.name || operatorUser?.username || 'Superuser',
+    userNik: operatorUser?.nik || 'SUPERUSER',
+    userRole: operatorUser?.systemRole || operatorUser?.role || 'superuser',
+    module: 'ATTENDANCE',
+    status: 'SUCCESS',
+    details: `Presensi ${existing.employeeName} (${existing.employeeNik}) tanggal ${existing.date} ID ${targetId} berhasil dihapus oleh Superuser.`
+  });
+
+  return {
+    success: true,
+    id: targetId,
+    employeeId: existing.employeeId,
+    date: existing.date,
+    linkedApprovalIds: linkedApprovals.map(a => a.id)
+  };
 }
 
 export function updateApproval(id, status, reviewNote, reviewedBy = 'Direksi / HR Lead') {
@@ -548,6 +866,9 @@ export function updateApproval(id, status, reviewNote, reviewedBy = 'Direksi / H
   item.reviewNote = reviewNote;
   item.reviewedBy = reviewedBy;
   item.reviewedAt = now;
+
+  let updatedAttendance = null;
+  let updatedEmployee = null;
 
   db.prepare(`
     UPDATE approvals
@@ -568,11 +889,239 @@ export function updateApproval(id, status, reviewNote, reviewedBy = 'Direksi / H
       }
       db.prepare(`UPDATE attendances SET approvalStatus = ?, status = ?, data_json = ? WHERE id = ?;`)
         .run(status, attRecord.status, JSON.stringify(attRecord), item.attendanceRecordId);
+      updatedAttendance = attRecord;
+    }
+  }
+
+  // Real-time Attendance Record Synchronization for Approved Attendance Correction
+  if (item.type === 'ATTENDANCE_CORRECTION' && status === 'APPROVED' && item.employeeId) {
+    const targetDate = item.startDate;
+    const existingAtt = db.prepare('SELECT id, data_json FROM attendances WHERE employeeId = ? AND date = ?;').get(item.employeeId, targetDate);
+
+    let attRecord = {};
+    let attId = existingAtt ? existingAtt.id : `ATT-CORR-${item.employeeId}-${targetDate}`;
+    if (existingAtt) {
+      try { attRecord = JSON.parse(existingAtt.data_json); } catch (e) {}
+    } else {
+      attRecord = {
+        id: attId,
+        employeeId: item.employeeId,
+        employeeName: item.employeeName,
+        employeeNik: item.employeeNik,
+        department: item.department,
+        date: targetDate,
+        mode: 'WFO',
+        location: {
+          lat: -7.395625,
+          lng: 112.717574,
+          accuracy: 10,
+          address: 'Koreksi Absensi Resmi Disetujui (' + (item.projectName || 'Pusat') + ')',
+          inGeofence: true,
+          distanceMeters: 0
+        }
+      };
+    }
+
+    const checkIn = (item.targetCheckInTime || attRecord.checkInTime || '08:00:00').replace(/\./g, ':');
+    const checkOut = item.targetCheckOutTime ? item.targetCheckOutTime.replace(/\./g, ':') : (attRecord.checkOutTime || null);
+    const attStatus = item.targetStatus || 'ON_TIME';
+
+    attRecord.id = attId;
+    attRecord.checkInTime = checkIn;
+    attRecord.checkOutTime = checkOut;
+    attRecord.status = attStatus;
+    attRecord.isLate = attStatus === 'LATE';
+    attRecord.lateMinutes = attStatus === 'LATE' ? (item.lateMinutes || 15) : 0;
+    attRecord.approvalStatus = 'APPROVED';
+    attRecord.approvedBy = reviewedBy;
+    attRecord.approvalDate = now;
+    attRecord.approvalNote = reviewNote;
+    attRecord.isHrCorrected = true;
+    attRecord.hrCorrectedBy = reviewedBy;
+    attRecord.hrCorrectedAt = now;
+    attRecord.hrCorrectionNotes = `Koreksi mandiri disetujui: ${item.description || ''}${reviewNote ? ` (Catatan: ${reviewNote})` : ''}`;
+
+    db.prepare(`
+      INSERT OR REPLACE INTO attendances (
+        id, employeeId, employeeName, employeeNik, department,
+        date, checkInTime, checkOutTime, mode, status,
+        photoUrl, isLate, lateMinutes, lateReason,
+        approvalStatus, data_json, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP);
+    `).run(
+      attId, item.employeeId, item.employeeName, item.employeeNik, item.department,
+      targetDate, checkIn, checkOut,
+      attRecord.mode || 'WFO', attStatus, attRecord.photoUrl || null,
+      attRecord.isLate ? 1 : 0, attRecord.lateMinutes || 0, attRecord.lateReason || null,
+      'APPROVED', JSON.stringify(attRecord)
+    );
+    updatedAttendance = attRecord;
+  }
+
+  // Automatic quota deduction, unpaid leave recording & roster schedule update for approved leave requests
+  if (item.type === 'LEAVE' && status === 'APPROVED' && item.employeeId) {
+    const empRow = db.prepare('SELECT data_json FROM employees WHERE id = ?;').get(item.employeeId);
+    if (empRow) {
+      try {
+        const emp = JSON.parse(empRow.data_json);
+        const days = Number(item.daysCount) || 1;
+        const coveredDays = typeof item.coveredByQuotaDays === 'number' ? item.coveredByQuotaDays : days;
+        const unpaidDays = typeof item.unpaidLeaveDays === 'number' ? item.unpaidLeaveDays : 0;
+
+        if (item.leaveType === 'CUTI_ROSTER_NON_LOKAL' && emp.nonLokalLeaveConfig) {
+          emp.nonLokalLeaveConfig.usedPeriodLeave = (emp.nonLokalLeaveConfig.usedPeriodLeave || 0) + coveredDays;
+          emp.nonLokalLeaveConfig.lastLeaveDate = item.startDate || new Date().toISOString().split('T')[0];
+          try {
+            const [y, m, d] = emp.nonLokalLeaveConfig.lastLeaveDate.split('-').map(Number);
+            let nextM = m + (emp.nonLokalLeaveConfig.rosterCycleMonths || 3);
+            let nextY = y;
+            if (nextM > 12) {
+              nextY += Math.floor((nextM - 1) / 12);
+              nextM = ((nextM - 1) % 12) + 1;
+            }
+            emp.nonLokalLeaveConfig.nextEligibleLeaveDate = `${nextY}-${String(nextM).padStart(2, '0')}-${String(Math.min(d, 28)).padStart(2, '0')}`;
+          } catch (e) {}
+        } else if (item.leaveType === 'CUTI_TAHUNAN' || !item.leaveType) {
+          emp.usedLeave = Math.min(emp.leaveQuota || 12, (emp.usedLeave || 0) + coveredDays);
+        }
+
+        // Record unpaid leave days for salary deduction if over quota
+        if (unpaidDays > 0) {
+          emp.unpaidLeaveDaysTotal = (emp.unpaidLeaveDaysTotal || 0) + unpaidDays;
+        }
+
+        db.prepare('UPDATE employees SET data_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?;').run(JSON.stringify(emp), item.employeeId);
+        updatedEmployee = emp;
+      } catch (err) {
+        console.warn('[SQLite] Failed updating employee leave quota on approval:', err);
+      }
     }
   }
 
   db.prepare('INSERT INTO audit_logs (action, entity, entityId, details) VALUES (?, ?, ?, ?);')
     .run('UPDATE_APPROVAL', 'approvals', id, `Approval ${id} diubah ke ${status} oleh ${reviewedBy}`);
+
+  return { success: true, item, updatedAttendance, updatedEmployee };
+}
+
+export function saveApproval(item) {
+  const db = getDatabase();
+
+  // Smart Leave Quota & Over-Quota Unpaid Leave Gatekeeper
+  if (item.type === 'LEAVE') {
+    const empRow = db.prepare('SELECT data_json FROM employees WHERE id = ?').get(item.employeeId);
+    if (empRow) {
+      try {
+        const empData = JSON.parse(empRow.data_json);
+        const requested = Number(item.daysCount) || 1;
+        let remaining = 12;
+
+        if (item.leaveType === 'CUTI_ROSTER_NON_LOKAL') {
+          const cfg = empData.nonLokalLeaveConfig || {};
+          const baseQuota = typeof cfg.leaveQuotaPerPeriod === 'number' ? cfg.leaveQuotaPerPeriod : 9;
+          const accumulated = typeof cfg.accumulatedLeaveDays === 'number' ? cfg.accumulatedLeaveDays : 0;
+          const effectiveQuota = baseQuota + accumulated;
+          const used = typeof cfg.usedPeriodLeave === 'number' ? cfg.usedPeriodLeave : 0;
+          remaining = Math.max(0, effectiveQuota - used);
+
+          // Check if off-schedule compared to nextEligibleLeaveDate
+          if (cfg.nextEligibleLeaveDate && item.startDate && item.startDate !== cfg.nextEligibleLeaveDate) {
+            item.isOffSchedule = true;
+            item.requiresHrApproval = true;
+          }
+        } else if (item.leaveType === 'CUTI_TAHUNAN' || !item.leaveType) {
+          const quota = typeof empData.leaveQuota === 'number' ? empData.leaveQuota : 12;
+          const used = typeof empData.usedLeave === 'number' ? empData.usedLeave : 0;
+          remaining = Math.max(0, quota - used);
+        }
+
+        if (item.leaveType === 'CUTI_ROSTER_NON_LOKAL' || item.leaveType === 'CUTI_TAHUNAN' || !item.leaveType) {
+          if (requested > remaining) {
+            // Over-quota condition: auto-split into covered quota and unpaid leave days with salary deduction condition
+            item.coveredByQuotaDays = remaining;
+            item.unpaidLeaveDays = requested - remaining;
+            item.isOverQuota = true;
+            item.requiresHrApproval = true;
+            if (!item.title.includes('Potong Gaji')) {
+              item.title = `${item.title} (Over-Quota: ${item.unpaidLeaveDays} Hari Potong Gaji)`;
+            }
+          } else {
+            item.coveredByQuotaDays = requested;
+            item.unpaidLeaveDays = 0;
+            item.isOverQuota = false;
+          }
+        } else {
+          item.coveredByQuotaDays = requested;
+          item.unpaidLeaveDays = 0;
+        }
+      } catch (err) {
+        console.error('[BACKEND SAVE_APPROVAL ERROR]', err);
+      }
+    }
+  }
+
+  // Attendance Correction Project & Routing Metadata Gatekeeper
+  if (item.type === 'ATTENDANCE_CORRECTION') {
+    const empRow = db.prepare('SELECT assignedProjectId, data_json FROM employees WHERE id = ?').get(item.employeeId);
+    if (empRow) {
+      try {
+        const empData = JSON.parse(empRow.data_json);
+        const projId = empRow.assignedProjectId || empData.assignedProjectId;
+        if (projId) {
+          const projRow = db.prepare('SELECT id, code, name, data_json FROM projects WHERE id = ? OR code = ?').get(projId, projId);
+          if (projRow) {
+            const projData = JSON.parse(projRow.data_json);
+            item.projectId = projRow.id;
+            item.projectCode = projRow.code;
+            item.projectName = projRow.name;
+            if (projData.projectManagerId) {
+              item.projectManagerId = projData.projectManagerId;
+              const pmEmpRow = db.prepare('SELECT name, data_json FROM employees WHERE id = ?').get(projData.projectManagerId);
+              if (pmEmpRow) {
+                item.projectManagerName = pmEmpRow.name;
+              }
+              item.targetApproverRole = 'PM';
+            } else {
+              item.targetApproverRole = 'HR';
+            }
+          } else {
+            item.targetApproverRole = 'HR';
+          }
+        } else {
+          item.targetApproverRole = 'HR';
+        }
+      } catch (e) {
+        item.targetApproverRole = 'HR';
+      }
+    }
+  }
+
+  db.prepare(`
+    INSERT OR REPLACE INTO approvals (
+      id, type, employeeId, employeeName, employeeNik, department,
+      title, description, startDate, endDate, daysCount, lateMinutes,
+      status, submittedAt, reviewedBy, reviewedAt, reviewNote, data_json, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP);
+  `).run(
+    item.id, item.type, item.employeeId, item.employeeName, item.employeeNik,
+    item.department, item.title, item.description, item.startDate,
+    item.endDate || null, item.daysCount || null, item.lateMinutes || null,
+    item.status || 'PENDING', item.submittedAt || new Date().toISOString().replace('T', ' ').slice(0, 19),
+    item.reviewedBy || null, item.reviewedAt || null, item.reviewNote || null,
+    JSON.stringify(item)
+  );
+
+  addAuditLog({
+    action: 'SUBMIT_APPROVAL',
+    entity: 'approvals',
+    entityId: item.id,
+    userName: item.employeeName,
+    userNik: item.employeeNik,
+    userRole: 'staff',
+    module: 'APPROVAL',
+    status: 'SUCCESS',
+    details: `Pengajuan ${item.type} (${item.title}) diajukan oleh ${item.employeeName} (${item.employeeNik}).`
+  });
 
   return { success: true, item };
 }
@@ -594,6 +1143,33 @@ export function saveEmployee(emp) {
     JSON.stringify(emp.bankAccount), emp.avatar, JSON.stringify(emp)
   );
 
+  // Synchronize active/inactive status and system_role/role to user_accounts
+  const userAccountStatus = emp.status === 'INACTIVE' ? 'inactive' : 'active';
+  const targetSysRole = emp.id === 'EMP-001' ? 'superuser' : (emp.systemRole === 'admin' ? 'hr' : emp.systemRole || 'staff');
+  const targetRole = emp.role || 'Employee';
+
+  try {
+    const res = db.prepare(`
+      UPDATE user_accounts 
+      SET system_role = ?, role = ?, status = ?, updated_at = CURRENT_TIMESTAMP 
+      WHERE employee_id = ?;
+    `).run(targetSysRole, targetRole, userAccountStatus, emp.id);
+
+    // If no user account existed yet for this employee, create it
+    if (res.changes === 0 && emp.id !== 'EMP-001') {
+      const loginId = emp.loginId || `d${String(emp.id.replace(/\D/g, '')).padStart(3, '0')}`;
+      const email = emp.email || `${loginId}@primeprojectx.net`;
+      const { hash, salt } = hashPassword('zzz');
+      db.prepare(`
+        INSERT INTO user_accounts (
+          id, employee_id, email, username, password_hash, salt, role, system_role, status, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+      `).run(`USR-${emp.id}`, emp.id, email, loginId, hash, salt, targetRole, targetSysRole, userAccountStatus);
+    }
+  } catch (err) {
+    console.error('Error syncing user_accounts status & system_role for employee', emp.id, err);
+  }
+
   addAuditLog({
     action: 'SAVE_EMPLOYEE',
     entity: 'employees',
@@ -602,10 +1178,181 @@ export function saveEmployee(emp) {
     userRole: 'admin',
     module: 'EMPLOYEES',
     status: 'SUCCESS',
-    details: `Data master karyawan ${emp.name} (${emp.nik}) - Jabatan ${emp.position} di departemen ${emp.department} diperbarui.`
+    details: `Data master karyawan ${emp.name} (${emp.nik}) - Jabatan ${emp.position} di departemen ${emp.department} diperbarui (Status: ${emp.status || 'ACTIVE'}).`
   });
 
   return { success: true, employee: emp };
+}
+
+/**
+ * Public Kiosk Safe Directory
+ * Returns minimal employee data needed for quick attendance kiosk without exposing salary or bank data.
+ */
+/**
+ * Ultra-Fast Enrolled Biometric Gallery Directory
+ * Returns ONLY employees who have completed biometric enrollment, with minimal payload (under 80 KB).
+ */
+export function getEnrolledBiometricGallery() {
+  const db = getDatabase();
+  const rows = db.prepare(`
+    SELECT 
+      e.id, 
+      e.nik, 
+      e.name, 
+      e.role, 
+      e.department, 
+      e.position, 
+      e.data_json,
+      MIN(u.username) AS loginUsername
+    FROM employees e
+    LEFT JOIN user_accounts u ON u.employee_id = e.id
+    WHERE e.data_json LIKE '%"isEnrolled":true%'
+    GROUP BY e.id
+    ORDER BY e.name ASC;
+  `).all();
+
+  const enrolled = [];
+  for (const r of rows) {
+    let data = {};
+    try {
+      data = JSON.parse(r.data_json);
+    } catch (e) {}
+
+    const bio = data.biometric || null;
+    if (bio && bio.isEnrolled && bio.samples && (bio.samples.front || bio.samples.smile || bio.samples.right || bio.samples.left)) {
+      if (data.status !== 'INACTIVE') {
+        enrolled.push({
+          id: r.id,
+          nik: r.nik,
+          name: r.name,
+          role: r.role,
+          department: r.department,
+          position: r.position,
+          loginUsername: r.loginUsername || data.loginUsername || null,
+          hasBiometric: true,
+          biometric: {
+            isEnrolled: true,
+            samples: bio.samples
+          }
+        });
+      }
+    }
+  }
+
+  return enrolled;
+}
+
+/**
+ * Public Kiosk Safe Directory
+ * Returns minimal employee data needed for quick attendance kiosk without exposing salary or bank data.
+ */
+export function getPublicKioskEmployees() {
+  const db = getDatabase();
+  const rows = db.prepare(`
+    SELECT 
+      e.id, 
+      e.nik, 
+      e.name, 
+      e.role, 
+      e.department, 
+      e.position, 
+      e.assignedProjectId,
+      e.avatar, 
+      e.data_json,
+      MIN(u.username) AS loginUsername
+    FROM employees e
+    LEFT JOIN user_accounts u ON u.employee_id = e.id
+    GROUP BY e.id
+    ORDER BY e.name ASC;
+  `).all();
+
+  const projectRows = db.prepare('SELECT data_json FROM projects ORDER BY code ASC;').all();
+  const projects = projectRows.map(r => {
+    let p = {};
+    try { p = JSON.parse(r.data_json); } catch (e) {}
+    const locLower = (p.location || '').toLowerCase();
+    const geofence = p.customRules?.geofence || (
+      locLower.includes('pomalaa') || p.name?.toLowerCase().includes('pomalaa') ? {
+        name: 'Site Pomalaa Kolaka',
+        lat: -4.1812,
+        lng: 121.6111,
+        radiusMeters: 500
+      } : locLower.includes('palembang') || p.name?.toLowerCase().includes('palembang') || p.name?.toLowerCase().includes('gani') ? {
+        name: 'Site RS AK Gani Palembang',
+        lat: -2.991240,
+        lng: 104.757310,
+        radiusMeters: 350
+      } : locLower.includes('ciremai') || p.name?.toLowerCase().includes('ciremai') ? {
+        name: 'Site RS Ciremai Cirebon',
+        lat: -6.737150,
+        lng: 108.552860,
+        radiusMeters: 350
+      } : {
+        name: 'PT Dwi Martha Jaya - Kantor Pusat & Workshop Terpadu',
+        lat: -7.395625,
+        lng: 112.717574,
+        radiusMeters: 350
+      }
+    );
+    return {
+      id: p.id,
+      code: p.code,
+      name: p.name,
+      location: p.location,
+      geofence
+    };
+  });
+
+  const rulesRow = db.prepare('SELECT config_json FROM salary_rules WHERE id = ?;').get('default');
+  const salaryRules = rulesRow ? JSON.parse(rulesRow.config_json) : null;
+  const officeGeofence = salaryRules?.officeGeofence || {
+    name: 'PT Dwi Martha Jaya - Kantor Pusat & Workshop Terpadu',
+    lat: -7.395625,
+    lng: 112.717574,
+    radiusMeters: 350,
+    address: 'Keboananom, Gedangan, Sidoarjo, Jawa Timur'
+  };
+
+  const employees = rows
+    .map(r => {
+      let data = {};
+      try {
+        data = JSON.parse(r.data_json);
+      } catch (e) {}
+
+      const bio = data.biometric || null;
+      const hasBiometric = Boolean(bio && bio.isEnrolled && bio.samples);
+
+      return {
+        id: r.id,
+        nik: r.nik,
+        name: r.name,
+        role: r.role,
+        department: r.department,
+        position: r.position,
+        assignedProjectId: r.assignedProjectId || data.assignedProjectId || null,
+        avatar: r.avatar || null,
+        loginUsername: r.loginUsername || data.loginUsername || null,
+        hasBiometric,
+        biometric: bio,
+        status: data.status || 'ACTIVE'
+      };
+    })
+    .filter(e => e.status !== 'INACTIVE');
+
+  const todayWib = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+  const todayRows = db.prepare('SELECT id, employeeId, date, checkInTime, checkOutTime, status, isLate, lateMinutes FROM attendances WHERE date = ?;').all(todayWib);
+  const todayAttendances = {};
+  for (const att of todayRows) {
+    todayAttendances[att.employeeId] = att;
+  }
+
+  return {
+    employees,
+    projects,
+    officeGeofence,
+    todayAttendances
+  };
 }
 
 export function saveProject(proj) {
@@ -670,46 +1417,12 @@ export function saveSalaryRules(rules) {
   return { success: true, rules };
 }
 
-export function saveReimbursement(claim) {
-  const db = getDatabase();
-  db.prepare(`
-    INSERT OR REPLACE INTO reimbursements (
-      id, employeeId, employeeName, employeeNik, category,
-      title, description, amount, date, receiptAttachment,
-      projectId, projectName, status, submittedAt,
-      reviewedBy, reviewedAt, rejectReason, data_json, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP);
-  `).run(
-    claim.id, claim.employeeId, claim.employeeName, claim.employeeNik,
-    claim.category, claim.title, claim.description, claim.amount,
-    claim.date, claim.receiptAttachment || null, claim.projectId || null,
-    claim.projectName || null, claim.status, claim.submittedAt,
-    claim.reviewedBy || null, claim.reviewedAt || null,
-    claim.rejectReason || null, JSON.stringify(claim)
-  );
-
-  addAuditLog({
-    action: 'SUBMIT_REIMBURSEMENT',
-    entity: 'reimbursements',
-    entityId: claim.id,
-    userName: claim.employeeName,
-    userNik: claim.employeeNik,
-    userRole: 'staff',
-    module: 'PAYROLL',
-    status: 'SUCCESS',
-    details: `Klaim reimbursement baru diajukan: "${claim.title}" sebesar Rp ${claim.amount?.toLocaleString('id-ID')} untuk proyek ${claim.projectName || claim.projectId}.`
-  });
-
-  return { success: true, claim };
-}
-
 export function resetDatabase() {
   const db = getDatabase();
   db.exec('DELETE FROM employees;');
   db.exec('DELETE FROM projects;');
   db.exec('DELETE FROM attendances;');
   db.exec('DELETE FROM approvals;');
-  db.exec('DELETE FROM reimbursements;');
   db.exec('DELETE FROM salary_rules;');
   db.exec('DELETE FROM audit_logs;');
   db.exec('DELETE FROM user_accounts;');
@@ -735,42 +1448,6 @@ export function seedDefaultUsers(db) {
       pass: 'admin123',
       role: 'Director',
       system_role: 'superuser'
-    },
-    {
-      id: 'USR-002',
-      employee_id: 'EMP-001',
-      email: 'galih@primeprojectx.net',
-      username: 'galih',
-      pass: 'prime123',
-      role: 'Director',
-      system_role: 'superuser'
-    },
-    {
-      id: 'USR-003',
-      employee_id: 'EMP-003',
-      email: 'hr@primeprojectx.net',
-      username: 'hrmanager',
-      pass: 'hr123',
-      role: 'HR_Manager',
-      system_role: 'admin'
-    },
-    {
-      id: 'USR-004',
-      employee_id: 'EMP-002',
-      email: 'pm@primeprojectx.net',
-      username: 'projmanager',
-      pass: 'pm123',
-      role: 'Project_Manager',
-      system_role: 'admin'
-    },
-    {
-      id: 'USR-005',
-      employee_id: 'EMP-004',
-      email: 'staff@primeprojectx.net',
-      username: 'karyawan',
-      pass: 'staff123',
-      role: 'Employee',
-      system_role: 'staff'
     }
   ];
 
@@ -780,27 +1457,42 @@ export function seedDefaultUsers(db) {
       u.id, u.employee_id, u.email, u.username, hash, salt, u.role, u.system_role, 'active'
     );
   }
-  console.log('[SQLite] 5 akun default Prime HRIS berhasil di-seed.');
+  // Ensure legacy USR-002 (galih) is purged
+  db.prepare("DELETE FROM user_accounts WHERE username = 'galih' OR id = 'USR-002';").run();
+  console.log('[SQLite] Akun Galih Primananda (Superuser Admin) berhasil di-seed.');
 }
 
 export function authenticateUser(identifier, password) {
   const db = getDatabase();
   const trimmed = (identifier || '').trim().toLowerCase();
-  const user = db.prepare(`
-    SELECT * FROM user_accounts 
-    WHERE LOWER(email) = ? OR LOWER(username) = ?;
-  `).get(trimmed, trimmed);
+  const candidates = db.prepare(`
+    SELECT u.* FROM user_accounts u
+    LEFT JOIN employees e ON u.employee_id = e.id
+    WHERE LOWER(u.email) = ? OR LOWER(u.username) = ? OR LOWER(e.nik) = ?;
+  `).all(trimmed, trimmed, trimmed);
+
+  if (!candidates || candidates.length === 0) {
+    return { success: false, error: 'Email atau Username / NIK tidak terdaftar' };
+  }
+
+  let user = null;
+  let hasInactive = false;
+
+  for (const cand of candidates) {
+    if (verifyPassword(password, cand.password_hash, cand.salt)) {
+      if (cand.status === 'active') {
+        user = cand;
+        break;
+      } else {
+        hasInactive = true;
+      }
+    }
+  }
 
   if (!user) {
-    return { success: false, error: 'Email atau Username tidak terdaftar' };
-  }
-
-  if (user.status !== 'active') {
-    return { success: false, error: 'Akun Anda sedang dinonaktifkan. Hubungi Administrator.' };
-  }
-
-  const isValid = verifyPassword(password, user.password_hash, user.salt);
-  if (!isValid) {
+    if (hasInactive) {
+      return { success: false, error: 'Akun Anda sedang dinonaktifkan. Hubungi Administrator.' };
+    }
     return { success: false, error: 'Password yang Anda masukkan salah' };
   }
 
@@ -817,6 +1509,13 @@ export function authenticateUser(identifier, password) {
     }
   }
 
+  if (employee && employee.status === 'INACTIVE') {
+    return {
+      success: false,
+      error: 'Akun Anda telah dinonaktifkan (Status: Non-Aktif / Resign). Hubungi HRD atau Administrator.'
+    };
+  }
+
   const token = generateToken(user);
 
   addAuditLog({
@@ -831,6 +1530,8 @@ export function authenticateUser(identifier, password) {
     details: `Pengguna ${user.username} (${user.role} / ${user.system_role}) berhasil login ke sistem PRIME HRIS.`
   });
 
+  const canonicalSystemRole = employee?.systemRole || user.system_role || 'staff';
+
   return {
     success: true,
     token,
@@ -839,7 +1540,74 @@ export function authenticateUser(identifier, password) {
       username: user.username,
       email: user.email,
       role: user.role,
-      systemRole: user.system_role,
+      systemRole: canonicalSystemRole,
+      status: user.status,
+      employeeId: user.employee_id,
+      lastLogin: now,
+      employee
+    }
+  };
+}
+
+export function authenticateByBiometric(employeeId, biometricVerification = {}) {
+  const db = getDatabase();
+  if (!employeeId) return { success: false, error: 'ID Karyawan tidak valid' };
+
+  // 1. Cari akun user yang terhubung ke employeeId ini
+  let user = db.prepare("SELECT * FROM user_accounts WHERE employee_id = ? AND status = 'active';").get(employeeId);
+
+  // Fallback untuk EMP-001 (Galih Primananda / Superuser)
+  if (!user && employeeId === 'EMP-001') {
+    user = db.prepare("SELECT * FROM user_accounts WHERE username = 'admin';").get();
+  }
+
+  if (!user) {
+    return { success: false, error: 'Akun login untuk karyawan ini belum aktif atau belum terdaftar di sistem.' };
+  }
+
+  // 2. Ambil data profil karyawan
+  let employee = null;
+  const empRow = db.prepare('SELECT id, nik, name, data_json FROM employees WHERE id = ?;').get(employeeId);
+  if (empRow) {
+    try { employee = JSON.parse(empRow.data_json); } catch (e) {}
+  }
+
+  if (employee && employee.status === 'INACTIVE') {
+    return {
+      success: false,
+      error: 'Akun karyawan Anda telah dinonaktifkan (Status: Non-Aktif / Resign). Hubungi HRD atau Administrator.'
+    };
+  }
+
+  // 3. Perbarui last_login
+  const now = new Date().toISOString();
+  db.prepare('UPDATE user_accounts SET last_login = ? WHERE id = ?;').run(now, user.id);
+
+  const token = generateToken(user);
+
+  addAuditLog({
+    action: 'AUTH_BIOMETRIC_LOGIN',
+    entity: 'user_accounts',
+    entityId: user.id,
+    userName: employee?.name || user.username,
+    userNik: employee?.nik || empRow?.nik,
+    userRole: user.system_role,
+    module: 'AUTH_BIOMETRIC',
+    status: 'SUCCESS',
+    details: `Login Biometrik Wajah 1:N Berhasil untuk ${employee?.name || user.username} (${user.role} / ${user.system_role}) - Skor Kemiripan: ${biometricVerification?.matchScore || 0}%`
+  });
+
+  const canonicalSystemRole = employee?.systemRole || user.system_role || 'staff';
+
+  return {
+    success: true,
+    token,
+    user: {
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      role: user.role,
+      systemRole: canonicalSystemRole,
       status: user.status,
       employeeId: user.employee_id,
       lastLogin: now,
@@ -864,6 +1632,8 @@ export function getCurrentUserFromToken(token) {
     }
   }
 
+  if (employee && employee.status === 'INACTIVE') return null;
+
   return {
     id: user.id,
     username: user.username,
@@ -887,8 +1657,8 @@ export function changeUserPassword(userId, oldPassword, newPassword) {
     if (!isValid) return { success: false, error: 'Password lama salah' };
   }
 
-  if (!newPassword || newPassword.length < 5) {
-    return { success: false, error: 'Password baru minimal 5 karakter' };
+  if (!newPassword || newPassword.length < 3) {
+    return { success: false, error: 'Password baru minimal 3 karakter' };
   }
 
   const { hash, salt } = hashPassword(newPassword);
@@ -907,6 +1677,284 @@ export function changeUserPassword(userId, oldPassword, newPassword) {
   });
 
   return { success: true };
+}
+
+export function resetEmployeePassword(employeeId, newPassword = 'zzz', operatorUser = null) {
+  const db = getDatabase();
+  const empRow = db.prepare('SELECT id, nik, name, data_json FROM employees WHERE id = ?;').get(employeeId);
+  if (!empRow) {
+    return { success: false, error: 'Karyawan tidak ditemukan di database' };
+  }
+
+  // Strict safeguard: EMP-001 (Galih Primananda) cannot be reset via bulk employee action
+  if (employeeId === 'EMP-001') {
+    if (!operatorUser || (operatorUser.employeeId !== 'EMP-001' && operatorUser.username !== 'admin')) {
+      return { success: false, error: 'Proteksi Keamanan: Akun Superuser Direktur (Galih Primananda) tidak dapat di-reset oleh pihak lain.' };
+    }
+  }
+
+  if (!newPassword || newPassword.length < 3) {
+    return { success: false, error: 'Password baru minimal 3 karakter' };
+  }
+
+  let parsedEmp = {};
+  try { parsedEmp = JSON.parse(empRow.data_json); } catch (e) {}
+
+  let user = db.prepare('SELECT * FROM user_accounts WHERE employee_id = ?;').get(employeeId);
+  const loginId = parsedEmp.loginId || user?.username || (employeeId === 'EMP-001' ? 'admin' : `d${String(employeeId.replace(/\\D/g, '')).padStart(3, '0')}`);
+
+  const { hash, salt } = hashPassword(newPassword);
+
+  if (!user) {
+    const userId = `USR-${employeeId}`;
+    const email = parsedEmp.email || `${loginId}@primeprojectx.net`;
+    const role = parsedEmp.role || 'Employee';
+    const systemRole = parsedEmp.systemRole || 'staff';
+    db.prepare(`
+      INSERT INTO user_accounts (id, employee_id, email, username, password_hash, salt, role, system_role, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+    `).run(userId, employeeId, email, loginId, hash, salt, role, systemRole);
+    user = { id: userId, username: loginId };
+  } else {
+    db.prepare('UPDATE user_accounts SET password_hash = ?, salt = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?;')
+      .run(hash, salt, user.id);
+  }
+
+  // Sync back loginId to data_json if missing
+  if (!parsedEmp.loginId) {
+    parsedEmp.loginId = user.username || loginId;
+    db.prepare('UPDATE employees SET data_json = ? WHERE id = ?;').run(JSON.stringify(parsedEmp), employeeId);
+  }
+
+  addAuditLog({
+    action: 'RESET_PASSWORD',
+    entity: 'user_accounts',
+    entityId: user.id,
+    userName: operatorUser?.name || operatorUser?.username || 'Admin HR',
+    userNik: operatorUser?.nik || 'ADMIN',
+    userRole: operatorUser?.systemRole || 'admin',
+    module: 'AUTH',
+    status: 'SUCCESS',
+    details: `Password akun untuk ${empRow.name} (ID Login: ${user.username || loginId}) berhasil di-reset menjadi default '${newPassword}'.`
+  });
+
+  return {
+    success: true,
+    message: `Password untuk ${empRow.name} (${user.username || loginId}) berhasil di-reset ke: ${newPassword}`,
+    loginId: user.username || loginId,
+    defaultPassword: newPassword
+  };
+}
+
+function cleanDigits(raw) {
+  if (!raw) return '';
+  return String(raw).replace(/\D+/g, '');
+}
+
+function cleanPhoneMatch(a, b) {
+  const d1 = cleanDigits(a);
+  const d2 = cleanDigits(b);
+  if (!d1 || !d2) return false;
+  if (d1 === d2) return true;
+  const s1 = d1.startsWith('62') ? d1.slice(2) : (d1.startsWith('0') ? d1.slice(1) : d1);
+  const s2 = d2.startsWith('62') ? d2.slice(2) : (d2.startsWith('0') ? d2.slice(1) : d2);
+  return s1 === s2 || (s1.length >= 8 && s2.length >= 8 && (s1.endsWith(s2) || s2.endsWith(s1)));
+}
+
+export function generateTemporaryPassword(rawIdentifier) {
+  const db = getDatabase();
+  const input = String(rawIdentifier || '').trim();
+  if (!input) {
+    return { success: false, error: 'Nomor HP, Email, atau ID/Username wajib diisi' };
+  }
+
+  const lowerInput = input.toLowerCase();
+  const digits = cleanDigits(input);
+
+  let targetUser = null;
+  let targetEmployee = null;
+
+  // 1. Direct query in user_accounts (username, email, or linked employee NIK / ID)
+  const candUsers = db.prepare(`
+    SELECT u.*, e.id AS emp_id, e.name AS emp_name, e.email AS emp_email, e.phone AS emp_phone, e.nik AS emp_nik, e.data_json
+    FROM user_accounts u
+    LEFT JOIN employees e ON u.employee_id = e.id
+    WHERE LOWER(u.username) = ? OR LOWER(u.email) = ? OR LOWER(e.nik) = ? OR LOWER(e.id) = ?;
+  `).all(lowerInput, lowerInput, lowerInput, lowerInput);
+
+  if (candUsers && candUsers.length > 0) {
+    targetUser = candUsers.find(u => u.status === 'active') || candUsers[0];
+    if (targetUser.emp_id) {
+      targetEmployee = {
+        id: targetUser.emp_id,
+        name: targetUser.emp_name,
+        email: targetUser.emp_email || targetUser.email,
+        phone: targetUser.emp_phone,
+        nik: targetUser.emp_nik,
+        data_json: targetUser.data_json
+      };
+    }
+  }
+
+  // 2. Direct query in employees (email, nik, id, name)
+  if (!targetUser && !targetEmployee) {
+    const candEmps = db.prepare(`
+      SELECT e.*, u.id AS u_id, u.username AS u_username, u.email AS u_email, u.status AS u_status
+      FROM employees e
+      LEFT JOIN user_accounts u ON (u.employee_id = e.id OR LOWER(u.username) = LOWER(e.nik))
+      WHERE LOWER(e.email) = ? OR LOWER(e.nik) = ? OR LOWER(e.id) = ? OR LOWER(e.name) = ?;
+    `).all(lowerInput, lowerInput, lowerInput, lowerInput);
+
+    if (candEmps && candEmps.length > 0) {
+      const e = candEmps[0];
+      targetEmployee = e;
+      if (e.u_id) {
+        targetUser = db.prepare('SELECT * FROM user_accounts WHERE id = ?;').get(e.u_id);
+      }
+    }
+  }
+
+  // 3. Search by Phone Number across employees if input contains digits
+  if (!targetEmployee && digits.length >= 8) {
+    const allEmps = db.prepare('SELECT id, nik, name, email, phone, data_json FROM employees;').all();
+    for (const e of allEmps) {
+      if (cleanPhoneMatch(e.phone, input)) {
+        targetEmployee = e;
+        targetUser = db.prepare('SELECT * FROM user_accounts WHERE employee_id = ?;').get(e.id);
+        break;
+      }
+    }
+  }
+
+  if (!targetUser && !targetEmployee) {
+    return {
+      success: false,
+      error: 'Data pengguna tidak ditemukan. Pastikan Nomor HP, Email, atau Username/NIK yang Anda masukkan sudah terdaftar di sistem.'
+    };
+  }
+
+  // Determine IDs & Display Info
+  const empId = targetEmployee?.id || targetUser?.employee_id;
+  const displayName = targetEmployee?.name || targetUser?.username || 'Karyawan';
+  const targetEmail = targetUser?.email || targetEmployee?.email;
+  const targetPhone = targetEmployee?.phone;
+  let username = targetUser?.username;
+
+  if (!username) {
+    username = targetEmployee?.loginId || (empId === 'EMP-001' ? 'admin' : `d${String(empId.replace(/\D/g, '')).padStart(3, '0')}`);
+  }
+
+  // Generate Temporary Password (Readable & Secure PIN)
+  const randomPin = Math.floor(1000 + Math.random() * 9000);
+  const tempPassword = `PRIME-${randomPin}`;
+  const { hash, salt } = hashPassword(tempPassword);
+
+  // Update or insert into user_accounts
+  if (targetUser) {
+    db.prepare('UPDATE user_accounts SET password_hash = ?, salt = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?;')
+      .run(hash, salt, targetUser.id);
+  } else if (empId) {
+    const userId = `USR-${empId}`;
+    const userRole = targetEmployee?.role || 'Employee';
+    const userSysRole = targetEmployee?.systemRole || 'staff';
+    db.prepare(`
+      INSERT OR REPLACE INTO user_accounts (id, employee_id, email, username, password_hash, salt, role, system_role, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+    `).run(userId, empId, targetEmail || `${username}@primeprojectx.net`, username, hash, salt, userRole, userSysRole);
+  }
+
+  // Audit Log
+  addAuditLog({
+    action: 'FORGOT_PASSWORD_RESET',
+    entity: 'user_accounts',
+    entityId: targetUser?.id || empId,
+    userName: displayName,
+    userNik: targetEmployee?.nik || 'N/A',
+    userRole: targetUser?.system_role || 'staff',
+    module: 'AUTH',
+    status: 'SUCCESS',
+    details: `Password sementara berhasil digenerate untuk pengguna ${username} (${displayName}).`
+  });
+
+  return {
+    success: true,
+    tempPassword,
+    username,
+    displayName,
+    targetPhone,
+    targetEmail,
+    employeeId: empId
+  };
+}
+
+export function saveEmployeeBiometric(employeeId, biometricProfile, updateAvatarAsWell = false, operatorUser = null) {
+  const db = getDatabase();
+  const empRow = db.prepare('SELECT id, nik, name, avatar, data_json FROM employees WHERE id = ?;').get(employeeId);
+  if (!empRow) {
+    return { success: false, error: 'Karyawan tidak ditemukan di database' };
+  }
+
+  let parsedEmp = {};
+  try { parsedEmp = JSON.parse(empRow.data_json); } catch (e) {}
+
+  parsedEmp.biometric = biometricProfile;
+
+  if (updateAvatarAsWell && biometricProfile.samples?.front) {
+    parsedEmp.avatar = biometricProfile.samples.front;
+    db.prepare('UPDATE employees SET avatar = ?, data_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?;')
+      .run(parsedEmp.avatar, JSON.stringify(parsedEmp), employeeId);
+  } else {
+    db.prepare('UPDATE employees SET data_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?;')
+      .run(JSON.stringify(parsedEmp), employeeId);
+  }
+
+  addAuditLog({
+    action: 'BIOMETRIC_ENROLLED',
+    entity: 'employees',
+    entityId: employeeId,
+    userName: operatorUser?.name || operatorUser?.username || 'Sistem HRIS',
+    userNik: operatorUser?.nik || 'SYSTEM',
+    userRole: operatorUser?.systemRole || 'staff',
+    module: 'BIOMETRIC',
+    status: 'SUCCESS',
+    details: `Profil biometrik wajah 4 pose (Depan, Kanan, Kiri, Senyum) untuk ${empRow.name} (${empRow.nik}) berhasil didaftarkan.`
+  });
+
+  return {
+    success: true,
+    message: `Profil biometrik wajah untuk ${empRow.name} berhasil disimpan.`,
+    employee: parsedEmp
+  };
+}
+
+export function deleteEmployeeBiometric(employeeId, operatorUser = null) {
+  const db = getDatabase();
+  const empRow = db.prepare('SELECT id, nik, name, data_json FROM employees WHERE id = ?;').get(employeeId);
+  if (!empRow) {
+    return { success: false, error: 'Karyawan tidak ditemukan' };
+  }
+
+  let parsedEmp = {};
+  try { parsedEmp = JSON.parse(empRow.data_json); } catch (e) {}
+
+  delete parsedEmp.biometric;
+
+  db.prepare('UPDATE employees SET data_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?;')
+    .run(JSON.stringify(parsedEmp), employeeId);
+
+  addAuditLog({
+    action: 'BIOMETRIC_DELETED',
+    entity: 'employees',
+    entityId: employeeId,
+    userName: operatorUser?.name || operatorUser?.username || 'Admin HR',
+    userNik: operatorUser?.nik || 'ADMIN',
+    userRole: operatorUser?.systemRole || 'admin',
+    module: 'BIOMETRIC',
+    status: 'SUCCESS',
+    details: `Profil biometrik wajah untuk ${empRow.name} (${empRow.nik}) telah di-reset/dihapus.`
+  });
+
+  return { success: true, message: `Profil biometrik untuk ${empRow.name} berhasil di-reset.`, employee: parsedEmp };
 }
 
 export function listUserAccounts() {
@@ -947,7 +1995,7 @@ export function seedRealisticAuditLogs(db) {
       details: 'Presensi On-Site WFO shift pagi berhasil diverifikasi di kantor pusat.',
       ipAddress: '103.31.205.218',
       status: 'SUCCESS',
-      metadata: JSON.stringify({ wifi: 'PRIME-Corporate-5G' })
+      metadata: JSON.stringify({ locationMode: 'OFFICE_GEOFENCE' })
     },
     {
       timestamp: '2026-09-07 09:00:15',
@@ -1013,11 +2061,11 @@ export function seedRealisticAuditLogs(db) {
       action: 'APPROVAL_REJECTED',
       module: 'APPROVALS',
       entity: 'approvals',
-      entityId: 'REIMB-9021',
-      details: 'Menolak klaim reimbursement REIMB-9021. Alasan: Nota kuitansi tidak memiliki stempel resmi vendor.',
+      entityId: 'JUSTIF-9021',
+      details: 'Menolak justifikasi keterlambatan JUSTIF-9021. Alasan: Bukti kendala di perjalanan tidak disertai dokumentasi valid.',
       ipAddress: '103.31.205.218',
       status: 'FAILED',
-      metadata: JSON.stringify({ reason: 'Nota kuitansi tidak memiliki stempel resmi vendor', amount: 180000 })
+      metadata: JSON.stringify({ reason: 'Bukti kendala di perjalanan tidak valid', lateMinutes: 45 })
     },
     {
       timestamp: '2026-09-08 17:10:00',
@@ -1045,7 +2093,7 @@ export function seedRealisticAuditLogs(db) {
       details: 'Presensi On-Site WFO berhasil divalidasi. Kamera cerdas mendeteksi wajah dengan rasio 1:1.',
       ipAddress: '103.31.205.218',
       status: 'SUCCESS',
-      metadata: JSON.stringify({ distanceMeters: 14, wifi: 'PRIME-Corporate-5G' })
+      metadata: JSON.stringify({ distanceMeters: 14, geofenceStatus: 'VALID' })
     },
     {
       timestamp: '2026-09-09 08:35:12',
@@ -1056,10 +2104,10 @@ export function seedRealisticAuditLogs(db) {
       module: 'ATTENDANCE',
       entity: 'attendances',
       entityId: 'ATT-20260909-006',
-      details: 'Presensi terlambat 5 menit. Alasan: Kemacetan perlintasan jalur logistik industri Manyar.',
+      details: 'Presensi terlambat 5 menit. Alasan: Kemacetan perlintasan jalur logistik industri Sidoarjo.',
       ipAddress: '103.31.205.218',
       status: 'WARNING',
-      metadata: JSON.stringify({ lateMinutes: 5, reason: 'Kemacetan perlintasan jalur logistik industri Manyar' })
+      metadata: JSON.stringify({ lateMinutes: 5, reason: 'Kemacetan perlintasan jalur logistik industri Sidoarjo' })
     },
     {
       timestamp: '2026-09-09 10:05:18',
@@ -1070,10 +2118,10 @@ export function seedRealisticAuditLogs(db) {
       module: 'HR_RULES',
       entity: 'salary_rules',
       entityId: 'default',
-      details: 'Pembaruan titik koordinat Geofence: Lat -7.118942, Lng 112.584319, radius 350 meter (Kawasan Kantor Pusat & Hub PRIME).',
+      details: 'Pembaruan titik koordinat Geofence: Lat -7.395625, Lng 112.717574, radius 350 meter (Kawasan Kantor Pusat & Hub PRIME).',
       ipAddress: '103.31.205.218',
       status: 'SUCCESS',
-      metadata: JSON.stringify({ lat: -7.118942, lng: 112.584319, radiusMeters: 350 })
+      metadata: JSON.stringify({ lat: -7.395625, lng: 112.717574, radiusMeters: 350 })
     },
     {
       timestamp: '2026-09-09 11:20:45',
@@ -1098,10 +2146,10 @@ export function seedRealisticAuditLogs(db) {
       module: 'APPROVALS',
       entity: 'approvals',
       entityId: 'APPR-002',
-      details: 'Menyetujui klaim reimbursement konsumsi lembur proyek PT Freeport Indonesia sebesar Rp 375.000.',
+      details: 'Menyetujui permohonan lembur shift malam proyek PT Freeport Indonesia durasi 4 jam.',
       ipAddress: '192.168.3.122',
       status: 'SUCCESS',
-      metadata: JSON.stringify({ amount: 375000, project: 'PT Freeport Indonesia' })
+      metadata: JSON.stringify({ overtimeHours: 4, project: 'PT Freeport Indonesia' })
     },
     {
       timestamp: '2026-09-09 15:40:22',
@@ -1112,24 +2160,24 @@ export function seedRealisticAuditLogs(db) {
       module: 'EMPLOYEES',
       entity: 'employees',
       entityId: 'EMP-007',
-      details: 'Pembaruan nomor rekening bank & validasi MAC Address hardware (FC:FB:FB:12:34:56) untuk karyawan Doni Prasetyo.',
+      details: 'Pembaruan nomor rekening bank & verifikasi biometrik wajah untuk karyawan Doni Prasetyo.',
       ipAddress: '103.31.205.218',
       status: 'SUCCESS',
-      metadata: JSON.stringify({ employeeId: 'EMP-007', macAddress: 'FC:FB:FB:12:34:56' })
+      metadata: JSON.stringify({ employeeId: 'EMP-007', biometricStatus: 'VERIFIED' })
     },
     {
       timestamp: '2026-09-09 16:30:00',
       userName: 'Rahmat Hidayat',
       userNik: 'PRIME-2023-014',
       userRole: 'staff',
-      action: 'SUBMIT_REIMBURSEMENT',
-      module: 'PAYROLL',
-      entity: 'reimbursements',
-      entityId: 'REIMB-4412',
-      details: 'Mengajukan klaim reimbursement: "BBM Mobil Operasional Kunjungan Smelter Manyar" sebesar Rp 250.000 (Proyek PRIME-ENG-01).',
+      action: 'SUBMIT_LEAVE',
+      module: 'APPROVALS',
+      entity: 'approvals',
+      entityId: 'LEAVE-4412',
+      details: 'Mengajukan cuti tahunan: "Urusan Keluarga & Mudik" durasi 2 hari kerja.',
       ipAddress: '103.31.205.218',
       status: 'SUCCESS',
-      metadata: JSON.stringify({ amount: 250000, category: 'TRANSPORT_BBM', project: 'PRIME-ENG-01' })
+      metadata: JSON.stringify({ days: 2, leaveType: 'ANNUAL_LEAVE' })
     },
     {
       timestamp: '2026-09-09 17:05:12',
@@ -1171,7 +2219,7 @@ export function seedRealisticAuditLogs(db) {
       details: 'Presensi On-Site WFO berhasil divalidasi melalui Gateway Utama PRIME. Koordinat GPS akurat (akurasi 5.2m).',
       ipAddress: '103.31.205.218',
       status: 'SUCCESS',
-      metadata: JSON.stringify({ distanceMeters: 15, wifi: 'PRIME-Corporate-5G', auditHash: '#901233' })
+      metadata: JSON.stringify({ distanceMeters: 15, geofenceStatus: 'VALID', auditHash: '#901233' })
     },
     {
       timestamp: '2026-09-10 08:18:02',
@@ -1185,7 +2233,7 @@ export function seedRealisticAuditLogs(db) {
       details: 'Presensi selfie WFO berhasil diverifikasi. Watermark audit hash #789211 terekam dalam database.',
       ipAddress: '103.31.205.218',
       status: 'SUCCESS',
-      metadata: JSON.stringify({ distanceMeters: 28, wifi: 'PRIME-Corporate-5G', auditHash: '#789211' })
+      metadata: JSON.stringify({ distanceMeters: 28, geofenceStatus: 'VALID', auditHash: '#789211' })
     },
     {
       timestamp: '2026-09-10 08:25:44',
@@ -1196,10 +2244,10 @@ export function seedRealisticAuditLogs(db) {
       module: 'ATTENDANCE',
       entity: 'attendances',
       entityId: 'ATT-20260910-003',
-      details: 'Presensi selfie WFO berhasil diverifikasi. Jarak GPS: 42 meter dari pusat Geofence kantor. SSID: PRIME-Corporate-5G.',
+      details: 'Presensi selfie WFO berhasil diverifikasi. Jarak GPS: 42 meter dari pusat Geofence kantor.',
       ipAddress: '103.31.205.218',
       status: 'SUCCESS',
-      metadata: JSON.stringify({ distanceMeters: 42, wifi: 'PRIME-Corporate-5G', auditHash: '#892144' })
+      metadata: JSON.stringify({ distanceMeters: 42, geofenceStatus: 'VALID', auditHash: '#892144' })
     },
     {
       timestamp: '2026-09-10 08:32:10',
@@ -1338,7 +2386,9 @@ export function getAuditLogsPaginated({
   search = '',
   module = '',
   role = '',
-  status = ''
+  status = '',
+  startDate = '',
+  endDate = ''
 } = {}) {
   const db = getDatabase();
   const safePage = Math.max(1, parseInt(page, 10) || 1);
@@ -1370,6 +2420,16 @@ export function getAuditLogsPaginated({
     params.push(role.toLowerCase());
   }
 
+  if (startDate && startDate.trim()) {
+    whereClauses.push(`substr(timestamp, 1, 10) >= ?`);
+    params.push(startDate.trim());
+  }
+
+  if (endDate && endDate.trim()) {
+    whereClauses.push(`substr(timestamp, 1, 10) <= ?`);
+    params.push(endDate.trim());
+  }
+
   if (status && status !== 'ALL') {
     whereClauses.push(`status = ?`);
     params.push(status);
@@ -1399,3 +2459,494 @@ export function getAuditLogsPaginated({
     }
   };
 }
+
+export function saveWaNotificationLog(log) {
+  const db = getDatabase();
+  const id = log.id || `WA-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  try {
+    db.prepare(`
+      INSERT INTO wa_notifications (id, recipient_id, recipient_name, recipient_phone, event_type, title, message, status, error_msg, metadata, sent_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    `).run(
+      id,
+      log.recipientId || null,
+      log.recipientName || null,
+      log.recipientPhone,
+      log.eventType,
+      log.title || null,
+      log.message,
+      log.status || 'SENT',
+      log.errorMsg || null,
+      log.metadata ? JSON.stringify(log.metadata) : null,
+      log.sentAt || new Date().toISOString()
+    );
+  } catch (err) {
+    console.warn('[SQLite] saveWaNotificationLog error:', err.message);
+  }
+  return { id, ...log };
+}
+
+export function getWaNotificationLogs(limit = 100) {
+  const db = getDatabase();
+  try {
+    return db.prepare('SELECT * FROM wa_notifications ORDER BY sent_at DESC LIMIT ?;').all(limit);
+  } catch (err) {
+    console.warn('[SQLite] getWaNotificationLogs error:', err.message);
+    return [];
+  }
+}
+
+export function hasSentTodayWaReminder(employeeId, eventType, dateStr) {
+  const db = getDatabase();
+  try {
+    const prefix = `${dateStr}%`;
+    const row = db.prepare(`
+      SELECT count(*) as count FROM wa_notifications
+      WHERE recipient_id = ? AND event_type = ? AND sent_at LIKE ? AND status = 'SENT';
+    `).get(employeeId, eventType, prefix);
+    return (row?.count || 0) > 0;
+  } catch (err) {
+    return false;
+  }
+}
+
+export function saveEmailNotificationLog(log) {
+  const db = getDatabase();
+  const id = log.id || `EMAIL-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+  try {
+    db.prepare(`
+      INSERT INTO email_notifications (id, recipient_id, recipient_name, recipient_email, event_type, subject, html_body, text_body, status, error_msg, metadata, sent_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    `).run(
+      id,
+      log.recipientId || null,
+      log.recipientName || null,
+      log.recipientEmail,
+      log.eventType,
+      log.subject,
+      log.htmlBody || null,
+      log.textBody || null,
+      log.status || 'SENT',
+      log.errorMsg || null,
+      log.metadata ? JSON.stringify(log.metadata) : null,
+      log.sentAt || new Date().toISOString()
+    );
+  } catch (err) {
+    console.warn('[SQLite] saveEmailNotificationLog error:', err.message);
+  }
+  return { id, ...log };
+}
+
+export function getEmailNotificationLogs(limit = 100) {
+  const db = getDatabase();
+  try {
+    return db.prepare('SELECT * FROM email_notifications ORDER BY sent_at DESC LIMIT ?;').all(limit);
+  } catch (err) {
+    console.warn('[SQLite] getEmailNotificationLogs error:', err.message);
+    return [];
+  }
+}
+
+export function hasSentTodayEmailReminder(employeeId, eventType, dateStr) {
+  const db = getDatabase();
+  try {
+    const prefix = `${dateStr}%`;
+    const row = db.prepare(`
+      SELECT count(*) as count FROM email_notifications
+      WHERE recipient_id = ? AND event_type = ? AND sent_at LIKE ? AND status = 'SENT';
+    `).get(employeeId, eventType, prefix);
+    return (row?.count || 0) > 0;
+  } catch (err) {
+    return false;
+  }
+}
+
+export function generateDefaultAnnualPeriods(year, cutoffStart = 21, cutoffEnd = 20, payday = 25, weeklyOffDays = [0, 6]) {
+  const monthNames = [
+    'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+    'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+  ];
+
+  const nationalHolidays = {
+    [`${year}-01-01`]: 'Tahun Baru Masehi',
+    [`${year}-01-29`]: 'Tahun Baru Imlek 2577 Kongzili',
+    [`${year}-03-20`]: 'Hari Raya Nyepi Tahun Baru Saka 1948',
+    [`${year}-03-21`]: 'Hari Raya Idul Fitri (Hari 1)',
+    [`${year}-03-22`]: 'Hari Raya Idul Fitri (Hari 2)',
+    [`${year}-04-03`]: 'Wafat Yesus Kristus',
+    [`${year}-05-01`]: 'Hari Buruh Internasional',
+    [`${year}-05-14`]: 'Kenaikan Yesus Kristus',
+    [`${year}-05-31`]: 'Hari Raya Waisak 2570 BE',
+    [`${year}-06-01`]: 'Hari Lahir Pancasila',
+    [`${year}-06-27`]: 'Hari Raya Idul Adha',
+    [`${year}-07-16`]: 'Tahun Baru Islam',
+    [`${year}-08-17`]: 'Hari Kemerdekaan Republik Indonesia',
+    [`${year}-09-25`]: 'Maulid Nabi Muhammad SAW',
+    [`${year}-12-25`]: 'Hari Raya Natal'
+  };
+
+  const periods = [];
+
+  for (let m = 0; m < 12; m++) {
+    const startYear = m === 0 ? year - 1 : year;
+    const startMonth = m === 0 ? 12 : m;
+    const startDateStr = `${startYear}-${String(startMonth).padStart(2, '0')}-${String(cutoffStart).padStart(2, '0')}`;
+    const endDateStr = `${year}-${String(m + 1).padStart(2, '0')}-${String(cutoffEnd).padStart(2, '0')}`;
+    const paydayStr = `${year}-${String(m + 1).padStart(2, '0')}-${String(payday).padStart(2, '0')}`;
+
+    let effectiveWorkDays = 0;
+    let weeklyOffDaysCount = 0;
+    let holidaysCount = 0;
+
+    let curr = new Date(`${startDateStr}T00:00:00`);
+    const end = new Date(`${endDateStr}T00:00:00`);
+
+    while (curr <= end) {
+      const dayOfWeek = curr.getDay();
+      const y = curr.getFullYear();
+      const mo = String(curr.getMonth() + 1).padStart(2, '0');
+      const d = String(curr.getDate()).padStart(2, '0');
+      const curStr = `${y}-${mo}-${d}`;
+
+      const isWeeklyOff = weeklyOffDays.includes(dayOfWeek);
+      const isNationalHoliday = Boolean(nationalHolidays[curStr]);
+
+      if (isWeeklyOff) {
+        weeklyOffDaysCount++;
+      } else if (isNationalHoliday) {
+        holidaysCount++;
+      } else {
+        effectiveWorkDays++;
+      }
+
+      curr.setDate(curr.getDate() + 1);
+    }
+
+    const todayYMD = new Date().toISOString().substring(0, 10);
+    const isOpen = todayYMD >= startDateStr && todayYMD <= endDateStr;
+    const isPast = todayYMD > endDateStr;
+
+    periods.push({
+      periodId: `PERIOD-${year}-${String(m + 1).padStart(2, '0')}`,
+      monthIndex: m,
+      periodName: `Periode ${monthNames[m]} ${year}`,
+      startDate: startDateStr,
+      endDate: endDateStr,
+      paydayDate: paydayStr,
+      attendanceOpen: isPast ? false : true,
+      payrollStatus: isPast ? 'PAID' : (isOpen ? 'OPEN' : 'DRAFT'),
+      totalCalendarDays: effectiveWorkDays + weeklyOffDaysCount + holidaysCount,
+      effectiveWorkDays,
+      weeklyOffDaysCount,
+      holidaysCount,
+      notes: `Siklus Presensi & Payroll ${monthNames[m]} ${year}`
+    });
+  }
+
+  return periods;
+}
+
+export function getWorkCalendarConfig(year = 2026) {
+  const db = getDatabase();
+  const targetYear = Number(year) || 2026;
+  const configId = `CALENDAR_${targetYear}`;
+
+  try {
+    const row = db.prepare('SELECT * FROM annual_work_calendar WHERE id = ?;').get(configId);
+    if (row) {
+      return {
+        id: row.id,
+        year: row.year,
+        weeklyOffDays: JSON.parse(row.weeklyOffDays || '[0, 6]'),
+        defaultCutoffStartDay: row.defaultCutoffStartDay || 21,
+        defaultCutoffEndDay: row.defaultCutoffEndDay || 20,
+        defaultPaydayDate: row.defaultPaydayDate || 25,
+        periods: JSON.parse(row.periods_json || '[]'),
+        updatedAt: row.updated_at,
+        updatedBy: row.updated_by
+      };
+    }
+  } catch (e) {
+    console.warn('[DB getWorkCalendarConfig warning]', e.message);
+  }
+
+  const defaultPeriods = generateDefaultAnnualPeriods(targetYear, 21, 20, 25, [0, 6]);
+  return {
+    id: configId,
+    year: targetYear,
+    weeklyOffDays: [0, 6],
+    defaultCutoffStartDay: 21,
+    defaultCutoffEndDay: 20,
+    defaultPaydayDate: 25,
+    periods: defaultPeriods,
+    updatedAt: new Date().toISOString(),
+    updatedBy: 'System Default'
+  };
+}
+
+export function saveWorkCalendarConfig(config, user = null) {
+  const db = getDatabase();
+  const targetYear = Number(config.year) || 2026;
+  const configId = `CALENDAR_${targetYear}`;
+  const weeklyOffDaysJson = JSON.stringify(config.weeklyOffDays || [0, 6]);
+  const periodsJson = JSON.stringify(config.periods || []);
+  const now = new Date().toISOString();
+  const userName = user?.name || user?.username || 'HR Administrator';
+
+  db.prepare(`
+    INSERT INTO annual_work_calendar (
+      id, year, weeklyOffDays, defaultCutoffStartDay, defaultCutoffEndDay, defaultPaydayDate, periods_json, updated_at, updated_by
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      weeklyOffDays = excluded.weeklyOffDays,
+      defaultCutoffStartDay = excluded.defaultCutoffStartDay,
+      defaultCutoffEndDay = excluded.defaultCutoffEndDay,
+      defaultPaydayDate = excluded.defaultPaydayDate,
+      periods_json = excluded.periods_json,
+      updated_at = excluded.updated_at,
+      updated_by = excluded.updated_by;
+  `).run(
+    configId,
+    targetYear,
+    weeklyOffDaysJson,
+    Number(config.defaultCutoffStartDay) || 21,
+    Number(config.defaultCutoffEndDay) || 20,
+    Number(config.defaultPaydayDate) || 25,
+    periodsJson,
+    now,
+    userName
+  );
+
+  addAuditLog({
+    action: 'SAVE_ANNUAL_WORK_CALENDAR',
+    entity: 'WORK_CALENDAR',
+    entityId: configId,
+    details: `Konfigurasi kalender kerja tahun ${targetYear} & cut-off presensi diperbarui oleh ${userName}.`,
+    userName: userName,
+    userRole: user?.role || 'admin',
+    module: 'HRIS_CALENDAR'
+  });
+
+  return getWorkCalendarConfig(targetYear);
+}
+
+
+
+
+
+// =============================================================================
+// CASUAL FIELD WORKER ATTENDANCE (PRESENSI TUKANG LAPANGAN)
+// =============================================================================
+export function getCasualWorkers(projectId = null) {
+  const db = getDatabase();
+  if (projectId) {
+    return db.prepare(`SELECT * FROM casual_workers WHERE projectId = ? AND status = 'active' ORDER BY name ASC;`).all(projectId);
+  }
+  return db.prepare(`SELECT * FROM casual_workers WHERE status = 'active' ORDER BY name ASC;`).all();
+}
+
+export function saveCasualWorker(worker) {
+  const db = getDatabase();
+  const id = worker.id || `CW-${Date.now()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+  const now = new Date().toISOString();
+  const existing = db.prepare('SELECT id FROM casual_workers WHERE id = ?;').get(id);
+
+  if (existing) {
+    db.prepare(`
+      UPDATE casual_workers
+      SET projectId = ?, name = ?, status = ?, updatedAt = ?
+      WHERE id = ?;
+    `).run(worker.projectId, worker.name.trim(), worker.status || 'active', now, id);
+  } else {
+    db.prepare(`
+      INSERT INTO casual_workers (id, projectId, name, status, createdBy, createdByName, createdAt, updatedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+    `).run(id, worker.projectId, worker.name.trim(), worker.status || 'active', worker.createdBy || null, worker.createdByName || null, now, now);
+  }
+  return db.prepare('SELECT * FROM casual_workers WHERE id = ?;').get(id);
+}
+
+export function getCasualAttendances(filters = {}) {
+  const db = getDatabase();
+  let query = 'SELECT a.*, p.name as projectName FROM casual_worker_attendances a LEFT JOIN projects p ON a.projectId = p.id WHERE 1=1';
+  const params = [];
+
+  if (filters.projectId) {
+    query += ' AND a.projectId = ?';
+    params.push(filters.projectId);
+  }
+  if (filters.date) {
+    query += ' AND a.date = ?';
+    params.push(filters.date);
+  }
+  if (filters.startDate) {
+    query += ' AND a.date >= ?';
+    params.push(filters.startDate);
+  }
+  if (filters.endDate) {
+    query += ' AND a.date <= ?';
+    params.push(filters.endDate);
+  }
+
+  query += ' ORDER BY a.date DESC, a.checkInTime DESC';
+  if (filters.limit) {
+    query += ` LIMIT ${Math.max(1, parseInt(filters.limit, 10) || 200)}`;
+  }
+
+  return db.prepare(query).all(...params);
+}
+
+export function saveCasualAttendance(record) {
+  const db = getDatabase();
+  const now = new Date();
+  const wibTime = now.toLocaleTimeString('id-ID', {
+    timeZone: 'Asia/Jakarta',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  }).replace(/\./g, ':');
+  const wibDate = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+
+  const id = record.id || `CWA-${Date.now()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+  const date = record.date || wibDate;
+  const checkInTime = record.checkInTime ? record.checkInTime.replace(/\./g, ':') : wibTime;
+
+  // Check if attendance already recorded today for this worker and project
+  const existing = db.prepare('SELECT id FROM casual_worker_attendances WHERE workerId = ? AND projectId = ? AND date = ?;').get(record.workerId, record.projectId, date);
+
+  if (existing) {
+    db.prepare(`
+      UPDATE casual_worker_attendances
+      SET checkInTime = ?, photoUrl = ?, latitude = ?, longitude = ?, address = ?, notes = ?, verifiedByPmId = ?, verifiedByPmName = ?
+      WHERE id = ?;
+    `).run(
+      checkInTime,
+      record.photoUrl || null,
+      record.latitude || null,
+      record.longitude || null,
+      record.address || null,
+      record.notes || null,
+      record.verifiedByPmId,
+      record.verifiedByPmName,
+      existing.id
+    );
+    return db.prepare('SELECT * FROM casual_worker_attendances WHERE id = ?;').get(existing.id);
+  } else {
+    db.prepare(`
+      INSERT INTO casual_worker_attendances (
+        id, workerId, workerName, projectId, date, checkInTime,
+        photoUrl, latitude, longitude, address, notes,
+        verifiedByPmId, verifiedByPmName
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    `).run(
+      id,
+      record.workerId,
+      record.workerName,
+      record.projectId,
+      date,
+      checkInTime,
+      record.photoUrl || null,
+      record.latitude || null,
+      record.longitude || null,
+      record.address || null,
+      record.notes || null,
+      record.verifiedByPmId,
+      record.verifiedByPmName
+    );
+    return db.prepare('SELECT * FROM casual_worker_attendances WHERE id = ?;').get(id);
+  }
+}
+
+export function deleteCasualAttendance(id) {
+  const db = getDatabase();
+  return db.prepare('DELETE FROM casual_worker_attendances WHERE id = ?;').run(id);
+}
+
+export function isWaOptedIn(phone) {
+  if (!phone) return false;
+  const digits = String(phone).replace(/\D+/g, '');
+  let norm = digits;
+  if (norm.startsWith('0')) norm = `62${norm.slice(1)}`;
+  else if (norm.startsWith('8')) norm = `62${norm}`;
+  else if (norm.startsWith('620')) norm = `62${norm.slice(3)}`;
+  if (!norm.startsWith('62') || norm.length < 10) return false;
+
+  const db = getDatabase();
+  try {
+    const row = db.prepare('SELECT phone FROM wa_opt_ins WHERE phone = ?;').get(norm);
+    return Boolean(row);
+  } catch (e) {
+    return false;
+  }
+}
+
+export function recordWaOptIn(phone, messageText = '', pushName = '') {
+  if (!phone) return null;
+  const digits = String(phone).replace(/\D+/g, '');
+  let norm = digits;
+  if (norm.startsWith('0')) norm = `62${norm.slice(1)}`;
+  else if (norm.startsWith('8')) norm = `62${norm}`;
+  else if (norm.startsWith('620')) norm = `62${norm.slice(3)}`;
+  if (!norm.startsWith('62') || norm.length < 10) return null;
+
+  const db = getDatabase();
+  const now = new Date().toISOString();
+
+  let matchedEmpId = null;
+  let matchedEmpName = null;
+  try {
+    const empRows = db.prepare('SELECT id, name, phone, data_json FROM employees;').all();
+    for (const emp of empRows) {
+      if (messageText && (messageText.toUpperCase().includes(emp.id) || (emp.nik && messageText.includes(emp.nik)))) {
+        matchedEmpId = emp.id;
+        matchedEmpName = emp.name;
+        break;
+      }
+      let eDigits = String(emp.phone || '').replace(/\D+/g, '');
+      if (eDigits.startsWith('0')) eDigits = `62${eDigits.slice(1)}`;
+      else if (eDigits.startsWith('8')) eDigits = `62${eDigits}`;
+      if (eDigits === norm) {
+        matchedEmpId = emp.id;
+        matchedEmpName = emp.name;
+        break;
+      }
+    }
+  } catch (e) {}
+
+  try {
+    db.prepare(`
+      INSERT INTO wa_opt_ins (phone, employee_id, employee_name, first_message, first_message_at, last_message, last_message_at, message_count)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+      ON CONFLICT(phone) DO UPDATE SET
+        last_message = excluded.last_message,
+        last_message_at = excluded.last_message_at,
+        message_count = wa_opt_ins.message_count + 1,
+        employee_id = COALESCE(excluded.employee_id, wa_opt_ins.employee_id),
+        employee_name = COALESCE(excluded.employee_name, wa_opt_ins.employee_name);
+    `).run(norm, matchedEmpId, matchedEmpName, messageText, now, messageText, now);
+
+    addAuditLog('WA_OPT_IN_RECORDED', 'wa_opt_ins', norm, `User +${norm} (${matchedEmpName || pushName || 'Tamu'}) mengetik pesan ke bot WhatsApp dan berhasil terverifikasi untuk notifikasi.`);
+  } catch (err) {
+    console.warn('[SQLite] recordWaOptIn error:', err.message);
+  }
+
+  return {
+    phone: norm,
+    employeeId: matchedEmpId,
+    employeeName: matchedEmpName,
+    messageCount: 1,
+    lastMessage: messageText,
+    lastMessageAt: now
+  };
+}
+
+export function getWaOptIns() {
+  const db = getDatabase();
+  try {
+    return db.prepare('SELECT * FROM wa_opt_ins ORDER BY last_message_at DESC;').all();
+  } catch (e) {
+    return [];
+  }
+}
+

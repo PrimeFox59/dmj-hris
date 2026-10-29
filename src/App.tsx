@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Zap } from 'lucide-react';
+import { Zap, Crown, Lock } from 'lucide-react';
 import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
 import { DashboardTab } from './components/DashboardTab';
@@ -9,38 +9,112 @@ import { EmployeeManagementTab } from './components/EmployeeManagementTab';
 import { SalaryRulesTab } from './components/SalaryRulesTab';
 import { PayrollTab } from './components/PayrollTab';
 import { CommercialProposalTab } from './components/CommercialProposalTab';
+import { InvoiceTab } from './components/InvoiceTab';
 import { UserPerformanceTab } from './components/UserPerformanceTab';
 import { NotificationApprovalModal } from './components/NotificationApprovalModal';
 import { TourDemoModal } from './components/TourDemoModal';
 import { LoginPage } from './components/LoginPage';
 import { AuditLogTab } from './components/AuditLogTab';
 import { ProjectManagementTab } from './components/ProjectManagementTab';
+import { ProjectDashboardTab } from './components/ProjectDashboardTab';
 import { MobileBottomNav } from './components/MobileBottomNav';
 import { ProfileTabId } from './components/ProfileSettingsModal';
+import { QuickAttendancePublicPortal } from './components/QuickAttendancePublicPortal';
+import { AnnualWorkCalendarTab } from './components/AnnualWorkCalendarTab';
+import { CasualWorkerAttendanceTab } from './components/CasualWorkerAttendanceTab';
 
 import {
   INITIAL_EMPLOYEES,
   INITIAL_PROJECTS,
   INITIAL_ATTENDANCE,
   INITIAL_APPROVALS,
-  INITIAL_SALARY_RULES,
-  INITIAL_REIMBURSEMENTS
+  INITIAL_SALARY_RULES
 } from './data/mockData';
-import { Employee, AttendanceRecord, ApprovalItem, Project, SalaryRuleConfig, ReimbursementClaim, getEffectiveSystemRole, AuthUser } from './types';
+import { Employee, AttendanceRecord, AttendanceMode, AttendanceStatus, ApprovalItem, Project, SalaryRuleConfig, getEffectiveSystemRole, AuthUser, canAccessProjectModule, isProjectManager } from './types';
 import { api } from './services/api';
 import { rtcService } from './services/rtcService';
 
 export function App() {
-  // Global States
-  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  // Public Kiosk Portal Mode (Tanpa Login)
+  const [isKioskPortalActive, setIsKioskPortalActive] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search);
+      const tab = searchParams.get('tab');
+      const view = searchParams.get('view');
+      const kiosk = searchParams.get('kiosk');
+      const mode = searchParams.get('mode');
+      const hash = window.location.hash.replace('#', '');
+      return tab === 'kiosk' || view === 'kiosk' || kiosk === 'true' || kiosk === '1' || mode === 'presensi' || hash === 'kiosk';
+    }
+    return false;
+  });
+
+  // Auto-invalidation build ID (Membersihkan cache lama saat versi baru dirilis)
+  const APP_BUILD_ID = '20261029_v3_fast_stream';
+  if (typeof window !== 'undefined') {
+    try {
+      const savedBuild = localStorage.getItem('prime_hris_build_id');
+      if (savedBuild !== APP_BUILD_ID) {
+        localStorage.setItem('prime_hris_build_id', APP_BUILD_ID);
+        localStorage.removeItem('prime_hris_bootstrap_cache');
+      }
+    } catch (e) {}
+  }
+
+  // Helper cache instan lokal 0ms (Stale-While-Revalidate pattern)
+  const getInitialBootstrapCache = () => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const raw = localStorage.getItem('prime_hris_bootstrap_cache');
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.projects) && parsed.projects.length > 0) {
+        return parsed;
+      }
+    } catch (e) {}
+    return null;
+  };
+  const bootCache = getInitialBootstrapCache();
+
+  // Global States (Prioritas: Cache Lokal 0ms -> Persistence -> Seed Data Resmi)
+  const [authUser, setAuthUser] = useState<AuthUser | null>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const savedAuth = localStorage.getItem('prime_hris_auth_user');
+        const token = localStorage.getItem('prime_hris_token');
+        if (savedAuth && token) {
+          const savedAt = localStorage.getItem('prime_hris_session_saved_at');
+          // Validasi sesi 30 hari (30 * 24 * 60 * 60 * 1000)
+          if (!savedAt || (Date.now() - Number(savedAt) < 30 * 24 * 60 * 60 * 1000)) {
+            return JSON.parse(savedAuth);
+          }
+        }
+      } catch (e) {}
+    }
+    return null;
+  });
   const [isAuthChecking, setIsAuthChecking] = useState<boolean>(true);
-  const [employees, setEmployees] = useState<Employee[]>(INITIAL_EMPLOYEES);
-  const [currentUser, setCurrentUser] = useState<Employee>(INITIAL_EMPLOYEES[0]); // Galih Primananda
-  const [projects, setProjects] = useState<Project[]>(INITIAL_PROJECTS);
-  const [attendances, setAttendances] = useState<AttendanceRecord[]>(INITIAL_ATTENDANCE);
-  const [approvals, setApprovals] = useState<ApprovalItem[]>(INITIAL_APPROVALS);
-  const [salaryRules, setSalaryRules] = useState<SalaryRuleConfig>(INITIAL_SALARY_RULES);
-  const [reimbursements, setReimbursements] = useState<ReimbursementClaim[]>(INITIAL_REIMBURSEMENTS);
+  const [employees, setEmployees] = useState<Employee[]>(() => (bootCache?.employees && bootCache.employees.length > 0) ? bootCache.employees : INITIAL_EMPLOYEES);
+  const [currentUser, setCurrentUser] = useState<Employee>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const savedUser = localStorage.getItem('prime_hris_current_user');
+        if (savedUser) return JSON.parse(savedUser);
+        const savedAuth = localStorage.getItem('prime_hris_auth_user');
+        if (savedAuth) {
+          const parsed = JSON.parse(savedAuth);
+          if (parsed && parsed.employee) return parsed.employee;
+        }
+      } catch (e) {}
+    }
+    const galih = (bootCache?.employees || []).find((e: Employee) => e.id === 'EMP-001') || INITIAL_EMPLOYEES[0];
+    return galih;
+  });
+  const [impersonatorUser, setImpersonatorUser] = useState<Employee | null>(null);
+  const [projects, setProjects] = useState<Project[]>(() => (bootCache?.projects && bootCache.projects.length > 0) ? bootCache.projects : INITIAL_PROJECTS);
+  const [attendances, setAttendances] = useState<AttendanceRecord[]>(() => (bootCache?.attendances && bootCache.attendances.length > 0) ? bootCache.attendances : INITIAL_ATTENDANCE);
+  const [approvals, setApprovals] = useState<ApprovalItem[]>(() => (bootCache?.approvals && bootCache.approvals.length > 0) ? bootCache.approvals : INITIAL_APPROVALS);
+  const [salaryRules, setSalaryRules] = useState<SalaryRuleConfig>(() => bootCache?.salaryRules || INITIAL_SALARY_RULES);
 
   // Notification & Approval Modal Popup State
   const [isNotificationModalOpen, setIsNotificationModalOpen] = useState<boolean>(false);
@@ -76,10 +150,7 @@ export function App() {
 
   // SubView state for Unified Dashboard (hris, finance, performance)
   const [dashboardSubView, setDashboardSubView] = useState<'hris' | 'finance' | 'performance'>('hris');
-
-  // WiFi simulation state
-  const [isWifiConnected, setIsWifiConnected] = useState<boolean>(true);
-  const [currentWifiSsid, setCurrentWifiSsid] = useState<string>('PRIME-Corporate-5G');
+  const [openLeaveModalDirectly, setOpenLeaveModalDirectly] = useState<boolean>(false);
 
   // Real IP Network Detection & Smart Mapping state (Opsi 2: Status Kantor vs Luar Kantor)
   const [realDetectedIp, setRealDetectedIp] = useState<string>('103.31.205.218');
@@ -193,16 +264,34 @@ export function App() {
         const res = await api.getMe();
         if (res.success && res.user) {
           setAuthUser(res.user);
+          try {
+            localStorage.setItem('prime_hris_auth_user', JSON.stringify(res.user));
+            localStorage.setItem('prime_hris_session_saved_at', String(Date.now()));
+            if (res.user.employee) {
+              localStorage.setItem('prime_hris_current_user', JSON.stringify(res.user.employee));
+            }
+          } catch (e) {}
           if (res.user.employee) {
             setCurrentUser(res.user.employee);
           }
         } else {
           api.setAuthToken(null);
           setAuthUser(null);
+          try {
+            localStorage.removeItem('prime_hris_auth_user');
+            localStorage.removeItem('prime_hris_current_user');
+          } catch (e) {}
         }
-      } catch (err) {
-        api.setAuthToken(null);
-        setAuthUser(null);
+      } catch (err: any) {
+        console.warn('getMe network warning:', err);
+        if (err?.message && (err.message.includes('401') || err.message.includes('Unauthorized') || err.message.includes('Sesi telah berakhir'))) {
+          api.setAuthToken(null);
+          setAuthUser(null);
+          try {
+            localStorage.removeItem('prime_hris_auth_user');
+            localStorage.removeItem('prime_hris_current_user');
+          } catch (e) {}
+        }
       } finally {
         setIsAuthChecking(false);
       }
@@ -211,11 +300,19 @@ export function App() {
   }, []);
 
   const handleLoginSuccess = (user: AuthUser, token: string) => {
+    try {
+      localStorage.setItem('prime_hris_auth_user', JSON.stringify(user));
+      localStorage.setItem('prime_hris_session_saved_at', String(Date.now()));
+      if (user.employee) {
+        localStorage.setItem('prime_hris_current_user', JSON.stringify(user.employee));
+      }
+    } catch (e) {}
     setAuthUser(user);
     if (user.employee) {
       setCurrentUser(user.employee);
     }
-    if (user.systemRole === 'staff') {
+    const effectiveRole = getEffectiveSystemRole(user.employee || currentUser);
+    if (effectiveRole === 'staff') {
       setActiveTab('attendance');
     } else {
       setActiveTab('dashboard');
@@ -239,6 +336,11 @@ export function App() {
 
   const handleLogout = async () => {
     try {
+      localStorage.removeItem('prime_hris_auth_user');
+      localStorage.removeItem('prime_hris_current_user');
+      localStorage.removeItem('prime_hris_session_saved_at');
+    } catch (e) {}
+    try {
       api.logActivity({
         userName: currentUser.name,
         userNik: currentUser.nik,
@@ -254,6 +356,7 @@ export function App() {
     } catch (e) {
       // ignore
     }
+    setImpersonatorUser(null);
     await api.logout();
     setAuthUser(null);
     setActiveTab('dashboard');
@@ -266,10 +369,11 @@ export function App() {
         const data = await api.getBootstrapData();
         if (data.employees && data.employees.length > 0) {
           setEmployees(data.employees);
-          const currentToken = api.getAuthToken();
-          if (!currentToken) {
-            setCurrentUser(data.employees[0]);
-          }
+          // Never overwrite currentUser with data.employees[0]
+          setCurrentUser(prev => {
+            const fresh = data.employees.find((e: Employee) => e.id === prev.id);
+            return fresh || prev;
+          });
         }
         if (data.projects && data.projects.length > 0) {
           setProjects(data.projects);
@@ -283,11 +387,21 @@ export function App() {
         if (data.salaryRules) {
           setSalaryRules(data.salaryRules);
         }
-        if (data.reimbursements && data.reimbursements.length > 0) {
-          setReimbursements(data.reimbursements);
-        }
         if (data.dbInfo) {
           setDbInfo(data.dbInfo);
+        }
+
+        // Persist fresh bootstrap snapshot to localStorage for instant 0ms hydration
+        try {
+          localStorage.setItem('prime_hris_bootstrap_cache', JSON.stringify({
+            employees: data.employees,
+            projects: data.projects,
+            attendances: data.attendances,
+            approvals: data.approvals,
+            salaryRules: data.salaryRules
+          }));
+        } catch (cacheErr) {
+          console.warn('Failed to cache bootstrap data', cacheErr);
         }
       } catch (err) {
         console.warn('Fallback to local mock data (SQLite loading error)', err);
@@ -308,97 +422,156 @@ export function App() {
     liveToastTimerRef.current = setTimeout(() => setLiveToast(null), 4500);
   };
 
-  // Real-Time Communication (SSE) multi-device live sync
+  // Real-Time Communication (WebSocket & SSE Engine) multi-device live sync
   useEffect(() => {
     const unsub = rtcService.subscribe('*', (packet) => {
       console.log('[RTC Live Event Received]', packet);
       if (packet.type === 'ATTENDANCE_SAVED') {
         const newAtt: AttendanceRecord = packet.payload;
+        if (!newAtt || !newAtt.id) return;
         setAttendances(prev => {
-          if (prev.some(a => a.id === newAtt.id)) return prev;
+          const idx = prev.findIndex(a => a.id === newAtt.id || (a.employeeId === newAtt.employeeId && a.date === newAtt.date));
+          if (idx >= 0) {
+            const next = [...prev];
+            next[idx] = { ...next[idx], ...newAtt };
+            return next;
+          }
           return [newAtt, ...prev];
         });
-        showLiveToast(`Presensi Baru Masuk: ${newAtt.employeeName} (${newAtt.checkInTime} • ${newAtt.mode})`, 'success');
+        const isCheckout = newAtt.attendanceType === 'CHECK_OUT' || (newAtt.checkOutTime && !newAtt.checkInTime);
+        const actionLabel = isCheckout ? 'Absen Pulang' : 'Absen Masuk';
+        const displayTime = isCheckout ? (newAtt.checkOutTime || newAtt.checkInTime) : newAtt.checkInTime;
+        showLiveToast(`${actionLabel}: ${newAtt.employeeName} (${displayTime || ''} - ${newAtt.mode || 'WFO'})`, 'success');
       } else if (packet.type === 'APPROVAL_UPDATED') {
-        const { id, status, reviewNote, reviewedBy } = packet.payload;
-        setApprovals(prev => prev.map(a => a.id === id ? { ...a, status, reviewNote, reviewedBy } : a));
-        showLiveToast(`Status Pengajuan Diperbarui: ${status}`, 'info');
-      } else if (packet.type === 'REIMBURSEMENT_SAVED') {
-        const newClaim: ReimbursementClaim = packet.payload;
-        setReimbursements(prev => {
-          if (prev.some(r => r.id === newClaim.id)) return prev;
-          return [newClaim, ...prev];
-        });
-        showLiveToast(`Klaim Biaya Baru: ${newClaim.title}`, 'info');
-      } else if (packet.type === 'EMPLOYEE_SAVED') {
-        const newEmp: Employee = packet.payload;
-        setEmployees(prev => {
-          const idx = prev.findIndex(e => e.id === newEmp.id);
-          if (idx >= 0) {
-            const next = [...prev];
-            next[idx] = newEmp;
-            return next;
-          }
-          return [newEmp, ...prev];
-        });
+        const { id, status, reviewNote, reviewedBy, item } = packet.payload;
+        setApprovals(prev => prev.map(a => a.id === id ? { ...a, status, reviewNote, reviewedBy, ...(item || {}) } : a));
+        showLiveToast(`Status Pengajuan Diperbarui: ${status} oleh ${reviewedBy || 'Atasan'}`, 'info');
+      } else if (packet.type === 'APPROVAL_SUBMITTED') {
+        const newItem: ApprovalItem = packet.payload;
+        if (newItem && newItem.id) {
+          setApprovals(prev => {
+            const idx = prev.findIndex(a => a.id === newItem.id);
+            if (idx >= 0) {
+              const next = [...prev];
+              next[idx] = { ...next[idx], ...newItem };
+              return next;
+            }
+            return [newItem, ...prev];
+          });
+          showLiveToast(`Pengajuan Baru Masuk: ${newItem.employeeName} (${newItem.type})`, 'info');
+        }
+      } else if (packet.type === 'EMPLOYEE_SAVED' || packet.type === 'EMPLOYEE_UPDATED') {
+        const updatedEmp: Employee = packet.payload;
+        if (updatedEmp && updatedEmp.id) {
+          setEmployees(prev => {
+            const idx = prev.findIndex(e => e.id === updatedEmp.id);
+            if (idx >= 0) {
+              const next = [...prev];
+              next[idx] = { ...next[idx], ...updatedEmp };
+              return next;
+            }
+            return [updatedEmp, ...prev];
+          });
+          setCurrentUser(prev => {
+            if (prev.id === updatedEmp.id) {
+              const next = { ...prev, ...updatedEmp };
+              try {
+                localStorage.setItem('prime_hris_current_user', JSON.stringify(next));
+              } catch (e) {}
+              return next;
+            }
+            return prev;
+          });
+        }
       } else if (packet.type === 'PROJECT_SAVED') {
         const newProj: Project = packet.payload;
-        setProjects(prev => {
-          const idx = prev.findIndex(p => p.id === newProj.id);
-          if (idx >= 0) {
-            const next = [...prev];
-            next[idx] = newProj;
-            return next;
+        if (newProj && newProj.id) {
+          setProjects(prev => {
+            const idx = prev.findIndex(p => p.id === newProj.id);
+            if (idx >= 0) {
+              const next = [...prev];
+              next[idx] = { ...next[idx], ...newProj };
+              return next;
+            }
+            return [newProj, ...prev];
+          });
+          showLiveToast(`Proyek ${newProj.name || newProj.code} diperbarui`, 'info');
+        }
+      } else if (packet.type === 'SALARY_RULES_UPDATED') {
+        const newRules: SalaryRuleConfig = packet.payload;
+        if (newRules) {
+          setSalaryRules(newRules);
+          showLiveToast('Konfigurasi Geofence & Parameter Sistem Diperbarui', 'info');
+        }
+      } else if (packet.type === 'WORK_CALENDAR_UPDATED' || packet.type === 'WORK_CALENDAR_PERIOD_TOGGLED') {
+        showLiveToast('Kalender Kerja & Periode Cut-off Diperbarui', 'info');
+      } else if (packet.type === 'ATTENDANCE_DELETED') {
+        const { id, linkedApprovalIds } = packet.payload || {};
+        if (id) {
+          setAttendances(prev => prev.filter(a => a.id !== id));
+          if (Array.isArray(linkedApprovalIds) && linkedApprovalIds.length > 0) {
+            setApprovals(prev => prev.filter(a => !linkedApprovalIds.includes(a.id) && a.attendanceRecordId !== id));
+          } else {
+            setApprovals(prev => prev.filter(a => a.attendanceRecordId !== id));
           }
-          return [newProj, ...prev];
-        });
-        showLiveToast(`Proyek ${newProj.name || newProj.code} diperbarui`, 'info');
+          showLiveToast(`Data presensi berhasil dihapus`, 'info');
+        }
+      } else if (packet.type === 'RTC_RECONNECTED') {
+        api.getBootstrapData().then(data => {
+          if (data.employees && data.employees.length > 0) {
+            setEmployees(data.employees);
+            setCurrentUser(prev => {
+              const fresh = data.employees.find((e: Employee) => e.id === prev.id);
+              return fresh || prev;
+            });
+          }
+          if (data.projects && data.projects.length > 0) setProjects(data.projects);
+          if (data.attendances && data.attendances.length > 0) setAttendances(data.attendances);
+          if (data.approvals && data.approvals.length > 0) setApprovals(data.approvals);
+          if (data.salaryRules) setSalaryRules(data.salaryRules);
+        }).catch(err => console.warn('[RTC] Background sync error', err));
       } else if (packet.type === 'DATABASE_RESET') {
         api.getBootstrapData().then(data => {
           if (data.employees) setEmployees(data.employees);
           if (data.projects) setProjects(data.projects);
           if (data.attendances) setAttendances(data.attendances);
           if (data.approvals) setApprovals(data.approvals);
-          if (data.reimbursements) setReimbursements(data.reimbursements);
+          if (data.salaryRules) setSalaryRules(data.salaryRules);
         });
-        showLiveToast(`Database di-reset ke data awal`, 'warn');
+        showLiveToast('Database di-reset ke data awal', 'warn');
       }
     });
 
     return () => unsub();
   }, []);
 
-  // Auto-launch Tour Demo immediately on page access (hands-free onboarding)
+  // Only launch Tour Demo if explicitly requested via query parameter (?tour=true)
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const searchParams = new URLSearchParams(window.location.search);
-      // Bypass auto-tour if explicitly disabled via query parameter
-      if (
-        searchParams.get('tour') === 'false' || 
-        searchParams.get('notour') === '1' || 
-        searchParams.get('autotour') === '0'
-      ) {
-        return;
+      if (searchParams.get('tour') === 'true' || searchParams.get('autotour') === '1') {
+        const timer = setTimeout(() => {
+          setIsTourOpen(true);
+        }, 450);
+        return () => clearTimeout(timer);
       }
     }
-    // Slight 450ms delay for DOM nodes & SQLite bootstrap to cleanly mount
-    const timer = setTimeout(() => {
-      setIsTourOpen(true);
-    }, 450);
-
-    return () => clearTimeout(timer);
   }, []);
 
-  const toggleWifi = () => {
-    setIsWifiConnected(prev => !prev);
-  };
+  const handleImpersonateUser = (targetEmp: Employee) => {
+    if (targetEmp.id === currentUser.id) return;
+    const realAdmin = impersonatorUser || currentUser;
+    if (!impersonatorUser) {
+      setImpersonatorUser(currentUser);
+    }
+    setCurrentUser(targetEmp);
+    try {
+      localStorage.setItem('prime_hris_current_user', JSON.stringify(targetEmp));
+    } catch (e) {}
 
-  const handleSwitchUser = (newEmp: Employee) => {
-    const prevEmp = currentUser;
-    setCurrentUser(newEmp);
-    const role = getEffectiveSystemRole(newEmp);
-    if (role === 'staff') {
-      if (activeTab === 'salary_rules' || activeTab === 'audit') {
+    const targetRole = getEffectiveSystemRole(targetEmp);
+    if (targetRole === 'staff') {
+      if (activeTab === 'system_settings' || activeTab === 'salary_rules' || activeTab === 'audit' || activeTab === 'wa_gateway' || activeTab === 'email_smtp' || activeTab === 'work_calendar') {
         setActiveTab('dashboard');
         setDashboardSubView('performance');
       } else if (activeTab === 'dashboard') {
@@ -406,49 +579,121 @@ export function App() {
       }
     }
 
-    // Record persona switch event in audit trail
+    // Record impersonation in audit log
     api.logActivity({
-      userName: prevEmp.name,
-      userNik: prevEmp.nik,
-      userRole: prevEmp.role,
+      userName: realAdmin.name,
+      userNik: realAdmin.nik,
+      userRole: 'superuser',
       module: 'AUTH',
-      action: 'ROLE_SWITCH',
+      action: 'IMPERSONATE_START',
       entity: 'UserSession',
-      entityId: newEmp.id,
-      details: `Beralih persona pengguna ke ${newEmp.name} (${newEmp.role} - ${newEmp.nik})`,
+      entityId: targetEmp.id,
+      details: `Superuser ${realAdmin.name} mengimpersonate persona ${targetEmp.name} (${targetEmp.nik} - ${targetEmp.position})`,
       status: 'SUCCESS',
       ipAddress: realDetectedIp,
-      metadata: { previousUser: prevEmp.name, previousNik: prevEmp.nik, switchedTo: newEmp.name, newRole: newEmp.role }
+      metadata: { impersonator: realAdmin.name, target: targetEmp.name, targetNik: targetEmp.nik }
     }).catch(() => {});
+
+    showLiveToast(`Mode Impersonasi: Sedang melihat sebagai ${targetEmp.name} (${targetEmp.nik})`, 'info');
+  };
+
+  const handleExitImpersonation = () => {
+    if (!impersonatorUser) return;
+    const originalUser = impersonatorUser;
+    api.logActivity({
+      userName: originalUser.name,
+      userNik: originalUser.nik,
+      userRole: 'superuser',
+      module: 'AUTH',
+      action: 'IMPERSONATE_EXIT',
+      entity: 'UserSession',
+      entityId: originalUser.id,
+      details: `Superuser ${originalUser.name} keluar dari mode impersonasi, kembali ke akun master`,
+      status: 'SUCCESS',
+      ipAddress: realDetectedIp
+    }).catch(() => {});
+
+    setCurrentUser(originalUser);
+    setImpersonatorUser(null);
+    try {
+      localStorage.setItem('prime_hris_current_user', JSON.stringify(originalUser));
+    } catch (e) {}
+    showLiveToast(`Keluar dari mode impersonasi. Kembali ke akun Superuser (${originalUser.name})`, 'info');
+  };
+
+  const handleSwitchUser = (newEmp: Employee) => {
+    handleImpersonateUser(newEmp);
   };
 
   const handleNavigateToTab = (tabId: string, projectIdFilter?: string) => {
-    // Sync URL with tabId query parameter without full reload
+    if (tabId === 'approvals' && (projectIdFilter === 'new-leave' || projectIdFilter === 'new-correction')) {
+      setActiveTab('approvals');
+      setOpenLeaveModalDirectly(true);
+      return;
+    }
+
+    // Sync URL with tabId & project query parameter without full reload
     if (typeof window !== 'undefined') {
       try {
         const url = new URL(window.location.href);
         url.searchParams.set('tab', tabId);
+        if (projectIdFilter && projectIdFilter !== 'ALL') {
+          url.searchParams.set('project', projectIdFilter);
+        } else if (projectIdFilter === 'ALL') {
+          url.searchParams.delete('project');
+        }
         window.history.replaceState({}, '', url.toString());
       } catch (e) {
         // ignore
       }
     }
 
+    if (tabId === 'kiosk') {
+      setIsKioskPortalActive(true);
+      return;
+    } else {
+      setIsKioskPortalActive(false);
+    }
+
+    const isMasterSuperuser = !impersonatorUser && authUser && (
+      authUser.systemRole === 'superuser' ||
+      authUser.role === 'Director' ||
+      authUser.username === 'admin' ||
+      authUser.username === 'galih'
+    );
+
     const role = getEffectiveSystemRole(currentUser);
-    if (role === 'staff') {
+    if (!isMasterSuperuser && role === 'staff') {
       if (tabId === 'dashboard' || tabId === 'dashboard_hris' || tabId === 'dashboard_finance') {
         setActiveTab('dashboard');
         setDashboardSubView('performance');
         return;
       }
-      if (tabId === 'salary_rules' || tabId === 'audit') {
+      if (tabId === 'system_settings' || tabId === 'salary_rules' || tabId === 'wa_gateway' || tabId === 'email_smtp' || tabId === 'work_calendar') {
+        setActiveTab('dashboard');
+        setDashboardSubView('performance');
+        return;
+      }
+      if (tabId === 'audit' || tabId === 'invoices' || tabId === 'invoice') {
+        setActiveTab('dashboard');
+        setDashboardSubView('performance');
+        return;
+      }
+      if (tabId === 'projects' || tabId === 'project_dashboard' || tabId === 'project_detail') {
         setActiveTab('dashboard');
         setDashboardSubView('performance');
         return;
       }
     }
 
-    if (tabId === 'dashboard' || tabId === 'dashboard_hris') {
+    if (tabId === 'system_settings' || tabId === 'salary_rules' || tabId === 'wa_gateway' || tabId === 'email_smtp') {
+      setActiveTab(tabId);
+      return;
+    }
+
+    if (tabId === 'project_dashboard' || tabId === 'project_detail') {
+      setActiveTab('project_dashboard');
+    } else if (tabId === 'dashboard' || tabId === 'dashboard_hris') {
       setActiveTab('dashboard');
       setDashboardSubView('hris');
     } else if (tabId === 'dashboard_finance') {
@@ -470,10 +715,11 @@ export function App() {
     const handleUrlSync = () => {
       const searchParams = new URLSearchParams(window.location.search);
       const queryTab = searchParams.get('tab');
+      const queryProject = searchParams.get('project') || undefined;
       if (queryTab) {
-        handleNavigateToTab(queryTab);
+        handleNavigateToTab(queryTab, queryProject);
       } else if (window.location.hash) {
-        handleNavigateToTab(window.location.hash.replace('#', ''));
+        handleNavigateToTab(window.location.hash.replace('#', ''), queryProject);
       }
     };
     window.addEventListener('popstate', handleUrlSync);
@@ -491,8 +737,59 @@ export function App() {
     // Save to SQLite asynchronously
     api.saveAttendance(record).catch(err => console.error('Failed to save attendance to SQLite', err));
 
-    // If Late or Dinas Luar, automatically register into Approval queue
-    if (record.isLate) {
+    // Resolve project and PM routing for applicant (prioritaskan proyek yang tercatat pada presensi)
+    const userProj = (record.projectId && projects.find(p => p.id === record.projectId || p.code === record.projectId)) ||
+      projects.find(p => 
+        p.id === currentUser.assignedProjectId || 
+        p.code === currentUser.assignedProjectId || 
+        (p.assignedEmployeeIds && p.assignedEmployeeIds.includes(record.employeeId)) ||
+        p.projectManagerId === record.employeeId
+      );
+
+    let pmEmp = userProj?.projectManagerId ? employees.find(e => e.id === userProj.projectManagerId) : null;
+    if (!pmEmp && userProj?.assignedEmployeeIds) {
+      pmEmp = employees.find(e => 
+        userProj.assignedEmployeeIds?.includes(e.id) && 
+        (e.position?.toLowerCase().includes('project manager') || 
+         e.position?.toLowerCase().includes('site manager') || 
+         e.role?.toLowerCase() === 'manager')
+      );
+    }
+
+    // 1. Geofence Out-of-Area Approval: Otomatis submit ke PM atau HR
+    const isOutOfGeofence = record.status === 'OUT_OF_GEOFENCE' || (record.mode === 'WFO' && !record.location.inGeofence);
+    if (isOutOfGeofence) {
+      const dist = record.location.distanceMeters || 0;
+      const distFormatted = dist >= 1000 ? `${(dist / 1000).toFixed(1)} km` : `${dist} m`;
+      const projName = userProj ? `${userProj.code} - ${userProj.name}` : (record.location.address || 'Site Proyek');
+
+      const geofenceApproval: ApprovalItem = {
+        id: `APP-GEO-${Date.now()}`,
+        type: 'OUT_OF_GEOFENCE',
+        employeeId: record.employeeId,
+        employeeName: record.employeeName,
+        employeeNik: record.employeeNik,
+        department: record.department,
+        title: `Persetujuan Presensi Luar Radius (${distFormatted}) - ${userProj?.code || 'SITE'}`,
+        description: `Lokasi: ${projName}. Jarak Aktual: ${distFormatted}. Catatan Karyawan: ${record.outOfRangeReason || record.note || 'Tugas operasional luar radius'}`,
+        startDate: record.date,
+        attendanceRecordId: record.id,
+        status: 'PENDING',
+        submittedAt: `${record.date} ${record.checkInTime}`,
+        projectId: userProj?.id,
+        projectCode: userProj?.code,
+        projectName: userProj?.name,
+        projectManagerId: pmEmp?.id,
+        projectManagerName: pmEmp?.name,
+        targetApproverRole: pmEmp ? 'PM' : 'HR'
+      };
+
+      setApprovals(prev => [geofenceApproval, ...prev]);
+      api.submitApproval(geofenceApproval).catch(err => console.error('Failed to submit OUT_OF_GEOFENCE approval to SQLite', err));
+    }
+
+    // 2. Late Justification Approval: HANYA untuk Absen Masuk (CHECK_IN) yang terlambat
+    if (record.isLate && record.attendanceType !== 'CHECK_OUT') {
       const lateApproval: ApprovalItem = {
         id: `APP-LATE-${Date.now()}`,
         type: 'LATE_JUSTIFICATION',
@@ -506,9 +803,16 @@ export function App() {
         lateMinutes: record.lateMinutes,
         attendanceRecordId: record.id,
         status: 'PENDING',
-        submittedAt: `${record.date} ${record.checkInTime}`
+        submittedAt: `${record.date} ${record.checkInTime}`,
+        projectId: userProj?.id,
+        projectCode: userProj?.code,
+        projectName: userProj?.name,
+        projectManagerId: pmEmp?.id,
+        projectManagerName: pmEmp?.name,
+        targetApproverRole: pmEmp ? 'PM' : 'HR'
       };
       setApprovals(prev => [lateApproval, ...prev]);
+      api.submitApproval(lateApproval).catch(err => console.error('Failed to submit late approval', err));
     } else if (record.mode === 'DINAS_LUAR' && record.dinasLuarDetails) {
       const dinasApproval: ApprovalItem = {
         id: `APP-DINAS-${Date.now()}`,
@@ -523,9 +827,48 @@ export function App() {
         daysCount: 1,
         attendanceRecordId: record.id,
         status: 'PENDING',
-        submittedAt: `${record.date} ${record.checkInTime}`
+        submittedAt: `${record.date} ${record.checkInTime}`,
+        projectId: userProj?.id,
+        projectCode: userProj?.code,
+        projectName: userProj?.name,
+        projectManagerId: pmEmp?.id,
+        projectManagerName: pmEmp?.name,
+        targetApproverRole: pmEmp ? 'PM' : 'HR'
       };
       setApprovals(prev => [dinasApproval, ...prev]);
+      api.submitApproval(dinasApproval).catch(err => console.error('Failed to submit dinas approval', err));
+    }
+  };
+
+  // Handle attendance correction / update from HR Manager
+  const handleUpdateAttendance = (record: AttendanceRecord) => {
+    setAttendances(prev => {
+      const idx = prev.findIndex(a => a.id === record.id || (a.employeeId === record.employeeId && a.date === record.date));
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = record;
+        return next;
+      }
+      return [record, ...prev];
+    });
+
+    // Save to SQLite asynchronously
+    api.saveAttendance(record).catch(err => console.error('Failed to save attendance correction to SQLite', err));
+  };
+
+  // Handle delete attendance record (Superuser direct deletion for testing/trial)
+  const handleDeleteAttendance = async (id: string) => {
+    try {
+      const res = await api.deleteAttendance(id);
+      if (res.success) {
+        setAttendances(prev => prev.filter(a => a.id !== id));
+        setApprovals(prev => prev.filter(a => a.attendanceRecordId !== id));
+        showLiveToast('Rekaman presensi berhasil dihapus oleh Superuser', 'success');
+      } else {
+        alert(res.error || 'Gagal menghapus rekaman presensi');
+      }
+    } catch (err: any) {
+      alert(`Gagal menghapus: ${err.message}`);
     }
   };
 
@@ -542,11 +885,105 @@ export function App() {
             setEmployees(empList =>
               empList.map(e => {
                 if (e.id === item.employeeId) {
+                  if (item.leaveType === 'CUTI_ROSTER_NON_LOKAL' && e.nonLokalLeaveConfig) {
+                    const cfg = e.nonLokalLeaveConfig;
+                    const days = item.daysCount || 1;
+                    const lastDate = item.startDate || new Date().toISOString().split('T')[0];
+                    let nextEligible = cfg.nextEligibleLeaveDate;
+                    try {
+                      const [y, m, d] = lastDate.split('-').map(Number);
+                      let nextM = m + (cfg.rosterCycleMonths || 3);
+                      let nextY = y;
+                      if (nextM > 12) {
+                        nextY += Math.floor((nextM - 1) / 12);
+                        nextM = ((nextM - 1) % 12) + 1;
+                      }
+                      nextEligible = `${nextY}-${String(nextM).padStart(2, '0')}-${String(Math.min(d, 28)).padStart(2, '0')}`;
+                    } catch (err) {}
+
+                    return {
+                      ...e,
+                      nonLokalLeaveConfig: {
+                        ...cfg,
+                        usedPeriodLeave: (cfg.usedPeriodLeave || 0) + days,
+                        lastLeaveDate: lastDate,
+                        nextEligibleLeaveDate: nextEligible
+                      }
+                    };
+                  }
                   return { ...e, usedLeave: e.usedLeave + (item.daysCount || 1) };
                 }
                 return e;
               })
             );
+          }
+
+          // If this is an attendance correction, update or add the attendance record in React state
+          if (item.type === 'ATTENDANCE_CORRECTION') {
+            const corrDate = item.startDate;
+            const reviewerName = `${currentUser.name} (${currentUser.role})`;
+            setAttendances(attList => {
+              const existingIdx = attList.findIndex(a => a.employeeId === item.employeeId && a.date === corrDate);
+              const targetStatus: AttendanceStatus = (item.targetStatus as AttendanceStatus) || 'ON_TIME';
+              const targetMode: AttendanceMode = item.targetStatus === 'DINAS_LUAR' ? 'DINAS_LUAR' : 'WFO';
+              const isLate = targetStatus === 'LATE';
+              const targetLateMinutes = isLate ? 30 : 0;
+              if (existingIdx >= 0) {
+                const nextList = [...attList];
+                nextList[existingIdx] = {
+                  ...nextList[existingIdx],
+                  checkInTime: item.targetCheckInTime || nextList[existingIdx].checkInTime || '08:00:00',
+                  checkOutTime: item.targetCheckOutTime || nextList[existingIdx].checkOutTime,
+                  status: targetStatus,
+                  mode: targetMode,
+                  isLate,
+                  lateMinutes: targetLateMinutes,
+                  approvalStatus: 'APPROVED',
+                  approvedBy: reviewerName,
+                  approvalDate: new Date().toISOString().substring(0, 10),
+                  approvalNote: reviewerNote || 'Disetujui via koreksi absensi',
+                  isHrCorrected: true,
+                  hrCorrectedBy: reviewerName,
+                  hrCorrectedAt: new Date().toISOString().replace('T', ' ').substring(0, 19),
+                  hrCorrectionNotes: item.description || reviewerNote
+                };
+                return nextList;
+              } else {
+                const newAtt: AttendanceRecord = {
+                  id: `ATT-CORR-${item.id}`,
+                  employeeId: item.employeeId,
+                  employeeName: item.employeeName,
+                  employeeNik: item.employeeNik || 'NIK-CORR',
+                  department: item.department || 'Operasional',
+                  date: corrDate,
+                  checkInTime: item.targetCheckInTime || '08:00:00',
+                  checkOutTime: item.targetCheckOutTime,
+                  mode: targetMode,
+                  status: targetStatus,
+                  photoUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150',
+                  location: {
+                    lat: -6.2088,
+                    lng: 106.8456,
+                    accuracy: 10,
+                    address: item.projectName || 'Site Penugasan Proyek',
+                    inGeofence: true,
+                    distanceMeters: 0
+                  },
+                  note: `Disetujui koreksi absensi oleh ${reviewerName}`,
+                  isLate,
+                  lateMinutes: targetLateMinutes,
+                  approvalStatus: 'APPROVED',
+                  approvedBy: reviewerName,
+                  approvalDate: new Date().toISOString().substring(0, 10),
+                  approvalNote: reviewerNote || 'Disetujui via koreksi absensi',
+                  isHrCorrected: true,
+                  hrCorrectedBy: reviewerName,
+                  hrCorrectedAt: new Date().toISOString().replace('T', ' ').substring(0, 19),
+                  hrCorrectionNotes: item.description || reviewerNote
+                };
+                return [newAtt, ...attList];
+              }
+            });
           }
 
           // If this is a late justification, mark the corresponding attendance as approved
@@ -623,6 +1060,7 @@ export function App() {
 
   const handleSubmitNewLeaveRequest = (item: ApprovalItem) => {
     setApprovals(prev => [item, ...prev]);
+    api.submitApproval(item).catch(err => console.error('Failed to submit approval to SQLite', err));
   };
 
   // Employee CRUD (User Management)
@@ -635,20 +1073,35 @@ export function App() {
     setEmployees(prev => prev.map(e => (e.id === emp.id ? emp : e)));
     if (currentUser.id === emp.id) {
       setCurrentUser(emp);
+      try { localStorage.setItem('prime_hris_current_user', JSON.stringify(emp)); } catch (e) {}
     }
     if (authUser && authUser.employee && authUser.employee.id === emp.id) {
-      setAuthUser(prev => prev ? { ...prev, employee: emp } : null);
+      const updatedAuth: AuthUser = {
+        ...authUser,
+        role: emp.role,
+        systemRole: emp.systemRole || authUser.systemRole,
+        employee: emp
+      };
+      setAuthUser(updatedAuth);
+      try { localStorage.setItem('prime_hris_auth_user', JSON.stringify(updatedAuth)); } catch (e) {}
     }
+
+    try {
+      const cachedBoot = localStorage.getItem('prime_hris_bootstrap_cache');
+      if (cachedBoot) {
+        const parsed = JSON.parse(cachedBoot);
+        if (parsed.employees) {
+          parsed.employees = parsed.employees.map((e: Employee) => e.id === emp.id ? emp : e);
+          localStorage.setItem('prime_hris_bootstrap_cache', JSON.stringify(parsed));
+        }
+      }
+    } catch (e) {}
+
     api.saveEmployee(emp).catch(err => console.error('Failed to update employee in SQLite', err));
   };
 
   const handleDeleteEmployee = (id: string) => {
     setEmployees(prev => prev.filter(e => e.id !== id));
-  };
-
-  const handleAddReimbursement = (claim: ReimbursementClaim) => {
-    setReimbursements(prev => [claim, ...prev]);
-    api.saveReimbursement(claim).catch(err => console.error('Failed to save reimbursement in SQLite', err));
   };
 
   const handleUpdateSalaryRules = (newRules: SalaryRuleConfig) => {
@@ -685,10 +1138,32 @@ export function App() {
   const pendingApprovalsCount = approvals.filter(a => a.status === 'PENDING').length;
 
   const userSystemRole = getEffectiveSystemRole(currentUser);
-  const effectiveNotificationCount = userSystemRole === 'staff'
-    ? approvals.filter(a => a.employeeId === currentUser.id && (a.status === 'PENDING' || a.status === 'REVISION_REQUESTED' || a.status === 'REJECTED')).length +
-      reimbursements.filter(r => r.employeeId === currentUser.id && r.status === 'REJECTED').length
+  const isStaffUser = userSystemRole === 'staff';
+  const canAccessProjects = canAccessProjectModule(currentUser);
+  const effectiveNotificationCount = isStaffUser
+    ? approvals.filter(a => a.employeeId === currentUser.id && (a.status === 'PENDING' || a.status === 'REVISION_REQUESTED' || a.status === 'REJECTED')).length
     : pendingApprovalsCount;
+
+  // Public Kiosk Portal Mode (Tanpa Login)
+  if (isKioskPortalActive) {
+    return (
+      <QuickAttendancePublicPortal
+        onGoToLogin={() => {
+          setIsKioskPortalActive(false);
+          if (typeof window !== 'undefined') {
+            try {
+              const url = new URL(window.location.href);
+              url.searchParams.delete('tab');
+              url.searchParams.delete('view');
+              url.searchParams.delete('kiosk');
+              url.searchParams.delete('mode');
+              window.history.replaceState({}, '', url.toString());
+            } catch (e) {}
+          }
+        }}
+      />
+    );
+  }
 
   // Session verification screen
   if (isAuthChecking) {
@@ -705,21 +1180,53 @@ export function App() {
 
   // Not authenticated: render Login Page
   if (!authUser) {
-    return <LoginPage onLoginSuccess={handleLoginSuccess} />;
+    return (
+      <LoginPage
+        onLoginSuccess={handleLoginSuccess}
+        onOpenKiosk={() => setIsKioskPortalActive(true)}
+      />
+    );
   }
 
   return (
     <div className="min-h-screen flex flex-col selection:bg-orange-500 selection:text-white w-full max-w-full overflow-x-hidden">
       
+      {/* Top Sticky Impersonation Indicator Banner */}
+      {impersonatorUser && (
+        <aside aria-label="Mode Impersonasi Aktif" className="sticky top-0 z-[100] w-full bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-slate-950 px-4 py-2 text-xs font-bold shadow-md flex flex-wrap items-center justify-between gap-3 border-b border-amber-600/40 animate-in slide-in-from-top duration-200">
+          <div className="flex items-center gap-2.5">
+            <div className="w-6 h-6 rounded-lg bg-black/20 text-white flex items-center justify-center shrink-0">
+              <Crown className="w-3.5 h-3.5 text-amber-200" />
+            </div>
+            <div>
+              <span className="font-black uppercase tracking-wider text-[11px] text-amber-950 mr-1.5">
+                👑 Mode Impersonasi Aktif:
+              </span>
+              <span className="text-white font-extrabold">{currentUser.name}</span>{' '}
+              <span className="text-amber-100 font-mono text-[10.5px]">({currentUser.nik} • {currentUser.position})</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2.5">
+            <span className="text-[10.5px] text-amber-950 font-semibold hidden md:inline">
+              Akun Master: <strong>{impersonatorUser.name}</strong>
+            </span>
+            <button
+              type="button"
+              onClick={handleExitImpersonation}
+              className="px-3 py-1 rounded-lg bg-slate-950 hover:bg-slate-900 active:scale-95 text-white font-extrabold text-[11px] shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
+            >
+              <span>✕ Keluar & Kembali ke Superuser</span>
+            </button>
+          </div>
+        </aside>
+      )}
+
       {/* Top Glass Navigation Bar */}
       <Navbar
         currentUser={currentUser}
-        allUsers={employees}
+        allUsers={isStaffUser ? [currentUser] : employees}
         onSwitchUser={handleSwitchUser}
         onUpdateEmployee={handleUpdateEmployee}
-        isWifiConnected={isWifiConnected}
-        onToggleWifi={toggleWifi}
-        currentWifiSsid={currentWifiSsid}
         pendingApprovalsCount={effectiveNotificationCount}
         onNavigateToTab={handleNavigateToTab}
         onOpenNotificationModal={() => setIsNotificationModalOpen(true)}
@@ -728,15 +1235,14 @@ export function App() {
         realDetectedIsp={realDetectedIsp}
         realDetectedCity={realDetectedCity}
         isOfficeNetwork={isOfficeNetwork}
-        simulatedNetworkMode={simulatedNetworkMode}
-        onSetSimulatedNetworkMode={setSimulatedNetworkMode}
-        onWhitelistCurrentIp={handleWhitelistCurrentIp}
         authUser={authUser}
         onLogout={handleLogout}
         isProfileModalOpenControlled={isProfileModalOpen}
         onOpenProfileModalControlled={handleOpenProfileModal}
         onCloseProfileModalControlled={() => setIsProfileModalOpen(false)}
         profileModalInitialTabControlled={profileModalInitialTab}
+        impersonatorUser={impersonatorUser}
+        onExitImpersonation={handleExitImpersonation}
       />
 
       {/* Floating Pill Sidebar Dock (Desktop) */}
@@ -745,6 +1251,7 @@ export function App() {
         onSelectTab={handleNavigateToTab}
         userRole={currentUser.role}
         systemRole={userSystemRole}
+        currentUser={currentUser}
         pendingApprovalsCount={effectiveNotificationCount}
       />
 
@@ -764,27 +1271,55 @@ export function App() {
 
       {/* Mobile Navigation Tabs (Screens < 768px) */}
       <div className="md:hidden sticky top-16 z-30 bg-white/90 backdrop-blur-md border-b border-slate-200 px-3 py-2 flex items-center gap-2 overflow-x-auto no-print">
-        {(getEffectiveSystemRole(currentUser) === 'staff'
+        {(userSystemRole === 'staff'
           ? [
               { id: 'dashboard', label: 'Kinerja Saya' },
               { id: 'attendance', label: 'Presensi Kamera' },
               { id: 'approvals', label: 'Pengajuan' },
-              { id: 'projects', label: 'Proyek & Site' },
               { id: 'payroll', label: 'Slip Gaji' },
               { id: 'users', label: 'Profil Saya' }
             ]
-          : [
+          : userSystemRole === 'finance'
+          ? [
+              { id: 'dashboard', label: 'Dashboard Keuangan' },
+              { id: 'payroll', label: 'Payroll' },
+              { id: 'users', label: 'Data Gaji' },
+              { id: 'projects', label: 'Biaya Proyek' },
+              { id: 'approvals', label: 'Approval SDM' },
+              { id: 'invoice', label: 'Invoice' },
+              { id: 'attendance', label: 'Rekap Presensi' },
+              { id: 'audit', label: 'Audit Log' }
+            ]
+          : (userSystemRole === 'admin' || userSystemRole === 'hr')
+          ? [
+              { id: 'dashboard', label: 'Dashboard SDM' },
+              { id: 'payroll', label: 'Payroll' },
+              { id: 'attendance', label: 'Presensi' },
+              { id: 'approvals', label: 'Approval SDM' },
+              { id: 'projects', label: 'Proyek & Site' },
+              { id: 'users', label: 'Karyawan' },
+              { id: 'audit', label: 'Audit Log' }
+            ]
+          : userSystemRole === 'superuser'
+          ? [
               { id: 'dashboard', label: 'Dashboard' },
               { id: 'attendance', label: 'Presensi' },
               { id: 'approvals', label: 'Approval SDM' },
               { id: 'projects', label: 'Proyek & Site' },
               { id: 'users', label: 'Karyawan' },
               { id: 'payroll', label: 'Payroll' },
-              { id: 'salary_rules', label: 'Pengaturan' },
+              { id: 'invoice', label: 'Invoice' },
               { id: 'audit', label: 'Audit Log' }
             ]
+          : [
+              { id: 'dashboard', label: 'Kinerja Saya' },
+              { id: 'attendance', label: 'Presensi Kamera' },
+              { id: 'approvals', label: 'Pengajuan' },
+              { id: 'payroll', label: 'Slip Gaji' },
+              { id: 'users', label: 'Profil Saya' }
+            ]
         ).map(tab => {
-          const isTabActive = activeTab === tab.id || (tab.id === 'dashboard' && (activeTab === 'dashboard_hris' || activeTab === 'dashboard_finance' || activeTab === 'user_performance'));
+          const isTabActive = activeTab === tab.id || (tab.id === 'projects' && activeTab === 'project_dashboard') || (tab.id === 'dashboard' && (activeTab === 'dashboard_hris' || activeTab === 'dashboard_finance' || activeTab === 'user_performance'));
           return (
             <button
               key={tab.id}
@@ -802,21 +1337,20 @@ export function App() {
       </div>
 
       {/* Main Content Area with Dynamic Key for Tab Transition Animation */}
-      <main key={activeTab} className="flex-1 max-w-7xl w-full mx-auto pl-4 sm:pl-6 md:pl-24 lg:pl-28 xl:px-8 pr-4 sm:pr-6 lg:pr-8 py-6 pb-28 md:pb-8 transition-all motion-fade-in-up min-w-0">
+      <main key={activeTab} className="flex-1 max-w-7xl w-full mx-auto pl-4 sm:pl-6 md:pl-24 lg:pl-28 xl:px-8 pr-4 sm:pr-6 lg:pr-8 py-6 pb-28 md:pb-8 transition-all animate-in fade-in duration-200 min-w-0">
         {(activeTab === 'dashboard' || activeTab === 'dashboard_hris' || activeTab === 'dashboard_finance' || activeTab === 'user_performance') && (
           <DashboardTab
             currentUser={currentUser}
-            employees={employees}
+            employees={isStaffUser ? [currentUser] : employees}
             projects={projects}
-            attendances={attendances}
-            approvals={approvals}
+            attendances={isStaffUser ? attendances.filter(a => a.employeeId === currentUser.id) : attendances}
+            approvals={isStaffUser ? approvals.filter(a => a.employeeId === currentUser.id) : approvals}
             salaryRules={salaryRules}
-            reimbursements={reimbursements}
-            onAddReimbursement={handleAddReimbursement}
             onSubmitNewLeaveRequest={handleSubmitNewLeaveRequest}
             onNavigateToTab={handleNavigateToTab}
-            currentWifiSsid={currentWifiSsid}
             initialSubView={dashboardSubView}
+            selectedProjectId={selectedProjectId}
+            onSelectProjectId={setSelectedProjectId}
           />
         )}
 
@@ -824,9 +1358,6 @@ export function App() {
           <PresensiCameraTab
             currentUser={currentUser}
             salaryRules={salaryRules}
-            isWifiConnected={isWifiConnected}
-            currentWifiSsid={currentWifiSsid}
-            onToggleWifi={toggleWifi}
             attendanceHistory={attendances}
             onSubmitAttendance={handleAttendanceSubmit}
             onNavigateToTab={handleNavigateToTab}
@@ -835,62 +1366,144 @@ export function App() {
             realDetectedCity={realDetectedCity}
             onUpdateRealIp={setRealDetectedIp}
             onUpdateSalaryRules={handleUpdateSalaryRules}
+            projects={projects}
+            onSaveProject={handleSaveProject}
+            onUpdateEmployee={handleUpdateEmployee}
+            onDeleteAttendance={handleDeleteAttendance}
+            isDbLoading={isDbLoading}
           />
         )}
 
-        {activeTab === 'approvals' && (
+        {(activeTab === 'approvals' || activeTab === 'leave_gantt') && (
           <ApprovalHubTab
             approvals={approvals}
             employees={employees}
+            projects={projects}
             currentUser={currentUser}
             onApprove={handleApprove}
             onReject={handleReject}
             onRequestRevision={handleRequestRevision}
             onSubmitNewLeaveRequest={handleSubmitNewLeaveRequest}
+            initialOpenNewRequest={openLeaveModalDirectly}
+            onNavigateToTab={handleNavigateToTab}
+            onUpdateEmployee={handleUpdateEmployee}
+            initialSubTab={activeTab === 'leave_gantt' ? 'gantt' : 'list'}
+          />
+        )}
+
+
+        {activeTab === 'casual_attendance' && (
+          <CasualWorkerAttendanceTab
+            currentUser={currentUser}
+            projects={projects}
           />
         )}
 
         {activeTab === 'projects' && (
-          <ProjectManagementTab
-            currentUser={currentUser}
-            employees={employees}
-            projects={projects}
-            salaryRules={salaryRules}
-            onSaveProject={handleSaveProject}
-            onUpdateEmployee={handleUpdateEmployee}
-            onNavigateToTab={handleNavigateToTab}
-          />
+          canAccessProjects ? (
+            <ProjectManagementTab
+              currentUser={currentUser}
+              employees={employees}
+              projects={projects}
+              salaryRules={salaryRules}
+              onSaveProject={handleSaveProject}
+              onUpdateEmployee={handleUpdateEmployee}
+              onNavigateToTab={handleNavigateToTab}
+              initialProjectId={selectedProjectId || undefined}
+            />
+          ) : (
+            <div className="glass-card rounded-3xl p-8 text-center space-y-4 max-w-lg mx-auto my-12 border border-slate-200">
+              <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
+                <Lock className="w-6 h-6" />
+              </div>
+              <h3 className="text-base font-black text-slate-900">Akses Terbatas: Khusus Manajemen Proyek</h3>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Modul manajemen proyek dan biaya tenaga kerja hanya dapat diakses oleh Project Manager (PM), Finance, HR Manager, dan Direksi.
+              </p>
+              <button
+                onClick={() => handleNavigateToTab('dashboard')}
+                className="px-4 py-2 rounded-xl bg-[#FF6B00] text-white text-xs font-bold cursor-pointer hover:bg-[#e56000] shadow-sm"
+              >
+                Kembali ke Portal Kinerja
+              </button>
+            </div>
+          )
+        )}
+
+        {activeTab === 'project_dashboard' && (
+          canAccessProjects ? (
+            <ProjectDashboardTab
+              project={projects.find(p => p.id === selectedProjectId) || projects[0]}
+              allProjects={projects}
+              employees={employees}
+              attendances={attendances}
+              approvals={approvals}
+              salaryRules={salaryRules}
+              currentUser={currentUser}
+              onSelectProject={(id) => {
+                setSelectedProjectId(id);
+                handleNavigateToTab('project_dashboard', id);
+              }}
+              onBackToProjects={() => handleNavigateToTab('projects')}
+              onNavigateToTab={handleNavigateToTab}
+              onUpdateEmployee={handleUpdateEmployee}
+            />
+          ) : (
+            <div className="glass-card rounded-3xl p-8 text-center space-y-4 max-w-lg mx-auto my-12 border border-slate-200">
+              <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
+                <Lock className="w-6 h-6" />
+              </div>
+              <h3 className="text-base font-black text-slate-900">Akses Terbatas: Khusus Manajemen Proyek</h3>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Modul analitik dan manajemen proyek hanya dapat diakses oleh Finance, HR Manager, dan Direksi.
+              </p>
+              <button
+                onClick={() => handleNavigateToTab('dashboard')}
+                className="px-4 py-2 rounded-xl bg-[#FF6B00] text-white text-xs font-bold cursor-pointer hover:bg-[#e56000] shadow-sm"
+              >
+                Kembali ke Beranda
+              </button>
+            </div>
+          )
         )}
 
         {activeTab === 'users' && (
           <EmployeeManagementTab
             currentUser={currentUser}
-            employees={employees}
+            employees={isStaffUser ? [currentUser] : employees}
             projects={projects}
             onAddEmployee={handleAddEmployee}
             onUpdateEmployee={handleUpdateEmployee}
             onDeleteEmployee={handleDeleteEmployee}
+            onImpersonateEmployee={handleImpersonateUser}
           />
         )}
 
         {activeTab === 'payroll' && (
           <PayrollTab
             currentUser={currentUser}
-            employees={employees}
+            employees={isStaffUser ? [currentUser] : employees}
             projects={projects}
-            attendances={attendances}
+            attendances={isStaffUser ? attendances.filter(a => a.employeeId === currentUser.id) : attendances}
             salaryRules={salaryRules}
             selectedProjectId={selectedProjectId}
             onSelectProjectId={setSelectedProjectId}
+            onUpdateEmployee={handleUpdateEmployee}
+            onUpdateAttendance={handleUpdateAttendance}
           />
         )}
 
-        {activeTab === 'salary_rules' && (
+        {(activeTab === 'system_settings' || activeTab === 'salary_rules' || activeTab === 'wa_gateway' || activeTab === 'email_smtp') && (
           <SalaryRulesTab
             currentUser={currentUser}
             salaryRules={salaryRules}
             onUpdateSalaryRules={handleUpdateSalaryRules}
+            initialFocusSection={activeTab === 'email_smtp' ? 'email' : 'whatsapp'}
           />
+        )}
+
+        {activeTab === 'work_calendar' && (
+          <AnnualWorkCalendarTab currentUser={currentUser} />
         )}
 
         {activeTab === 'audit' && (
@@ -904,21 +1517,32 @@ export function App() {
         {activeTab === 'proposal' && (
           <CommercialProposalTab />
         )}
+
+        {activeTab === 'invoice' && (
+          <InvoiceTab onNavigateToTab={handleNavigateToTab} />
+        )}
       </main>
 
       {/* Footer */}
       <footer className="mt-auto py-6 border-t border-slate-200/80 bg-white/40 text-center text-xs text-slate-500 font-mono-code no-print">
         <p>
-          PRIME HRIS Enterprise • Production-Grade Human Resource Information System
+          PRIME HRIS Enterprise  Production-Grade Human Resource Information System
         </p>
         <p className="text-[10px] text-slate-400 mt-1 flex items-center justify-center gap-3">
           <span>Developed by PT Prime Infinity Systems (Prime ProjectX)</span>
-          <span>•</span>
+          <span></span>
           <button
             onClick={() => handleNavigateToTab('proposal')}
             className="text-[#FF6B00] hover:underline cursor-pointer"
           >
             Spesifikasi & Proposal Sistem
+          </button>
+          <span></span>
+          <button
+            onClick={() => handleNavigateToTab('invoice')}
+            className="text-[#18345E] font-bold hover:underline cursor-pointer"
+          >
+            Invoice Digital (Termin 1)
           </button>
         </p>
       </footer>
@@ -938,8 +1562,8 @@ export function App() {
         isOpen={isNotificationModalOpen}
         onClose={() => setIsNotificationModalOpen(false)}
         approvals={approvals}
-        reimbursements={reimbursements}
         employees={employees}
+        projects={projects}
         currentUser={currentUser}
         onApprove={handleApprove}
         onReject={handleReject}
@@ -972,7 +1596,7 @@ export function App() {
               onClick={() => setLiveToast(null)} 
               className="p-1 rounded-lg text-slate-400 hover:text-white transition-colors cursor-pointer text-xs"
             >
-              ✕
+              ?
             </button>
           </div>
         </div>
