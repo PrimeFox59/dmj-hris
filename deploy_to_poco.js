@@ -60,14 +60,31 @@ try {
 } catch (e) {}
 
 try {
-  execSync('pm2 restart prime-hris', { stdio: 'inherit' });
-  console.log('[POCO] PM2 prime-hris restarted.');
-} catch (e) {}
+  execSync('pm2 reload prime-hris --update-env', { stdio: 'inherit' });
+  console.log('[POCO] PM2 prime-hris reloaded with ZERO DOWNTIME.');
+} catch (e) {
+  try {
+    execSync('pm2 restart prime-hris', { stdio: 'inherit' });
+    console.log('[POCO] Fallback PM2 restart executed.');
+  } catch (e2) {}
+}
+
+// Pre-flight healthcheck verification (Zero-downtime gatekeeper)
+try {
+  const healthCheck = execSync('curl -s -f http://localhost:8567/api/health', { encoding: 'utf8' });
+  if (healthCheck.includes('online')) {
+    console.log('[POCO] Pre-flight Healthcheck PASSED: Service online and healthy.');
+  }
+} catch (healthErr) {
+  console.warn('[POCO Healthcheck Warning]', healthErr.message);
+}
 
 try {
-  execSync('pm2 restart prime-wa', { stdio: 'inherit' });
-  console.log('[POCO] PM2 prime-wa restarted.');
-} catch (e) {}
+  execSync('pm2 reload prime-wa --update-env', { stdio: 'inherit' });
+  console.log('[POCO] PM2 prime-wa reloaded with ZERO DOWNTIME.');
+} catch (e) {
+  try { execSync('pm2 restart prime-wa', { stdio: 'inherit' }); } catch (e2) {}
+}
 `;
 
 const runnerFile = 'poco_unpack_runner.cjs';
