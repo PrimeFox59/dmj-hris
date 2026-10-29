@@ -2376,13 +2376,35 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                       )}
                     </td>
                     <td className="py-3 px-3 text-right">
-                      <button
-                        onClick={() => setSelectedHistoryItem(item)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-[10px] cursor-pointer"
-                      >
-                        <Eye className="w-3 h-3 text-[#FF6B00]" />
-                        <span>Lihat Foto</span>
-                      </button>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => setSelectedHistoryItem(item)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-[10px] cursor-pointer transition-colors"
+                          title="Lihat Foto & Watermark Presensi"
+                        >
+                          <Eye className="w-3 h-3 text-[#FF6B00]" />
+                          <span>Lihat Foto</span>
+                        </button>
+                        {currentRole === 'superuser' && onDeleteAttendance && (
+                          <button
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              if (window.confirm(`Hapus permanen rekaman presensi tanggal ${item.date} (${item.employeeName})? Tindakan ini tidak dapat dibatalkan.`)) {
+                                try {
+                                  await onDeleteAttendance(item.id);
+                                } catch (err: any) {
+                                  alert('Gagal menghapus presensi: ' + (err?.message || err));
+                                }
+                              }
+                            }}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 font-semibold text-[10px] cursor-pointer transition-colors"
+                            title="Hapus Rekaman Presensi (Khusus Superuser)"
+                          >
+                            <Trash2 className="w-3 h-3 text-rose-600" />
+                            <span>Hapus</span>
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -2424,6 +2446,26 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                 <p><span className="font-bold text-slate-700">Geofence:</span> <span className="font-mono-code font-semibold">{selectedHistoryItem.location.distanceMeters}m</span> • {selectedHistoryItem.location.inGeofence ? 'Dalam Area Geofence Resmi' : 'Luar Radius'}</p>
                 <p><span className="font-bold text-slate-700">Lokasi:</span> {selectedHistoryItem.location.address}</p>
               </div>
+              {currentRole === 'superuser' && onDeleteAttendance && (
+                <div className="mt-4 pt-3 border-t border-slate-100 flex justify-end">
+                  <button
+                    onClick={async () => {
+                      if (window.confirm(`Hapus permanen rekaman presensi tanggal ${selectedHistoryItem.date} (${selectedHistoryItem.employeeName})?`)) {
+                        try {
+                          await onDeleteAttendance(selectedHistoryItem.id);
+                          setSelectedHistoryItem(null);
+                        } catch (err: any) {
+                          alert('Gagal menghapus: ' + (err?.message || err));
+                        }
+                      }
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 font-semibold text-xs cursor-pointer transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Hapus Rekaman Ini (Superuser)</span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>,

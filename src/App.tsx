@@ -50,7 +50,7 @@ export function App() {
   });
 
   // Auto-invalidation build ID (Membersihkan cache lama saat versi baru dirilis)
-  const APP_BUILD_ID = '20261029_v3_fast_stream';
+  const APP_BUILD_ID = '20261029_v4_anti_duplication';
   if (typeof window !== 'undefined') {
     try {
       const savedBuild = localStorage.getItem('prime_hris_build_id');
@@ -378,7 +378,7 @@ export function App() {
         if (data.projects && data.projects.length > 0) {
           setProjects(data.projects);
         }
-        if (data.attendances && data.attendances.length > 0) {
+        if (Array.isArray(data.attendances)) {
           setAttendances(data.attendances);
         }
         if (data.approvals && data.approvals.length > 0) {
@@ -731,11 +731,34 @@ export function App() {
   }, [currentUser]);
 
   // Submit new attendance record
-  const handleAttendanceSubmit = (record: AttendanceRecord) => {
-    setAttendances(prev => [record, ...prev]);
+  const handleAttendanceSubmit = async (record: AttendanceRecord) => {
+    setAttendances(prev => {
+      const idx = prev.findIndex(a => a.id === record.id || (a.employeeId === record.employeeId && a.date === record.date));
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = { ...next[idx], ...record };
+        return next;
+      }
+      return [record, ...prev];
+    });
 
-    // Save to SQLite asynchronously
-    api.saveAttendance(record).catch(err => console.error('Failed to save attendance to SQLite', err));
+    // Save to SQLite asynchronously and reconcile returned record
+    try {
+      const res = await api.saveAttendance(record);
+      if (res && res.record) {
+        setAttendances(prev => {
+          const idx = prev.findIndex(a => a.id === res.record.id || (a.employeeId === res.record.employeeId && a.date === res.record.date));
+          if (idx >= 0) {
+            const next = [...prev];
+            next[idx] = { ...next[idx], ...res.record };
+            return next;
+          }
+          return [res.record, ...prev];
+        });
+      }
+    } catch (err) {
+      console.error('Failed to save attendance to SQLite', err);
+    }
 
     // Resolve project and PM routing for applicant (prioritaskan proyek yang tercatat pada presensi)
     const userProj = (record.projectId && projects.find(p => p.id === record.projectId || p.code === record.projectId)) ||
