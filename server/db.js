@@ -563,7 +563,7 @@ export function getAllData() {
   const projects = db.prepare('SELECT data_json FROM projects ORDER BY code ASC;').all().map(r => JSON.parse(r.data_json));
 
   // REA Optimization: Streamline attendances and convert inline base64 to /api/attendance/:id/photo
-  const attendances = db.prepare('SELECT id, data_json FROM attendances ORDER BY date DESC, checkInTime DESC LIMIT 200;').all().map(r => {
+  const attendances = db.prepare('SELECT id, data_json FROM attendances ORDER BY date DESC, COALESCE(checkOutTime, checkInTime) DESC, checkInTime DESC LIMIT 200;').all().map(r => {
     let item = {};
     try { item = JSON.parse(r.data_json); } catch (e) {}
     if (item.photoUrl && item.photoUrl.startsWith('data:image')) {

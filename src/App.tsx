@@ -50,7 +50,7 @@ export function App() {
   });
 
   // Auto-invalidation build ID (Membersihkan cache lama saat versi baru dirilis)
-  const APP_BUILD_ID = '20261029_v4_anti_duplication';
+  const APP_BUILD_ID = '20261029_v5_chronological_top';
   if (typeof window !== 'undefined') {
     try {
       const savedBuild = localStorage.getItem('prime_hris_build_id');
@@ -430,13 +430,10 @@ export function App() {
         const newAtt: AttendanceRecord = packet.payload;
         if (!newAtt || !newAtt.id) return;
         setAttendances(prev => {
-          const idx = prev.findIndex(a => a.id === newAtt.id || (a.employeeId === newAtt.employeeId && a.date === newAtt.date));
-          if (idx >= 0) {
-            const next = [...prev];
-            next[idx] = { ...next[idx], ...newAtt };
-            return next;
-          }
-          return [newAtt, ...prev];
+          const existing = prev.find(a => a.id === newAtt.id || (a.employeeId === newAtt.employeeId && a.date === newAtt.date));
+          const merged = existing ? { ...existing, ...newAtt } : newAtt;
+          const rest = prev.filter(a => a.id !== merged.id && !(a.employeeId === merged.employeeId && a.date === merged.date));
+          return [merged, ...rest];
         });
         const isCheckout = newAtt.attendanceType === 'CHECK_OUT' || (newAtt.checkOutTime && !newAtt.checkInTime);
         const actionLabel = isCheckout ? 'Absen Pulang' : 'Absen Masuk';
@@ -730,30 +727,24 @@ export function App() {
     };
   }, [currentUser]);
 
-  // Submit new attendance record
+  // Submit new attendance record (Always promote most recent activity to index 0)
   const handleAttendanceSubmit = async (record: AttendanceRecord) => {
     setAttendances(prev => {
-      const idx = prev.findIndex(a => a.id === record.id || (a.employeeId === record.employeeId && a.date === record.date));
-      if (idx >= 0) {
-        const next = [...prev];
-        next[idx] = { ...next[idx], ...record };
-        return next;
-      }
-      return [record, ...prev];
+      const existing = prev.find(a => a.id === record.id || (a.employeeId === record.employeeId && a.date === record.date));
+      const merged = existing ? { ...existing, ...record } : record;
+      const rest = prev.filter(a => a.id !== merged.id && !(a.employeeId === merged.employeeId && a.date === merged.date));
+      return [merged, ...rest];
     });
 
-    // Save to SQLite asynchronously and reconcile returned record
+    // Save to SQLite asynchronously and reconcile returned record at index 0
     try {
       const res = await api.saveAttendance(record);
       if (res && res.record) {
         setAttendances(prev => {
-          const idx = prev.findIndex(a => a.id === res.record.id || (a.employeeId === res.record.employeeId && a.date === res.record.date));
-          if (idx >= 0) {
-            const next = [...prev];
-            next[idx] = { ...next[idx], ...res.record };
-            return next;
-          }
-          return [res.record, ...prev];
+          const existing = prev.find(a => a.id === res.record.id || (a.employeeId === res.record.employeeId && a.date === res.record.date));
+          const merged = existing ? { ...existing, ...res.record } : res.record;
+          const rest = prev.filter(a => a.id !== merged.id && !(a.employeeId === merged.employeeId && a.date === merged.date));
+          return [merged, ...rest];
         });
       }
     } catch (err) {

@@ -178,16 +178,29 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
   const currentRole: SystemRole = getEffectiveSystemRole(currentUser);
   const isSuperOrAdmin = currentRole === 'superuser' || currentRole === 'admin' || currentRole === 'hr';
 
-  // RBAC Privacy Filter: Superuser & Admin see all workforce logs, staff users only see their own attendance records.
+  // RBAC Privacy Filter & Chronological Sorting:
+  // Superuser & Admin see all workforce logs, staff users only see their own attendance records.
+  // ALWAYS sort by latest activity time (checkOutTime || checkInTime) DESC so the newest activity is at the very top!
   const visibleAttendanceHistory = useMemo(() => {
-    if (isSuperOrAdmin) {
-      return attendanceHistory;
-    }
-    return attendanceHistory.filter(item => {
-      const matchId = Boolean(item.employeeId && currentUser.id && item.employeeId === currentUser.id);
-      const matchNik = Boolean(item.employeeNik && currentUser.nik && item.employeeNik.trim().toLowerCase() === currentUser.nik.trim().toLowerCase());
-      const matchName = Boolean(item.employeeName && currentUser.name && item.employeeName.trim().toLowerCase() === currentUser.name.trim().toLowerCase());
-      return matchId || matchNik || matchName;
+    const rawList = isSuperOrAdmin
+      ? attendanceHistory
+      : attendanceHistory.filter(item => {
+          const matchId = Boolean(item.employeeId && currentUser.id && item.employeeId === currentUser.id);
+          const matchNik = Boolean(item.employeeNik && currentUser.nik && item.employeeNik.trim().toLowerCase() === currentUser.nik.trim().toLowerCase());
+          const matchName = Boolean(item.employeeName && currentUser.name && item.employeeName.trim().toLowerCase() === currentUser.name.trim().toLowerCase());
+          return matchId || matchNik || matchName;
+        });
+
+    return [...rawList].sort((a, b) => {
+      // 1. Sort by Date DESC
+      const dateA = a.date || '';
+      const dateB = b.date || '';
+      if (dateA !== dateB) return dateB.localeCompare(dateA);
+
+      // 2. Sort by Latest Activity Time DESC (checkOutTime || checkInTime)
+      const timeA = a.checkOutTime || a.checkInTime || '00:00:00';
+      const timeB = b.checkOutTime || b.checkInTime || '00:00:00';
+      return timeB.localeCompare(timeA);
     });
   }, [attendanceHistory, isSuperOrAdmin, currentUser.id, currentUser.nik, currentUser.name]);
 
@@ -1245,7 +1258,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
       employeeNik: currentUser.nik,
       department: currentUser.department,
       date: dateStr,
-      checkInTime: isCheckIn ? timeStr : (existingToday?.checkInTime || timeStr),
+      checkInTime: isCheckIn ? timeStr : (existingToday?.checkInTime || '08:00:00'),
       checkOutTime: isCheckIn ? undefined : timeStr,
       attendanceType: attendanceAction,
       mode: mode,
