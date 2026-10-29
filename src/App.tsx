@@ -221,10 +221,13 @@ export function App() {
         console.warn('Backend network lookup fallback', e);
       }
 
-      // Step 2: Query ipwho.is for ISP name and geographic location
+      // Step 2: Query ipwho.is for ISP name and geographic location (with 2.5s strict timeout)
       try {
         const targetUrl = clientIp ? `https://ipwho.is/${clientIp}` : 'https://ipwho.is/';
-        const res = await fetch(targetUrl);
+        const ctrl = new AbortController();
+        const timeoutId = setTimeout(() => ctrl.abort(), 2500);
+        const res = await fetch(targetUrl, { signal: ctrl.signal });
+        clearTimeout(timeoutId);
         const data = await res.json();
         if (data && data.success) {
           setRealDetectedIp(data.ip);
@@ -368,6 +371,7 @@ export function App() {
       setIsDbLoading(false);
       return;
     }
+
     const loadFromSqlite = async () => {
       setIsDbLoading(true);
       try {
@@ -415,7 +419,7 @@ export function App() {
       }
     };
     loadFromSqlite();
-  }, [authUser, isKioskPortalActive]);
+  }, [authUser?.id, isKioskPortalActive]);
 
   // Floating Live Notification Toast (SSE Multi-device Sync)
   const [liveToast, setLiveToast] = useState<{ message: string; type?: 'info' | 'success' | 'warn' } | null>(null);

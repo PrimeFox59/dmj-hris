@@ -5,7 +5,15 @@ console.log('[MC18] Building dist for PRIME HRIS...');
 execSync('npm run build', { stdio: 'inherit' });
 
 console.log('[MC18] Packaging dist, server, wa-gateway, and data...');
-execSync('tar -czf bundle.tar.gz dist server/db.js server/index.js server/whatsappService.js server/emailService.js wa-gateway/package.json wa-gateway/server.js data/seedData.json galih_enrolled_square.jpg test_enrolled_front.png scripts/enroll_galih_biometric.mjs scripts/sync_project_schedules.mjs scripts/purge_dummy_and_reindex_logins.mjs scripts/sync_staff_location_to_sqlite.mjs scripts/sync_project_personnel_assignments.mjs scripts/sync_system_roles.mjs scripts/fix_poco_attendance_data.mjs', { stdio: 'inherit' });
+const bundleTargets = [
+  'dist', 'server/db.js', 'server/index.js', 'server/whatsappService.js', 'server/emailService.js',
+  'wa-gateway/package.json', 'wa-gateway/server.js', 'data/seedData.json',
+  'galih_enrolled_square.jpg', 'test_enrolled_front.png', 'scripts/enroll_galih_biometric.mjs',
+  'scripts/sync_project_schedules.mjs', 'scripts/purge_dummy_and_reindex_logins.mjs',
+  'scripts/sync_staff_location_to_sqlite.mjs', 'scripts/sync_project_personnel_assignments.mjs',
+  'scripts/sync_system_roles.mjs', 'scripts/fix_poco_attendance_data.mjs'
+].filter(f => fs.existsSync(f));
+execSync(`tar -czf bundle.tar.gz ${bundleTargets.join(' ')}`, { stdio: 'inherit' });
 
 console.log('[MC18] Transferring bundle.tar.gz to POCO...');
 let remoteRunner = 'DIRECT';
