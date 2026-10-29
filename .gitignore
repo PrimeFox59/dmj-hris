@@ -68,3 +68,5 @@ server/__pycache__/
 
 # CodeGraph Index
 .codegraph/
+
+_scratch_archive/
