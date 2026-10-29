@@ -362,9 +362,14 @@ export function App() {
     setActiveTab('dashboard');
   };
 
-  // Load initial dataset directly from SQLite Database
+  // Load initial dataset directly from SQLite Database (only after authenticated or in kiosk mode)
   useEffect(() => {
+    if (!authUser && !isKioskPortalActive) {
+      setIsDbLoading(false);
+      return;
+    }
     const loadFromSqlite = async () => {
+      setIsDbLoading(true);
       try {
         const data = await api.getBootstrapData();
         if (data.employees && data.employees.length > 0) {
@@ -410,7 +415,7 @@ export function App() {
       }
     };
     loadFromSqlite();
-  }, []);
+  }, [authUser, isKioskPortalActive]);
 
   // Floating Live Notification Toast (SSE Multi-device Sync)
   const [liveToast, setLiveToast] = useState<{ message: string; type?: 'info' | 'success' | 'warn' } | null>(null);

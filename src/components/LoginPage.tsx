@@ -22,43 +22,7 @@ import {
 } from 'lucide-react';
 import { AuthUser } from '../types';
 import { api } from '../services/api';
-import {
-  buildGalleryFeatureIndex,
-  evaluateKiosk1N,
-  isHumanFacePresent,
-  EnrolledGalleryItem
-} from '../utils/biometricHelper';
-
-// In-Memory Pre-Indexed Biometric Gallery for Instant Face ID Login (0 ms)
-let memoryCachedGallery: EnrolledGalleryItem[] | null = null;
-let galleryLoadingPromise: Promise<EnrolledGalleryItem[]> | null = null;
-
-async function fetchAndBuildGallery(forceRefresh = false): Promise<EnrolledGalleryItem[]> {
-  if (!forceRefresh && memoryCachedGallery && memoryCachedGallery.length > 0) {
-    return memoryCachedGallery;
-  }
-  if (!forceRefresh && galleryLoadingPromise) {
-    return galleryLoadingPromise;
-  }
-
-  galleryLoadingPromise = (async () => {
-    try {
-      const res = await api.getEnrolledBiometricGallery();
-      if (res.success && Array.isArray(res.employees)) {
-        const gallery = await buildGalleryFeatureIndex(res.employees);
-        memoryCachedGallery = gallery;
-        return gallery;
-      }
-    } catch (e) {
-      console.warn('Failed to pre-index biometric gallery:', e);
-    } finally {
-      galleryLoadingPromise = null;
-    }
-    return [];
-  })();
-
-  return galleryLoadingPromise;
-}
+// Lightweight Biometric Verification via Server SFace Engine
 
 interface LoginPageProps {
   onLoginSuccess: (user: AuthUser, token: string) => void;
@@ -103,7 +67,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onOpenKios
   // Biometric Face ID States
   const [cameraActive, setCameraActive] = useState<boolean>(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
-  const [galleryIndex, setGalleryIndex] = useState<EnrolledGalleryItem[]>(() => memoryCachedGallery || []);
+  const [enrolledCount, setEnrolledCount] = useState<number>(0);
   const [isIndexingGallery, setIsIndexingGallery] = useState<boolean>(false);
   const [detectedCandidate, setDetectedCandidate] = useState<any | null>(null);
   const [recognitionProgress, setRecognitionProgress] = useState<number>(0);
@@ -181,16 +145,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onOpenKios
     setPendingLogin(null);
   };
 
-  // Pre-index Face Gallery immediately in background when LoginPage mounts
-  useEffect(() => {
-    fetchAndBuildGallery().then(gallery => {
-      if (gallery && gallery.length > 0) {
-        setGalleryIndex(gallery);
-      }
-    });
-  }, []);
-
-  // Manage Camera and ensure Gallery is ready when switching to FACE_ID
+  // Manage Camera when switching to FACE_ID (Zero Canvas/CPU Bloat)
   useEffect(() => {
     if (loginMode === 'FACE_ID') {
       isFaceAuthenticatingRef.current = false;
@@ -199,18 +154,17 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onOpenKios
       setFaceFeedback('Posisikan Wajah di Depan Kamera');
       startFaceCamera();
 
-      // Selalu perbarui galeri biometrik di latar belakang agar karyawan baru (e.g. Wildan) langsung terindeks
-      setIsIndexingGallery(galleryIndex.length === 0);
-      fetchAndBuildGallery(true).then(gallery => {
-        if (gallery && gallery.length > 0) {
-          setGalleryIndex(gallery);
-          console.log(`[LOGIN FACE ID] Galeri biometrik mutakhir siap (${gallery.length} karyawan terdaftar).`);
-        }
-      }).catch(err => {
-        console.warn('Failed to refresh face gallery:', err);
-      }).finally(() => {
-        setIsIndexingGallery(false);
-      });
+      if (enrolledCount === 0) {
+        setIsIndexingGallery(true);
+        fetch('/api/public-kiosk/employees')
+          .then(r => r.json())
+          .then(data => {
+            const count = (data.employees || []).filter((e: any) => e.hasBiometric || e.biometric?.isEnrolled).length;
+            setEnrolledCount(count);
+          })
+          .catch(() => {})
+          .finally(() => setIsIndexingGallery(false));
+      }
     } else {
       stopFaceCamera();
     }
@@ -372,7 +326,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onOpenKios
     }, 250);
 
     return () => clearInterval(interval);
-  }, [loginMode, cameraActive, isFaceAuthenticating, pendingLogin, galleryIndex]);
+  }, [loginMode, cameraActive, isFaceAuthenticating, pendingLogin]);
 
   // Execute Biometric Login on Server
   const executeBiometricLogin = async (emp: any, matchScore: number, matchedPose: any) => {
@@ -495,6 +449,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onOpenKios
             {/* Loop Video with feathered radial mask */}
             <video
               ref={videoRef}
+              preload="metadata"
               src="/ecosystem_hero.mp4"
               poster="/ecosystem_hero.png"
               autoPlay
@@ -584,7 +539,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onOpenKios
                 <div className="flex items-center justify-between text-[11px] px-1 text-slate-400 max-w-[280px] mx-auto">
                   <span className="flex items-center gap-1.5 font-medium">
                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                    Biometrik: <strong className="text-slate-200">{galleryIndex.length} Terdaftar</strong>
+                    Biometrik: <strong className="text-slate-200">{enrolledCount > 0 ? `${enrolledCount} Terdaftar` : "AI SFace Aktif"}</strong>
                   </span>
                   {isIndexingGallery && (
                     <span className="text-amber-400 text-[10px] animate-pulse">Menyelaraskan...</span>

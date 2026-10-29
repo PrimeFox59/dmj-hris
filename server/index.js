@@ -1484,6 +1484,22 @@ const server = http.createServer(async (req, res) => {
     } else {
       headers['Cache-Control'] = 'public, max-age=31536000, immutable';
     }
+
+    const acceptEncoding = req.headers['accept-encoding'] || '';
+    const compressible = ['.js', '.css', '.html', '.json', '.svg', '.map'].includes(ext);
+
+    if (compressible && acceptEncoding.includes('gzip') && content.length > 1024) {
+      try {
+        const gzipped = zlib.gzipSync(content);
+        headers['Content-Encoding'] = 'gzip';
+        headers['Content-Length'] = gzipped.length;
+        headers['Vary'] = 'Accept-Encoding';
+        res.writeHead(200, headers);
+        return res.end(gzipped);
+      } catch (gzipErr) {}
+    }
+
+    headers['Content-Length'] = content.length;
     res.writeHead(200, headers);
     res.end(content);
   });
