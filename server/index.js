@@ -81,6 +81,7 @@ const MIME_TYPES = {
   '.js': 'text/javascript',
   '.css': 'text/css',
   '.json': 'application/json',
+  '.webmanifest': 'application/manifest+json',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.svg': 'image/svg+xml',
@@ -1477,7 +1478,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     const headers = { 'Content-Type': contentType };
-    if (ext === '.html') {
+    if (ext === '.html' || cleanUrl === '/sw.js' || cleanUrl.endsWith('.webmanifest') || cleanUrl.endsWith('manifest.json')) {
       headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0';
       headers['Pragma'] = 'no-cache';
       headers['Expires'] = '0';

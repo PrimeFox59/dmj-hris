@@ -22,6 +22,7 @@ import { ProfileTabId } from './components/ProfileSettingsModal';
 import { QuickAttendancePublicPortal } from './components/QuickAttendancePublicPortal';
 import { AnnualWorkCalendarTab } from './components/AnnualWorkCalendarTab';
 import { CasualWorkerAttendanceTab } from './components/CasualWorkerAttendanceTab';
+import { PwaInstallPrompt } from './components/PwaInstallPrompt';
 
 import {
   INITIAL_EMPLOYEES,
@@ -1639,6 +1640,9 @@ export function App() {
         onSubmitNewLeaveRequest={handleSubmitNewLeaveRequest}
         onNavigateToTab={handleNavigateToTab}
       />
+
+      {/* Native PWA Mobile Install Banner */}
+      <PwaInstallPrompt />
 
       {/* Floating Real-Time Sync Notification Toast */}
       {liveToast && (
