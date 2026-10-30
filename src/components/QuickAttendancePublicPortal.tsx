@@ -137,7 +137,7 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
   const [biometricResult, setBiometricResult] = useState<BiometricVerificationResult | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [submittedRecord, setSubmittedRecord] = useState<AttendanceRecord | null>(null);
-  const [resetCountdown, setResetCountdown] = useState<number>(4);
+  const [resetCountdown, setResetCountdown] = useState<number>(2);
 
   // Mode Presensi Terpisah: CHECK_IN (Masuk) vs CHECK_OUT (Pulang)
   const [attendanceAction, setAttendanceAction] = useState<'CHECK_IN' | 'CHECK_OUT'>(() => {
@@ -394,7 +394,7 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
       navigator.geolocation.getCurrentPosition(
         handlePosition,
         handleGpsErr,
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
       );
 
       watchId = navigator.geolocation.watchPosition(
@@ -656,7 +656,8 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
           });
 
           setRecognitionProgress(prev => {
-            const next = prev + 50; // Mengunci cepat dalam 2 tick (~500ms)
+            // Akselerasi pengenalan kilat <3 detik: skor >= 72% langsung kunci 100% di frame pertama
+            const next = resp.score >= 72 ? 100 : (prev + 50);
             if (next >= 100) {
               isAutoProcessingRef.current = true;
               setPendingConfirmation({
@@ -665,7 +666,7 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
                 matchedPose: 'front',
                 targetGeofence,
                 distMeters,
-                countdown: 4,
+                countdown: 1, // Konfirmasi kilat 1 detik (total alur deteksi + catat <1.5 detik)
                 actionType: attendanceAction
               });
               return 100;
@@ -708,7 +709,7 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
       } finally {
         isProcessingFrame = false;
       }
-    }, 250);
+    }, 180);
 
     return () => {
       isSubscribed = false;
@@ -988,8 +989,8 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
 
       playTone(1318.51, 'sine', 0.45); // celebration chime
 
-      // 4-second auto-reset timer for the next employee
-      let count = 4;
+      // 2-second auto-reset timer for the next employee (akselerasi pergantian antrean)
+      let count = 2;
       setResetCountdown(count);
       resetTimerRef.current = setInterval(() => {
         count -= 1;
@@ -1069,7 +1070,7 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
     setGeofenceReject(null);
     setRecognitionProgress(0);
     isAutoProcessingRef.current = false;
-    setResetCountdown(4);
+    setResetCountdown(2);
     if (!cameraActive) {
       startCamera();
     }
