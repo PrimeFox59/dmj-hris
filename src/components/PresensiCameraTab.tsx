@@ -1886,48 +1886,6 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                 </div>
               )}
 
-              {/* Mandatory Reason Alert Card: Terlambat */}
-              {isLate && (
-                <div className="p-3.5 rounded-2xl bg-rose-50/90 border border-rose-300 shadow-xs space-y-2 motion-fade-in-up">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 text-rose-900 font-bold text-xs">
-                      <Clock className="w-4 h-4 text-rose-600 shrink-0" />
-                      <span>Keterlambatan Presensi ({lateMinutes} Menit)</span>
-                    </div>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-200 text-rose-900 font-mono-code uppercase tracking-wider shrink-0">
-                      Wajib Diisi
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-rose-800 leading-relaxed">
-                    Harap berikan alasan / justifikasi keterlambatan:
-                  </p>
-                  <textarea
-                    rows={2}
-                    required
-                    value={lateReason}
-                    onChange={e => setLateReason(e.target.value)}
-                    placeholder="Tulis alasan keterlambatan (cth: lalu lintas macet, cuaca buruk)..."
-                    className="w-full glass-input rounded-xl p-2.5 text-xs text-slate-800 placeholder-slate-400 resize-none border border-rose-300 focus:ring-2 focus:ring-rose-500/30 bg-white"
-                  />
-                  <div className="flex flex-wrap gap-1.5">
-                    {[
-                      'Penumpukan arus lalu lintas jam sibuk',
-                      'Cuaca ekstrem / hujan lebat perjalanan',
-                      'Kendala teknis kendaraan pribadi',
-                      'Penyelesaian urusan darurat keluarga'
-                    ].map(preset => (
-                      <button
-                        key={preset}
-                        type="button"
-                        onClick={() => setLateReason(preset)}
-                        className="text-[10px] px-2 py-0.5 rounded-lg bg-white border border-rose-200 hover:border-rose-400 text-rose-800 font-medium transition-colors cursor-pointer"
-                      >
-                        + {preset}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
 
             {/* Live GPS Coordinates Status Banner */}
