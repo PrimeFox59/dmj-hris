@@ -65,12 +65,17 @@ export function normalizeIndoLat(lat: number | undefined | null, lng: number | u
 export function getProjectCoordinates(proj: Project): { lat: number; lng: number; radius: number } | null {
   if (!proj) return null;
   const geo = proj.customRules?.geofence;
-  if (geo && typeof geo.latitude === 'number' && typeof geo.longitude === 'number' && !isNaN(geo.latitude) && !isNaN(geo.longitude)) {
-    return {
-      lat: geo.latitude,
-      lng: geo.longitude,
-      radius: geo.radiusMeters || 350
-    };
+  if (geo) {
+    const rawLat = typeof geo.latitude === 'number' ? geo.latitude : parseFloat(geo.latitude as any);
+    const rawLng = typeof geo.longitude === 'number' ? geo.longitude : parseFloat(geo.longitude as any);
+    if (!isNaN(rawLat) && !isNaN(rawLng)) {
+      const normalizedLat = normalizeIndoLat(rawLat, rawLng) ?? rawLat;
+      return {
+        lat: normalizedLat,
+        lng: rawLng,
+        radius: Number(geo.radiusMeters) || 350
+      };
+    }
   }
 
   // Fallback mapping berbasis nama proyek atau kota site resmi penempatan
@@ -469,10 +474,16 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
   }, [projects, currentUser]);
 
   // State Proyek Terpilih (Default ke assignedProject / OFFICE, namun bisa di-override manual oleh staf)
-  const [selectedProjectId, setSelectedProjectId] = useState<string>(() => {
-    return currentUser.assignedProjectId || (currentUser as any).employee?.assignedProjectId || 'OFFICE';
-  });
+  const currentAssignedId = currentUser.assignedProjectId || (currentUser as any).employee?.assignedProjectId || 'OFFICE';
+  const [selectedProjectId, setSelectedProjectId] = useState<string>(currentAssignedId);
   const [isManualProjectOverride, setIsManualProjectOverride] = useState<boolean>(false);
+
+  // Selalu sinkronkan selectedProjectId jika assignedProjectId karyawan berubah (misal diubah admin di tab Proyek)
+  useEffect(() => {
+    if (currentAssignedId && !isManualProjectOverride) {
+      setSelectedProjectId(currentAssignedId);
+    }
+  }, [currentAssignedId, isManualProjectOverride]);
 
   // Kalkulasi jarak ke semua proyek untuk auto-detection site terdekat / dalam radius
   const projectDistanceList = useMemo<{
@@ -515,8 +526,11 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
 
   // Proyek aktif yang sedang dituju untuk presensi saat ini
   const activeProject = useMemo(() => {
-    if (selectedProjectId === 'OFFICE') return null;
-    return projects.find(p => p.id === selectedProjectId) || assignedProject || null;
+    if (selectedProjectId && selectedProjectId !== 'OFFICE') {
+      const found = projects.find(p => p.id === selectedProjectId);
+      if (found) return found;
+    }
+    return assignedProject || null;
   }, [selectedProjectId, projects, assignedProject]);
 
   const activeProjectDist = useMemo(() => {
@@ -544,20 +558,26 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
 
   // Resolusi nama lokasi akurat untuk UI & record presensi
   const activeLocationTitle = useMemo(() => {
-    if (isInOfficeGeofence) {
-      return salaryRules?.officeGeofence?.name || assignedProject?.name || 'Kantor Pusat & Operasional Sidoarjo';
-    }
     if (activeProject && isInProjectGeofence) {
-      return activeProject.name;
+      return `Site ${activeProject.name}`;
+    }
+    if (isInOfficeGeofence) {
+      return salaryRules?.officeGeofence?.name || 'Kantor Pusat & Operasional';
     }
     if (autoDetectedMatch && autoDetectedMatch.inGeofence) {
-      return autoDetectedMatch.project.name;
+      return `Site ${autoDetectedMatch.project.name}`;
+    }
+    if (activeProject) {
+      return `Site ${activeProject.name}`;
+    }
+    if (assignedProject) {
+      return `Site ${assignedProject.name}`;
     }
     if (coords.address && !coords.address.startsWith('Koordinat HP:')) {
-      return coords.address.replace(' (GPS HP Asli)', '');
+      return coords.address.replace(' (GPS HP Asli)', '').replace(' (Lokasi Jaringan PC)', '');
     }
     return 'Luar Area Kerja';
-  }, [isInOfficeGeofence, activeProject, isInProjectGeofence, autoDetectedMatch, salaryRules?.officeGeofence?.name, assignedProject?.name, coords.address]);
+  }, [isInOfficeGeofence, activeProject, isInProjectGeofence, autoDetectedMatch, salaryRules?.officeGeofence?.name, assignedProject, coords.address]);
 
   const handleSaveGeofence = async () => {
     const numLat = typeof tempOfficeLat === 'string' ? parseFloat(tempOfficeLat) : tempOfficeLat;
@@ -1821,8 +1841,8 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                   {!isGpsLocked
                     ? 'Mencari Lokasi...'
                     : isWithinAnyAuthorizedGeofence
-                    ? `${realGeofenceDistance}m • Masuk Area Kerja (Valid)`
-                    : `${realGeofenceDistance}m • Luar Area`}
+                    ? `${effectiveTargetDistance}m • Masuk Area Kerja (Valid)`
+                    : `${effectiveTargetDistance}m • Luar Area`}
                 </span>
                 <button
                   type="button"
@@ -1841,7 +1861,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5 text-amber-900 font-bold text-xs">
                     <MapPin className="w-4 h-4 text-amber-600 shrink-0" />
-                    <span>Presensi di Luar Radius Area Kerja ({realGeofenceDistance}m)</span>
+                    <span>Presensi di Luar Radius Area Kerja ({effectiveTargetDistance}m)</span>
                   </div>
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-200 text-amber-900 font-mono-code uppercase tracking-wider shrink-0">
                     Wajib Isi Catatan

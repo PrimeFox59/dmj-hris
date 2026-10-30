@@ -148,6 +148,15 @@ export function App() {
   // Project Filter state for Payroll
   const [selectedProjectId, setSelectedProjectId] = useState<string>('ALL');
 
+  // Pastikan currentUser selalu terupdate reaktif jika data penugasan proyeknya diubah di tab lain
+  useEffect(() => {
+    const updated = employees.find(e => e.id === currentUser.id);
+    if (updated && updated.assignedProjectId !== currentUser.assignedProjectId) {
+      setCurrentUser(updated);
+      try { localStorage.setItem('prime_hris_current_user', JSON.stringify(updated)); } catch (e) {}
+    }
+  }, [employees, currentUser.id, currentUser.assignedProjectId]);
+
   // SubView state for Unified Dashboard (hris, finance, performance)
   const [dashboardSubView, setDashboardSubView] = useState<'hris' | 'finance' | 'performance'>('hris');
   const [openLeaveModalDirectly, setOpenLeaveModalDirectly] = useState<boolean>(false);
@@ -1174,6 +1183,10 @@ export function App() {
         updatedEmployees.forEach(e => {
           map.set(e.id, e);
           api.saveEmployee(e).catch(err => console.error('Failed to save reassigned employee to SQLite', err));
+          if (currentUser.id === e.id) {
+            setCurrentUser(e);
+            try { localStorage.setItem('prime_hris_current_user', JSON.stringify(e)); } catch (err) {}
+          }
         });
         return Array.from(map.values());
       });
