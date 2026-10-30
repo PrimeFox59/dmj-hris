@@ -211,12 +211,10 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
   const [cameraFacingMode, setCameraFacingMode] = useState<'user' | 'environment'>('user');
   const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
   const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
-  const [activeParameterPanel, setActiveParameterPanel] = useState<'NOTE' | 'LOCATION' | 'DINAS' | 'LATE' | null>('NOTE');
   const [mode, setMode] = useState<AttendanceMode>('WFO');
   const [attendanceAction, setAttendanceAction] = useState<'CHECK_IN' | 'CHECK_OUT'>(() => {
     return new Date().getHours() >= 12 ? 'CHECK_OUT' : 'CHECK_IN';
   });
-  const [note, setNote] = useState('Supervisi Machining & Koordinasi Operasional Shift');
   
   const [destination, setDestination] = useState('PT Vale Indonesia, Sorowako Mill Site');
   const [clientName, setClientName] = useState('PT Vale Indonesia Tbk');
@@ -1207,12 +1205,12 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validasi & Auto-Fallback: Presensi di Luar Geofence (Tetap Diterima & Butuh Approval)
+    // Validasi Wajib Isi Catatan jika di luar radius area kerja
     let effectiveOutOfRangeReason = outOfRangeReason.trim();
     if (mode === 'WFO' && !isWithinAnyAuthorizedGeofence) {
       if (!effectiveOutOfRangeReason) {
-        effectiveOutOfRangeReason = 'Supervisi Lapangan & Penugasan Luar Radius';
-        setOutOfRangeReason(effectiveOutOfRangeReason);
+        alert('Anda terdeteksi di luar area kerja resmi. Wajib mengisi catatan / alasan presensi di luar area sebelum mengirim!');
+        return;
       }
     }
 
@@ -1232,13 +1230,16 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
       return;
     }
 
-    const userNote = note.trim();
-    const noteParts: string[] = [];
-    if (userNote) noteParts.push(userNote);
-    if (mode === 'WFO' && !isWithinAnyAuthorizedGeofence && effectiveOutOfRangeReason) {
-      noteParts.push(`[Luar Area ${assignedProjectDist !== null ? assignedProjectDist : realGeofenceDistance}m: ${effectiveOutOfRangeReason}]`);
+    let noteToUse = '';
+    if (mode === 'WFO' && !isWithinAnyAuthorizedGeofence) {
+      noteToUse = `[Luar Area ${assignedProjectDist !== null ? assignedProjectDist : realGeofenceDistance}m]: ${effectiveOutOfRangeReason}`;
+    } else if (mode === 'DINAS_LUAR') {
+      noteToUse = `[Dinas Luar: ${clientName || 'Klien'} - ${destination || 'Tujuan'}] ${dinasPurpose || ''}`.trim();
+    } else if (mode === 'WFH') {
+      noteToUse = 'Presensi Kerja Remote (WFH)';
+    } else {
+      noteToUse = isCheckIn ? 'Presensi Masuk (Dalam Area Kerja)' : 'Presensi Pulang (Dalam Area Kerja)';
     }
-    const noteToUse = noteParts.length > 0 ? noteParts.join(' | ') : 'Supervisi Machining & Operasional Shift';
     const lateReasonToUse = effectiveIsLate ? effectiveLateReason : undefined;
 
     const now = rtcService.getServerNow();
@@ -1608,7 +1609,6 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                       type="button"
                       onClick={() => {
                         setMode(item.id as AttendanceMode);
-                        if (item.id === 'DINAS_LUAR') setActiveParameterPanel('DINAS');
                       }}
                       className={`p-2.5 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center gap-1 active:scale-95 ${
                         isSelected
@@ -1635,20 +1635,11 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
               )}
 
               {mode === 'DINAS_LUAR' && (
-                <div className="p-2.5 rounded-xl bg-amber-50/90 border border-amber-200 text-amber-900 text-xs flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
-                    <p className="text-[11px] leading-relaxed truncate">
-                      <b>Dinas Luar Aktif:</b> Bebas geofence site. Silakan isi surat tugas / tujuan di bawah.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setActiveParameterPanel('DINAS')}
-                    className="text-[10px] font-bold bg-amber-200 text-amber-900 px-2 py-0.5 rounded-lg shrink-0 cursor-pointer hover:bg-amber-300"
-                  >
-                    Edit Surat Tugas
-                  </button>
+                <div className="p-2.5 rounded-xl bg-amber-50/90 border border-amber-200 text-amber-900 text-xs flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
+                  <p className="text-[11px] leading-relaxed">
+                    <b>Dinas Luar Aktif:</b> Bebas geofence site. Silakan lengkapi detail penugasan di formulir bawah sebelum mengambil foto.
+                  </p>
                 </div>
               )}
             </div>
@@ -1731,84 +1722,8 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
               </div>
             </div>
 
-            {/* 2. Parameter Control Deck (Grid of Button Icons) */}
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
-                <span>2. Parameter & Validasi</span>
-                <span className="text-[10px] text-slate-400">Klik ikon untuk edit</span>
-              </label>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                {/* Button Icon: Catatan Harian */}
-                <button
-                  type="button"
-                  onClick={() => setActiveParameterPanel(prev => prev === 'NOTE' ? null : 'NOTE')}
-                  className={`p-2.5 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center gap-1 active:scale-95 ${
-                    activeParameterPanel === 'NOTE'
-                      ? 'bg-slate-900 border-slate-900 text-white shadow-md'
-                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                  }`}
-                  title="Buka Catatan Harian"
-                >
-                  <div className="relative">
-                    <FileText className={`w-4 h-4 ${activeParameterPanel === 'NOTE' ? 'text-[#FF6B00]' : 'text-slate-600'}`} />
-                    {note && (
-                      <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-emerald-500"></span>
-                    )}
-                  </div>
-                  <span className="text-xs font-bold leading-tight">Catatan</span>
-                  <span className={`text-[9px] font-mono-code truncate max-w-[80px] ${activeParameterPanel === 'NOTE' ? 'text-slate-300' : 'text-slate-400'}`}>
-                    {note ? 'Terisi' : 'Kosong'}
-                  </span>
-                </button>
-
-                {/* Button Icon: Lokasi & Geofence */}
-                <button
-                  type="button"
-                  onClick={() => setActiveParameterPanel(prev => prev === 'LOCATION' ? null : 'LOCATION')}
-                  className={`p-2.5 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center gap-1 active:scale-95 ${
-                    activeParameterPanel === 'LOCATION'
-                      ? 'bg-slate-900 border-slate-900 text-white shadow-md'
-                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                  }`}
-                  title="Buka Detail Lokasi & Geofence"
-                >
-                  <div className="relative">
-                    <MapPin className={`w-4 h-4 ${activeParameterPanel === 'LOCATION' ? 'text-[#FF6B00]' : 'text-slate-600'}`} />
-                    <span className={`absolute -top-1 -right-1 w-2 h-2 rounded-full ${
-                      realGeofenceDistance <= (salaryRules.officeGeofence.radiusMeters || 350) ? 'bg-emerald-500' : 'bg-rose-500'
-                    }`}></span>
-                  </div>
-                  <span className="text-xs font-bold leading-tight">Lokasi</span>
-                  <span className={`text-[9px] font-mono-code ${activeParameterPanel === 'LOCATION' ? 'text-slate-300' : 'text-slate-400'}`}>
-                    {realGeofenceDistance}m
-                  </span>
-                </button>
-
-                {/* Button Icon: Kamera Biometrik (Pop-up Modal Trigger) */}
-                <button
-                  type="button"
-                  onClick={handleOpenBiometricCamera}
-                  className={`p-2.5 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center gap-1 active:scale-95 ${
-                    capturedPhoto
-                      ? 'bg-emerald-50/90 border-emerald-300 text-emerald-800 shadow-sm'
-                      : isCameraModalOpen
-                      ? 'bg-slate-900 border-slate-900 text-white shadow-md'
-                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                  }`}
-                  title="Buka Terminal Kamera Biometrik"
-                >
-                  <div className="relative">
-                    <Camera className={`w-4 h-4 ${capturedPhoto ? 'text-emerald-600' : isCameraModalOpen ? 'text-[#FF6B00]' : 'text-slate-600'}`} />
-                    <span className={`absolute -top-1 -right-1 w-2 h-2 rounded-full ${capturedPhoto ? 'bg-emerald-500' : 'bg-orange-500 animate-pulse'}`}></span>
-                  </div>
-                  <span className="text-xs font-bold leading-tight">Kamera</span>
-                  <span className={`text-[9px] font-mono-code ${capturedPhoto ? 'text-emerald-700 font-bold' : isCameraModalOpen ? 'text-slate-300' : 'text-slate-400'}`}>
-                    {capturedPhoto ? 'Foto Siap' : 'Buka Pop-up'}
-                  </span>
-                </button>
-              </div>
-
+            {/* Kamera Biometrik & Validasi Kehadiran */}
+            <div className="space-y-2.5">
               {/* Compact Photo Preview & Quick Shutter / Modal Trigger Card */}
               {capturedPhoto ? (
                 <div className="p-3 rounded-2xl bg-emerald-50/70 border border-emerald-200/90 flex items-center justify-between gap-3 shadow-2xs motion-fade-in-up">
@@ -1858,7 +1773,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
               ) : (
                 <div 
                   onClick={handleOpenBiometricCamera}
-                  className="p-3 rounded-2xl bg-slate-50/80 hover:bg-orange-50/50 border border-dashed border-slate-300 hover:border-[#FF6B00] transition-all cursor-pointer flex items-center justify-between gap-3 group"
+                  className="p-3.5 rounded-2xl bg-slate-50/80 hover:bg-orange-50/50 border border-dashed border-slate-300 hover:border-[#FF6B00] transition-all cursor-pointer flex items-center justify-between gap-3 group"
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-11 h-11 rounded-xl bg-white border border-slate-200 group-hover:border-orange-300 flex items-center justify-center text-[#FF6B00] shadow-2xs transition-colors">
@@ -1866,17 +1781,17 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                     </div>
                     <div>
                       <p className="text-xs font-bold text-slate-800 group-hover:text-[#FF6B00] transition-colors">
-                        Foto Biometrik Belum Diambil
+                        Ambil Foto Biometrik
                       </p>
                       <p className="text-[11px] text-slate-400">
-                        Klik tombol Kamera atau baris ini untuk buka kamera pop-up
+                        Klik untuk membuka kamera & verifikasi wajah
                       </p>
                     </div>
                   </div>
                   <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); handleOpenBiometricCamera(); }}
-                    className="px-3 py-1.5 rounded-xl bg-[#FF6B00] text-white text-xs font-bold hover:bg-[#e56000] shadow-sm flex items-center gap-1 cursor-pointer shrink-0"
+                    className="px-3.5 py-2 rounded-xl bg-[#FF6B00] text-white text-xs font-bold hover:bg-[#e56000] shadow-sm flex items-center gap-1.5 cursor-pointer shrink-0"
                   >
                     <Camera className="w-3.5 h-3.5" />
                     <span>Buka Kamera</span>
@@ -1884,28 +1799,28 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                 </div>
               )}
 
-              {/* Mandatory Reason Alert Card: Luar Geofence Area */}
+              {/* Status Masuk Area Kerja: Jika Luar Geofence, Otomatis Muncul Input Wajib Catatan */}
               {mode === 'WFO' && !isWithinAnyAuthorizedGeofence && (
                 <div className="p-3.5 rounded-2xl bg-amber-50/90 border border-amber-300 shadow-xs space-y-2 motion-fade-in-up">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5 text-amber-900 font-bold text-xs">
                       <MapPin className="w-4 h-4 text-amber-600 shrink-0" />
-                      <span>Presensi di Luar Radius Area ({assignedProjectDist !== null ? assignedProjectDist : realGeofenceDistance}m)</span>
+                      <span>Presensi di Luar Radius Area Kerja ({assignedProjectDist !== null ? assignedProjectDist : realGeofenceDistance}m)</span>
                     </div>
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-200 text-amber-900 font-mono-code uppercase tracking-wider shrink-0">
-                      Wajib Diisi
+                      Wajib Isi Catatan
                     </span>
                   </div>
                   <p className="text-[11px] text-amber-800 leading-relaxed">
-                    Sistem tetap menerima presensi Anda. Harap berikan penjelasan / alasan mengapa Anda melakukan presensi di luar area resmi:
+                    GPS perangkat terdeteksi di luar area kerja resmi. Harap tuliskan catatan / alasan presensi di lokasi ini:
                   </p>
                   <textarea
                     rows={2}
                     required
                     value={outOfRangeReason}
                     onChange={e => setOutOfRangeReason(e.target.value)}
-                    placeholder="Tulis alasan di luar radius (cth: supervisi vendor lapangan, mobilisasi alat, kendala sinyal GPS)..."
-                    className="w-full glass-input rounded-xl p-2.5 text-xs text-slate-800 placeholder-slate-400 resize-none border border-amber-300 focus:ring-2 focus:ring-amber-500/30"
+                    placeholder="Tuliskan alasan presensi di luar radius (wajib diisi)..."
+                    className="w-full glass-input rounded-xl p-2.5 text-xs text-slate-800 placeholder-slate-400 resize-none border border-amber-300 focus:ring-2 focus:ring-amber-500/30 bg-white"
                   />
                   <div className="flex flex-wrap gap-1.5">
                     {[
@@ -1927,6 +1842,50 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                 </div>
               )}
 
+              {/* Form Input Tambahan: Dinas Luar */}
+              {mode === 'DINAS_LUAR' && (
+                <div className="p-3.5 rounded-2xl bg-amber-50/90 border border-amber-200 space-y-2 motion-fade-in-up">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900">
+                    <Briefcase className="w-4 h-4 text-amber-600" />
+                    <span>Detail Surat Tugas Dinas Luar</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="text"
+                      value={clientName}
+                      onChange={e => setClientName(e.target.value)}
+                      className="glass-input rounded-xl px-2.5 py-1.5 text-xs text-slate-800 bg-white"
+                      placeholder="Nama Klien / Perusahaan"
+                      required
+                    />
+                    <input
+                      type="text"
+                      value={projectCode}
+                      onChange={e => setProjectCode(e.target.value)}
+                      className="glass-input rounded-xl px-2.5 py-1.5 text-xs text-slate-800 font-mono-code bg-white"
+                      placeholder="Kode Proyek"
+                      required
+                    />
+                  </div>
+                  <input
+                    type="text"
+                    value={destination}
+                    onChange={e => setDestination(e.target.value)}
+                    className="w-full glass-input rounded-xl px-2.5 py-1.5 text-xs text-slate-800 bg-white"
+                    placeholder="Alamat / Site Tujuan"
+                    required
+                  />
+                  <textarea
+                    rows={2}
+                    value={dinasPurpose}
+                    onChange={e => setDinasPurpose(e.target.value)}
+                    className="w-full glass-input rounded-xl px-2.5 py-1.5 text-xs text-slate-800 resize-none bg-white"
+                    placeholder="Urgensi / catatan tugas dinas..."
+                    required
+                  />
+                </div>
+              )}
+
               {/* Mandatory Reason Alert Card: Terlambat */}
               {isLate && (
                 <div className="p-3.5 rounded-2xl bg-rose-50/90 border border-rose-300 shadow-xs space-y-2 motion-fade-in-up">
@@ -1940,15 +1899,15 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                     </span>
                   </div>
                   <p className="text-[11px] text-rose-800 leading-relaxed">
-                    Sistem tetap menerima presensi Anda. Harap berikan alasan / justifikasi keterlambatan:
+                    Harap berikan alasan / justifikasi keterlambatan:
                   </p>
                   <textarea
                     rows={2}
                     required
                     value={lateReason}
                     onChange={e => setLateReason(e.target.value)}
-                    placeholder="Tulis alasan keterlambatan (cth: penumpukan arus lalu lintas jam sibuk, cuaca buruk)..."
-                    className="w-full glass-input rounded-xl p-2.5 text-xs text-slate-800 placeholder-slate-400 resize-none border border-rose-300 focus:ring-2 focus:ring-rose-500/30"
+                    placeholder="Tulis alasan keterlambatan (cth: lalu lintas macet, cuaca buruk)..."
+                    className="w-full glass-input rounded-xl p-2.5 text-xs text-slate-800 placeholder-slate-400 resize-none border border-rose-300 focus:ring-2 focus:ring-rose-500/30 bg-white"
                   />
                   <div className="flex flex-wrap gap-1.5">
                     {[
@@ -1969,236 +1928,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                   </div>
                 </div>
               )}
-
-              {/* Conditional Button Icons: Dinas Luar */}
-              {mode === 'DINAS_LUAR' && (
-                <div className="grid grid-cols-2 gap-2 pt-1">
-                  {mode === 'DINAS_LUAR' && (
-                    <button
-                      type="button"
-                      onClick={() => setActiveParameterPanel(prev => prev === 'DINAS' ? null : 'DINAS')}
-                      className={`p-2.5 rounded-2xl border text-center transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-95 ${
-                        activeParameterPanel === 'DINAS'
-                          ? 'bg-amber-600 border-amber-600 text-white shadow-md'
-                          : 'bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100'
-                      }`}
-                    >
-                      <Briefcase className="w-4 h-4" />
-                      <span className="text-xs font-bold">Surat Tugas Dinas</span>
-                    </button>
-                  )}
-                  {isLate && (
-                    <button
-                      type="button"
-                      onClick={() => setActiveParameterPanel(prev => prev === 'LATE' ? null : 'LATE')}
-                      className={`p-2.5 rounded-2xl border text-center transition-all cursor-pointer flex items-center justify-center gap-2 active:scale-95 ${
-                        activeParameterPanel === 'LATE'
-                          ? 'bg-rose-600 border-rose-600 text-white shadow-md'
-                          : 'bg-rose-50 border-rose-200 text-rose-800 hover:bg-rose-100'
-                      }`}
-                    >
-                      <ShieldAlert className="w-4 h-4" />
-                      <span className="text-xs font-bold">Alasan Telat ({lateMinutes}m)</span>
-                    </button>
-                  )}
-                </div>
-              )}
             </div>
-
-            {/* 3. Interactive Quick-Drawer / Parameter Panel */}
-            {activeParameterPanel && (
-              <div className="p-3.5 rounded-2xl bg-slate-50/90 border border-slate-200/90 space-y-3 animate-in fade-in duration-200">
-                
-                {/* Panel: Catatan Harian */}
-                {activeParameterPanel === 'NOTE' && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                        <FileText className="w-3.5 h-3.5 text-[#FF6B00]" />
-                        Catatan & Rencana Kerja Harian
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setActiveParameterPanel(null)}
-                        className="text-slate-400 hover:text-slate-600 text-[10px] cursor-pointer"
-                      >
-                        Tutup ✕
-                      </button>
-                    </div>
-                    <textarea
-                      rows={2}
-                      value={note}
-                      onChange={e => setNote(e.target.value)}
-                      className="w-full glass-input rounded-xl p-2.5 text-xs text-slate-800 placeholder-slate-400 resize-none"
-                      placeholder="Tuliskan aktivitas atau tugas hari ini..."
-                      required
-                    />
-                    <div className="flex flex-wrap gap-1.5">
-                      {[
-                        'Supervisi Shift Lapangan',
-                        'Machining CNC & QC',
-                        'Maintenance Tooling',
-                        'Koordinasi Site'
-                      ].map(preset => (
-                        <button
-                          key={preset}
-                          type="button"
-                          onClick={() => setNote(preset)}
-                          className="text-[10px] px-2 py-0.5 rounded-lg bg-white border border-slate-200 hover:border-orange-300 hover:text-[#FF6B00] text-slate-600 font-medium transition-colors cursor-pointer"
-                        >
-                          + {preset}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Panel: Lokasi & Geofence */}
-                {activeParameterPanel === 'LOCATION' && (
-                  <div className="space-y-2.5">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                        <MapPin className="w-3.5 h-3.5 text-[#FF6B00]" />
-                        Lokasi & Geofence Perangkat
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setActiveParameterPanel(null)}
-                        className="text-slate-400 hover:text-slate-600 text-[10px] cursor-pointer"
-                      >
-                        Tutup ✕
-                      </button>
-                    </div>
-                    <div className="p-2.5 rounded-xl bg-white border border-slate-200 text-xs space-y-1">
-                      <p className="font-bold text-slate-900">{coords.address}</p>
-                      <div className="flex items-center justify-between text-[11px] font-mono-code text-slate-500 pt-1 border-t border-slate-100">
-                        <span>Jarak: <strong className="text-slate-800">{realGeofenceDistance}m</strong></span>
-                        <span>Akurasi: ±{coords.accuracy}m</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <button
-                        type="button"
-                        onClick={() => fetchDeviceGps(true)}
-                        disabled={isGpsLoading}
-                        className="px-2.5 py-1.5 rounded-xl bg-white border border-slate-200 hover:border-orange-300 text-[11px] font-bold text-slate-700 flex items-center gap-1.5 shadow-2xs cursor-pointer active:scale-95 disabled:opacity-50"
-                      >
-                        <RefreshCw className={`w-3 h-3 ${isGpsLoading ? 'animate-spin text-[#FF6B00]' : 'text-slate-500'}`} />
-                        <span>{isGpsLoading ? 'Satelit HP...' : 'Perbarui GPS HP'}</span>
-                      </button>
-                      {isSuperOrAdmin && (
-                        <button
-                          type="button"
-                          onClick={() => openGeofenceModal('OFFICE')}
-                          className="px-2.5 py-1.5 rounded-xl bg-orange-50 border border-orange-200 text-[#FF6B00] text-[11px] font-bold flex items-center gap-1 shadow-2xs cursor-pointer hover:bg-orange-100 active:scale-95"
-                        >
-                          <MapPin className="w-3 h-3" />
-                          <span>Set Titik Geofence</span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-
-                {/* Panel: Dinas Luar */}
-                {activeParameterPanel === 'DINAS' && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
-                        <Briefcase className="w-3.5 h-3.5 text-amber-600" />
-                        Formulir Tugas Dinas Luar Mendadak
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setActiveParameterPanel(null)}
-                        className="text-slate-400 hover:text-slate-600 text-[10px] cursor-pointer"
-                      >
-                        Tutup ✕
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <input
-                        type="text"
-                        value={clientName}
-                        onChange={e => setClientName(e.target.value)}
-                        className="glass-input rounded-xl px-2.5 py-1.5 text-xs text-slate-800"
-                        placeholder="Nama Klien / Perusahaan"
-                        required
-                      />
-                      <input
-                        type="text"
-                        value={projectCode}
-                        onChange={e => setProjectCode(e.target.value)}
-                        className="glass-input rounded-xl px-2.5 py-1.5 text-xs text-slate-800 font-mono-code"
-                        placeholder="Kode Proyek"
-                        required
-                      />
-                    </div>
-                    <input
-                      type="text"
-                      value={destination}
-                      onChange={e => setDestination(e.target.value)}
-                      className="w-full glass-input rounded-xl px-2.5 py-1.5 text-xs text-slate-800"
-                      placeholder="Alamat / Site Tujuan"
-                      required
-                    />
-                    <textarea
-                      rows={2}
-                      value={dinasPurpose}
-                      onChange={e => setDinasPurpose(e.target.value)}
-                      className="w-full glass-input rounded-xl px-2.5 py-1.5 text-xs text-slate-800 resize-none"
-                      placeholder="Urgensi dinas mendadak..."
-                      required
-                    />
-                  </div>
-                )}
-
-                {/* Panel: Keterlambatan */}
-                {activeParameterPanel === 'LATE' && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-rose-800 flex items-center gap-1.5">
-                        <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
-                        Alasan Keterlambatan ({lateMinutes} Menit)
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setActiveParameterPanel(null)}
-                        className="text-slate-400 hover:text-slate-600 text-[10px] cursor-pointer"
-                      >
-                        Tutup ✕
-                      </button>
-                    </div>
-                    <textarea
-                      rows={2}
-                      value={lateReason}
-                      onChange={e => setLateReason(e.target.value)}
-                      className="w-full glass-input rounded-xl p-2.5 text-xs text-slate-800 border-rose-300 focus:border-rose-500 resize-none"
-                      placeholder="Sebutkan kendala lalu lintas / cuaca..."
-                      required
-                    />
-                    <div className="flex flex-wrap gap-1.5">
-                      {[
-                        'Kepadatan arus lalu lintas jalan raya',
-                        'Kendala cuaca hujan deras lapangan',
-                        'Koordinasi teknis penanganan darurat'
-                      ].map(preset => (
-                        <button
-                          key={preset}
-                          type="button"
-                          onClick={() => setLateReason(preset)}
-                          className="text-[10px] px-2 py-0.5 rounded-lg bg-white border border-rose-200 hover:bg-rose-100 text-rose-800 font-medium transition-colors cursor-pointer"
-                        >
-                          + {preset}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-              </div>
-            )}
 
             {/* Live GPS Coordinates Status Banner */}
             <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200/90 flex items-center justify-between gap-2 text-xs">
@@ -2213,12 +1943,16 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                   </span>
                 </div>
               </div>
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 font-mono-code ${
+              <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold shrink-0 font-mono-code ${
                 isInOfficeGeofence || isInProjectGeofence
-                  ? 'bg-emerald-100 text-emerald-800'
-                  : 'bg-rose-100 text-rose-800'
+                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                  : 'bg-rose-100 text-rose-800 border border-rose-300'
               }`}>
-                {assignedProjectDist !== null && isInProjectGeofence ? `${assignedProjectDist}m` : `${realGeofenceDistance}m`}
+                {assignedProjectDist !== null && isInProjectGeofence
+                  ? `${assignedProjectDist}m • Masuk Area`
+                  : isWithinAnyAuthorizedGeofence
+                  ? `${realGeofenceDistance}m • Masuk Area`
+                  : `${realGeofenceDistance}m • Luar Area`}
               </span>
             </div>
 
