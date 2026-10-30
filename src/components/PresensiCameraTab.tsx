@@ -116,8 +116,20 @@ export function getProjectCoordinates(proj: Project): { lat: number; lng: number
   if (loc.includes('MADIUN') || loc.includes('PONOROGO') || loc.includes('MAGETAN')) {
     return { lat: -7.866700, lng: 111.466700, radius: 2500 };
   }
-  if (loc.includes('SURABAYA') || loc.includes('SIDOARJO') || loc.includes('GRESIK') || name.includes('KANTOR PUSAT') || name.includes('BG JUNCTION')) {
-    return { lat: -7.395625, lng: 112.717574, radius: 1500 };
+  if (name.includes('KANTOR PUSAT') || name.includes('HEAD OFFICE') || name.includes('INNOVATION HUB')) {
+    return { lat: -7.395625, lng: 112.717574, radius: 350 };
+  }
+  if (name.includes('BG JUNCTION')) {
+    return { lat: -7.256800, lng: 112.738100, radius: 500 };
+  }
+  if (loc.includes('SURABAYA')) {
+    return { lat: -7.257500, lng: 112.752100, radius: 1500 };
+  }
+  if (loc.includes('SIDOARJO')) {
+    return { lat: -7.447800, lng: 112.718300, radius: 1500 };
+  }
+  if (loc.includes('GRESIK')) {
+    return { lat: -7.156600, lng: 112.655500, radius: 1500 };
   }
 
   return null;
@@ -482,17 +494,23 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
     }).sort((a, b) => a.distance - b.distance);
   }, [projects, coords.lat, coords.lng]);
 
-  // Proyek yang terdeteksi otomatis berada di dalam radius GPS perangkat saat ini
+  // Evaluasi Geofence Kantor Utama
+  const isInOfficeGeofence = realGeofenceDistance <= (salaryRules?.officeGeofence?.radiusMeters || 350);
+
+  // Proyek yang terdeteksi otomatis berada di dalam radius GPS perangkat saat ini (hanya jika di luar kantor pusat)
   const autoDetectedMatch = useMemo(() => {
-    return projectDistanceList.find(item => item.inGeofence) || null;
-  }, [projectDistanceList]);
+    if (isInOfficeGeofence) return null;
+    return projectDistanceList.find(item => item.inGeofence && !item.project.name.toUpperCase().includes('KANTOR PUSAT')) || null;
+  }, [projectDistanceList, isInOfficeGeofence]);
 
   // Otomatis sinkronisasi selectedProjectId saat terdeteksi berada di lokasi site proyek tertentu
   useEffect(() => {
-    if (autoDetectedMatch && !isManualProjectOverride) {
+    if (isInOfficeGeofence) {
+      setSelectedProjectId('OFFICE');
+    } else if (autoDetectedMatch && !isManualProjectOverride) {
       setSelectedProjectId(autoDetectedMatch.project.id);
     }
-  }, [autoDetectedMatch, isManualProjectOverride]);
+  }, [isInOfficeGeofence, autoDetectedMatch, isManualProjectOverride]);
 
   // Proyek aktif yang sedang dituju untuk presensi saat ini
   const activeProject = useMemo(() => {
@@ -513,8 +531,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
     return pGeo?.radius || 350;
   }, [activeProject, salaryRules?.officeGeofence?.radiusMeters]);
 
-  // Evaluasi Geofence Kantor & Proyek
-  const isInOfficeGeofence = realGeofenceDistance <= (salaryRules?.officeGeofence?.radiusMeters || 350);
+  // Evaluasi Geofence Kantor & Proyek Terpilih
   const isInSelectedProjectGeofence = activeProjectDist !== null && activeProjectDist <= activeProjectRadius;
   const isInProjectGeofence = isInSelectedProjectGeofence;
   const isPhysicallyInGeofence = isInOfficeGeofence || isInSelectedProjectGeofence || Boolean(autoDetectedMatch);
@@ -523,6 +540,23 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
   const isWithinAnyAuthorizedGeofence = mode === 'WFH' || mode === 'DINAS_LUAR' ? true : isPhysicallyInGeofence;
   const assignedProjectDist = activeProjectDist;
   const effectiveTargetDistance = activeProjectDist !== null ? activeProjectDist : realGeofenceDistance;
+
+  // Resolusi nama lokasi akurat untuk UI & record presensi
+  const activeLocationTitle = useMemo(() => {
+    if (isInOfficeGeofence) {
+      return salaryRules?.officeGeofence?.name || assignedProject?.name || 'Kantor Pusat & Operasional Sidoarjo';
+    }
+    if (activeProject && isInProjectGeofence) {
+      return activeProject.name;
+    }
+    if (autoDetectedMatch && autoDetectedMatch.inGeofence) {
+      return autoDetectedMatch.project.name;
+    }
+    if (coords.address && !coords.address.startsWith('Koordinat HP:')) {
+      return coords.address.replace(' (GPS HP Asli)', '');
+    }
+    return 'Luar Area Kerja';
+  }, [isInOfficeGeofence, activeProject, isInProjectGeofence, autoDetectedMatch, salaryRules?.officeGeofence?.name, assignedProject?.name, coords.address]);
 
   const handleSaveGeofence = async () => {
     const numLat = typeof tempOfficeLat === 'string' ? parseFloat(tempOfficeLat) : tempOfficeLat;
@@ -1283,9 +1317,11 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
         inGeofence: mode === 'WFO' ? isPhysicallyInGeofence : true,
         distanceMeters: effectiveTargetDistance
       },
-      projectId: activeProject?.id,
-      projectCode: activeProject?.code,
-      projectName: activeProject?.name || (selectedProjectId === 'OFFICE' ? 'Kantor Pusat & Workshop' : undefined),
+      projectId: isInOfficeGeofence ? 'OFFICE' : (activeProject?.id || 'OFFICE'),
+      projectCode: isInOfficeGeofence ? 'HO' : (activeProject?.code || 'HO'),
+      projectName: isInOfficeGeofence 
+        ? (salaryRules?.officeGeofence?.name || assignedProject?.name || 'Kantor Pusat & Operasional')
+        : (activeProject && isInProjectGeofence ? activeProject.name : (coords.address ? coords.address.replace(' (GPS HP Asli)', '') : 'Presensi Luar Area')),
       networkAudit: {
         ipAddress: activeIp,
         connectionType: isInOfficeGeofence || isInProjectGeofence ? 'Geofence Valid' : 'GPS Mobile'
@@ -1715,16 +1751,23 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
             </div>
 
             {/* Live GPS Coordinates Status Banner */}
-            <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200/90 flex items-center justify-between gap-2 text-xs">
-              <div className="flex items-center gap-2 min-w-0">
-                <MapPin className="w-4 h-4 text-[#FF6B00] shrink-0" />
+            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/90 flex items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <MapPin className={`w-5 h-5 shrink-0 ${isWithinAnyAuthorizedGeofence ? 'text-emerald-600' : 'text-rose-500'}`} />
                 <div className="truncate">
-                  <span className="font-bold text-slate-800">
-                    {autoDetectedMatch?.project?.name || (assignedProject ? `Site ${assignedProject.name}` : 'Kantor Pusat & Operasional')}
-                  </span>
-                  <span className="text-slate-400 font-mono-code text-[11px] ml-1.5">
-                    ({coords.lat ? `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}` : 'Mendeteksi GPS...'})
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-slate-800 text-xs">
+                      {activeLocationTitle}
+                    </span>
+                    <span className="text-slate-400 font-mono-code text-[11px]">
+                      ({coords.lat ? `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}` : 'Mencari GPS...'})
+                    </span>
+                  </div>
+                  {coords.address && (
+                    <div className="text-[11px] text-slate-500 truncate mt-0.5">
+                      {coords.address.replace(' (GPS HP Asli)', '')}
+                    </div>
+                  )}
                 </div>
               </div>
               <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold shrink-0 font-mono-code ${
@@ -1807,17 +1850,9 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
               >
                 <Send className="w-4 h-4" />
                 <span>
-                  {mode === 'WFH'
-                    ? (capturedPhoto 
-                        ? (attendanceAction === 'CHECK_IN' ? 'Kirim Absen Masuk WFH Sekarang' : 'Kirim Absen Pulang WFH Sekarang')
-                        : (attendanceAction === 'CHECK_IN' ? 'Ambil Foto & Absen Masuk WFH' : 'Ambil Foto & Absen Pulang WFH'))
-                    : mode === 'DINAS_LUAR'
-                    ? (capturedPhoto 
-                        ? (attendanceAction === 'CHECK_IN' ? 'Kirim Absen Masuk Dinas Luar' : 'Kirim Absen Pulang Dinas Luar')
-                        : (attendanceAction === 'CHECK_IN' ? 'Ambil Foto & Absen Masuk Dinas' : 'Ambil Foto & Absen Pulang Dinas'))
-                    : (capturedPhoto 
-                        ? (attendanceAction === 'CHECK_IN' ? 'Kirim Absen Masuk Sekarang' : 'Kirim Absen Pulang Sekarang')
-                        : (attendanceAction === 'CHECK_IN' ? 'Ambil Foto & Absen Masuk' : 'Ambil Foto & Absen Pulang'))}
+                  {capturedPhoto 
+                    ? (attendanceAction === 'CHECK_IN' ? 'Kirim Absen Masuk Sekarang' : 'Kirim Absen Pulang Sekarang')
+                    : (attendanceAction === 'CHECK_IN' ? 'Ambil Foto & Absen Masuk' : 'Ambil Foto & Absen Pulang')}
                 </span>
               </button>
             </div>
