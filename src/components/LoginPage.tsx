@@ -420,13 +420,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onOpenKios
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* Server Indicator */}
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-[11px] font-mono text-slate-600 shadow-2xs">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span className="font-semibold">POCO Edge : 3000</span>
-          </div>
-        </div>
+
       </header>
 
       {/* ========================================================================= */}
