@@ -198,7 +198,7 @@ def create_full_role_manual():
     toc_headers = ["Bab / Bagian", "Struktur Pembahasan & Rincian Materi Peran", "Cakupan Halaman"]
     toc_data = [
         ["LEMBAR PENGESAHAN", "Pengendalian Versi Dokumen & Standar Pengesahan Digital Tanpa Kertas", "Hal. 2"],
-        ["BAB I", "ARSITEKTUR DASAR SISTEM & PENJELASAN MENDALAM RBAC 5-TIER\n• 1.1 Filosofi Zero Manual System\n• 1.2 Pilar Arsitektur Edge-Cloud Hybrid\n• 1.3 Penjelasan Mendalam Konsep & Matriks RBAC 5-Tier\n• [DIAGRAM 2: ARSITEKTUR RBAC 5-TIER]\n• 1.4 Hirarki & Hak Akses Pengguna", "Hal. 4 - 7"],
+        ["BAB I", "ARSITEKTUR DASAR SISTEM & PENJELASAN MENDALAM RBAC 5-TIER\n• 1.1 Filosofi Zero Manual System\n• 1.2 Pilar Arsitektur Edge-Cloud Hybrid\n• 1.3 Penjelasan Konsep & Hirarki RBAC 5-Tier\n• [DIAGRAM 2: ARSITEKTUR RBAC 5-TIER]\n• 1.4 Tabel 1.1: Matriks Otorisasi Modul & Menu Sistem (25 Fitur vs 5 Peran)\n• 1.5 Tabel 1.2: Matriks Akses Data Sensitif & Finansial\n• 1.6 Tabel 1.3: Matriks Hirarki Otorisasi Persetujuan\n• 1.7 Tabel 1.4: Matriks Proteksi API Backend Server", "Hal. 4 - 8"],
         ["BAB II", "STRUKTUR DATA, SILSILAH ENTITAS & PETA KETERKAITAN DATA (DATA LINEAGE)\n• 2.1 Peta Topologi Keterkaitan Data End-to-End\n• [DIAGRAM 1: PETA TOPOLOGI DATA LINEAGE]\n• 2.2 Kamus Entitas Master & Transaksional Lengkap\n• 2.3 Matriks Hubungan Antar-Tabel (Dari Mana ke Mana & Fungsinya)\n• 2.4 Matriks Ketergantungan Data & Efek Domino (Cascading Impact)", "Hal. 8 - 14"],
         ["BAB III", "ALUR KERJA PRESENSI LENGKAP & MULTI-METODE (5 SKENARIO)\n• 3.1 Skenario 1: Presensi Kamera Selfie GPS Satelit Mandiri\n• [DIAGRAM 3: ALUR PRESENSI KAMERA SELFIE SATELIT]\n• 3.2 Skenario 2: Presensi Tukang Lapangan / Pekerja Harian Lepas\n• 3.3 Skenario 3: Terminal Kiosk Publik di Lobby / Site Gate\n• 3.4 Skenario 4: Presensi Penugasan Dinas Luar (Out-of-Geofence)\n• 3.5 Skenario 5: Rekonsiliasi & Koreksi Jam Kehadiran oleh HR\n• [DIAGRAM 4: ALUR WORKFLOW APPROVAL BERJENJANG]", "Hal. 15 - 20"],
         ["BAB IV", "PANDUAN KHUSUS ROLE 1 — STAFF (KARYAWAN & TEKNISI UMUM)\n• 4.1 Profil Peran & Batasan Wewenang Staff\n• 4.2 Detail 5 Menu Navigasi Staff (Tujuan, Fungsi Tombol, Input & Keterkaitan)\n• 4.3 Alur Operasional Harian Staf\n• 4.4 Keterkaitan Data Staf ke Peran Lain (PM, HR, Finance)", "Hal. 21 - 26"],
@@ -257,6 +257,139 @@ def create_full_role_manual():
 
     # Insert Diagram 2: RBAC
     add_diagram_image(doc, "diagram_2_rbac_5tier.png", "Diagram 1.1: Arsitektur Hirarki & Hak Akses Sistem RBAC 5-Tier")
+
+    # ---------------------------------------------------------------------------
+    # TABEL 1.1: MATRIKS OTORISASI MODUL & MENU SISTEM (25 FITUR VS 5 PERAN)
+    # ---------------------------------------------------------------------------
+    add_heading_2(doc, "1.4 Tabel 1.1: Matriks Otorisasi Modul & Menu Sistem (Menu-to-Role Matrix - 25 Fitur)")
+    add_body_p(doc, 
+        "Matriks berikut memetakan hak akses 25 fitur dan sub-modul sistem terhadap 5 tingkatan peran pengguna "
+        "pada antarmuka PRIME HRIS Enterprise beserta batas kewenangannya:"
+    )
+    add_callout(doc, "Keterangan Indikator Hak Akses",
+        "• FULL (CRUD): Akses penuh (Create, Read, Update, Delete / Eksekusi).\n"
+        "• READ ONLY: Hanya dapat melihat data secara menyeluruh tanpa wewenang mengubah.\n"
+        "• SELF ONLY: Terbatas hanya untuk data pribadi dirinya sendiri (Read & Submit).\n"
+        "• PROJECT ONLY: Terbatas hanya untuk proyek site yang dipimpinnya.\n"
+        "• NO ACCESS: Menu tersembunyi (hidden) & akses API diblokir (HTTP 403 Forbidden).",
+        bg_color="F8FAFC", border_color="18345E", title_color="18345E"
+    )
+
+    t_mod_matrix = doc.add_table(rows=26, cols=7)
+    t_mod_matrix.alignment = WD_TABLE_ALIGNMENT.CENTER
+    set_table_borders(t_mod_matrix, "CBD5E1", "4")
+    mod_headers = ["No", "Modul / Sub-Modul Sistem", "Staff (Umum)", "Project Manager", "HR / Admin SDM", "Finance & Payroll", "Superuser / Direksi"]
+    mod_data = [
+        ["1", "Portal Kinerja Saya (dashboard)", "Self Only", "Self Only", "Read Only", "Read Only", "FULL (CRUD)"],
+        ["2", "Dashboard HRIS & SDM (dashboard)", "No Access", "No Access", "FULL (CRUD)", "Read Only", "FULL (CRUD)"],
+        ["3", "Dashboard Keuangan & Finance (dashboard)", "No Access", "No Access", "No Access", "FULL (CRUD)", "FULL (CRUD)"],
+        ["4", "Executive Dashboard Terpadu (dashboard)", "No Access", "No Access", "No Access", "No Access", "FULL (CRUD)"],
+        ["5", "Presensi Kamera Saya (attendance)", "Self Only", "Self Only", "Self Only", "Self Only", "FULL (Test/Any)"],
+        ["6", "Audit Rekap Presensi & Jam Kerja (attendance)", "No Access", "Project Only", "FULL (CRUD)", "Read Only (Payroll)", "FULL (CRUD)"],
+        ["7", "Pengajuan & Izin Saya (approvals)", "Self Only", "Self Only", "Self Only", "Self Only", "FULL (CRUD)"],
+        ["8", "Pusat Approval SDM (Final) (approvals)", "No Access", "No Access", "FULL (Final)", "Read Only", "FULL (Bypass)"],
+        ["9", "Otorisasi Anggota Proyek (approvals)", "No Access", "Project Only", "FULL (CRUD)", "No Access", "FULL (CRUD)"],
+        ["10", "Presensi Tukang Lapangan (casual_attendance)", "No Access", "Project (Input)", "Read (Audit)", "Read (Kas)", "FULL (CRUD)"],
+        ["11", "Manajemen Proyek & Site (projects)", "No Access", "Project Only", "FULL (Alokasi)", "Read Only", "FULL (CRUD)"],
+        ["12", "Kontrol Biaya Tenaga Kerja (projects)", "No Access", "Project (Burn Rate)", "No Access", "FULL (Alokasi)", "FULL (CRUD)"],
+        ["13", "Master Data Karyawan (users)", "No Access", "No Access", "FULL (CRUD)", "No Access", "FULL (CRUD)"],
+        ["14", "Pendaftaran Biometrik Wajah AI (users)", "No Access", "No Access", "FULL (Enroll)", "No Access", "FULL (CRUD)"],
+        ["15", "Master Data Gaji & Rekening (users)", "No Access", "No Access", "Read Only", "FULL (CRUD)", "FULL (CRUD)"],
+        ["16", "Kalkulator Payroll Bulanan (payroll)", "No Access", "No Access", "No Access", "FULL (Hitung/Kunci)", "FULL (CRUD)"],
+        ["17", "Slip Gaji Saya (Personal Slip) (payroll)", "Self Only", "Self Only", "Self Only", "Self Only", "FULL (Lihat Semua)"],
+        ["18", "Ekspor Transfer Bank & WA Dispatch (payroll)", "No Access", "No Access", "No Access", "FULL (Ekspor/Kirim)", "FULL (CRUD)"],
+        ["19", "Koreksi Timesheet HR (EmployeeTimesheetModal)", "No Access", "No Access", "FULL (Koreksi)", "FULL (Audit Gaji)", "FULL (CRUD)"],
+        ["20", "Kalender Kerja & Cut-Off 1 Thn (work_calendar)", "No Access", "No Access", "FULL (Setting)", "Read (Verifikasi)", "FULL (CRUD)"],
+        ["21", "Invoice Resmi Termin Klien (invoice)", "No Access", "No Access", "No Access", "FULL (Billing)", "FULL (CRUD)"],
+        ["22", "Setting WhatsApp Bot Baileys (system_settings)", "No Access", "No Access", "Read (Opt-In)", "No Access", "FULL (Pair QR)"],
+        ["23", "Setting Geofence & SMTP Mail (system_settings)", "No Access", "No Access", "No Access", "No Access", "FULL (CRUD)"],
+        ["24", "Audit Trail Kriptografis (audit)", "No Access", "No Access", "Read (SDM)", "Read (Finance)", "FULL (Root Log)"],
+        ["25", "Terminal Kiosk Publik (?tab=kiosk)", "Publik/PIN", "Publik/PIN", "Publik/PIN", "Publik/PIN", "FULL (Setup)"]
+    ]
+    format_table_headers_and_data(t_mod_matrix, [0.4, 1.87, 0.9, 0.95, 0.95, 0.95, 0.85], mod_headers, mod_data)
+
+    # ---------------------------------------------------------------------------
+    # TABEL 1.2: MATRIKS AKSES DATA SENSITIF & FINANSIAL
+    # ---------------------------------------------------------------------------
+    add_heading_2(doc, "1.5 Tabel 1.2: Matriks Akses Data Sensitif & Finansial (Data Confidentiality Matrix)")
+    add_body_p(doc, 
+        "Tabel berikut menjamin kepatuhan perlindungan data pribadi (Data Privacy) dan menjaga kerahasiaan komersial perusahaan "
+        "agar parameter finansial maupun biometrik hanya dapat diakses oleh personil yang berhak:"
+    )
+
+    t_sens_matrix = doc.add_table(rows=9, cols=6)
+    t_sens_matrix.alignment = WD_TABLE_ALIGNMENT.CENTER
+    set_table_borders(t_sens_matrix, "CBD5E1", "4")
+    sens_headers = ["Objek Data Sensitif & Kritis", "Staff (Umum)", "Project Manager", "HR / Admin SDM", "Finance & Payroll", "Superuser / Direksi"]
+    sens_data = [
+        ["Gaji Pokok & Tunjangan Staf Lain", "Dilarang", "Dilarang", "Terbatas SDM", "Akses Penuh", "Akses Penuh"],
+        ["Nomor Rekening Bank Staf Lain", "Dilarang", "Dilarang", "Terbatas Verifikasi", "Akses Penuh (Transfer)", "Akses Penuh"],
+        ["Pagu Anggaran Kontrak Klien", "Dilarang", "Anggaran Upah Saja", "Dilarang", "Akses Penuh", "Akses Penuh"],
+        ["Realisasi Serapan Anggaran Upah", "Dilarang", "Proyek Terkait", "Dilarang", "Akses Penuh (EAC)", "Akses Penuh"],
+        ["Potongan PPh 21 TER & Iuran BPJS", "Milik Sendiri", "Milik Sendiri", "Dilarang", "Rekapitulasi Pajak", "Akses Penuh"],
+        ["Vektor Biometrik Wajah 128D", "Terenkripsi", "Terenkripsi", "Pendaftaran Ulang", "Dilarang", "Akses Penuh"],
+        ["Kredensial Akun & Password Hash", "Dilarang", "Dilarang", "Reset Sandi Default", "Dilarang", "Akses Root"],
+        ["Alamat IP & Forensik Audit Trail", "Dilarang", "Dilarang", "Mutasi Personalia", "Mutasi Penggajian", "Seluruh Jejak Audit"]
+    ]
+    format_table_headers_and_data(t_sens_matrix, [1.87, 0.95, 1.05, 1.05, 1.05, 0.90], sens_headers, sens_data)
+
+    # ---------------------------------------------------------------------------
+    # TABEL 1.3: MATRIKS HIRARKI OTORISASI PERSETUJUAN
+    # ---------------------------------------------------------------------------
+    add_heading_2(doc, "1.6 Tabel 1.3: Matriks Hirarki Otorisasi Persetujuan (Approval & Disposition Hierarchy)")
+    add_body_p(doc, 
+        "Menjabarkan alur persetujuan tiket secara berjenjang dari inisiator pemohon hingga validasi dan eksekusi otomatis sistem:"
+    )
+
+    t_app_matrix = doc.add_table(rows=10, cols=5)
+    t_app_matrix.alignment = WD_TABLE_ALIGNMENT.CENTER
+    set_table_borders(t_app_matrix, "CBD5E1", "4")
+    app_headers = ["Jenis Tiket / Permohonan", "Pemohon (Initiator)", "Pemeriksa Awal (Reviewer)", "Pemutus Akhir (Final Approver)", "Dampak Otomatis Sistem"]
+    app_data = [
+        ["Cuti Tahunan Reguler", "Karyawan Kantor", "— (Langsung HR)", "HR Manager", "Memotong saldo leaveQuota, status kalender absensi menjadi LEAVE."],
+        ["Cuti Roster Non-Lokal (Site)", "Teknisi Lapangan", "Project Manager (PM)", "HR Manager", "Penyesuaian jadwal roster site, proteksi akumulasi cuti periode berikutnya."],
+        ["Izin Sakit / Surat Dokter", "Seluruh Karyawan", "—", "HR Manager", "Status absensi menjadi SICK, tunjangan kehadiran disesuaikan tanpa denda."],
+        ["Dispensasi Terlambat", "Seluruh Karyawan", "PM (Site) / — (Kantor)", "HR Manager", "Denda keterlambatan pada mesin payroll dibatalkan (Late Penalty Waived)."],
+        ["Penugasan Dinas Luar", "Staf Kantor / Site", "Atasan Langsung / PM", "HR Manager", "Presensi luar radius diakui sah, status absensi menjadi DINAS_LUAR."],
+        ["Koreksi Absensi Mandiri", "Karyawan", "—", "HR Manager", "Mengubah jam check-in/out di attendances, memicu audit log koreksi."],
+        ["Koreksi Timesheet oleh HR", "HRD / Finance", "—", "HR Manager", "Override jam masuk/pulang pada Employee Timesheet Detail Modal."],
+        ["Presensi Tukang Lapangan", "Mandor Proyek", "—", "Project Manager (PM)", "Memvalidasi kehadiran tukang site, dasar pencairan kas operasional proyek."],
+        ["Finalisasi Payroll Bulanan", "Mesin Payroll", "Payroll Specialist", "Finance Manager / Direksi", "Mengunci lembar gaji, cetak slip PDF, ekspor batch bank, dan kirim WA."]
+    ]
+    format_table_headers_and_data(t_app_matrix, [1.35, 1.1, 1.1, 1.25, 2.07], app_headers, app_data)
+
+    # ---------------------------------------------------------------------------
+    # TABEL 1.4: MATRIKS PROTEKSI API BACKEND SERVER
+    # ---------------------------------------------------------------------------
+    add_heading_2(doc, "1.7 Tabel 1.4: Matriks Proteksi API Backend Server (server/index.js & server/db.js)")
+    add_body_p(doc, 
+        "Setiap endpoint API pada backend Node.js diproteksi dengan otorisasi berbasis token JWT dan pemeriksaan systemRole pengguna. "
+        "Akses di luar hak wewenang secara otomatis ditolak dengan kode respon HTTP 403 Forbidden:"
+    )
+
+    t_api_matrix = doc.add_table(rows=17, cols=4)
+    t_api_matrix.alignment = WD_TABLE_ALIGNMENT.CENTER
+    set_table_borders(t_api_matrix, "CBD5E1", "4")
+    api_headers = ["Rute Endpoint API", "Metode HTTP", "Hak Peran Minimum", "Tindakan & Validasi Keamanan Server"]
+    api_data = [
+        ["/api/auth/login", "POST", "Publik", "Verifikasi PBKDF2/SHA-512 password hash + salt. Mengembalikan token JWT sesi."],
+        ["/api/auth/biometric-login", "POST", "Publik / Kiosk", "Verifikasi vektor Euclidean distance <= 0.45. Mengembalikan token sesi aman."],
+        ["/api/employees", "GET", "hr, finance, superuser", "Mengembalikan master data karyawan (Staf biasa dibatasi ke /api/auth/me)."],
+        ["/api/employees", "POST / PUT", "hr, superuser", "Tambah/Ubah profil staf, gaji pokok, tunjangan, departemen."],
+        ["/api/employees/:id/biometric", "POST / DEL", "hr, superuser", "Pendaftaran vektor biometrik 128D baru atau penghapusan profil biometrik lama."],
+        ["/api/employees/:id/reset-password", "POST", "hr, superuser", "Reset kata sandi staf ke default aman (zzz) saat lupa password."],
+        ["/api/attendances", "GET", "Semua Role (Tersaring)", "Staf hanya melihat miliknya; PM melihat staf proyeknya; HR/Finance melihat semua."],
+        ["/api/attendances", "POST", "Semua Karyawan", "Input absensi mandiri. Validasi geofence Haversine meter & foto selfie."],
+        ["/api/approvals", "POST", "Semua Karyawan", "Pengajuan tiket permohonan baru oleh staf."],
+        ["/api/approvals/:id", "PUT", "pm, hr, superuser", "Eksekusi persetujuan/penolakan tiket. Memotong saldo cuti & update absensi."],
+        ["/api/casual-workers", "GET / POST", "pm, hr, superuser", "Pendaftaran dan pembacaan data pekerja harian lepas proyek."],
+        ["/api/casual-worker-attendances", "POST", "pm, superuser", "Pengambilan foto presensi harian tukang di site proyek dengan GPS watermark."],
+        ["/api/salary-rules", "GET / POST", "superuser (W), finance (R)", "Mengatur tarif BPJS, rumus PPh 21 TER, pengali lembur, dan geofence kantor."],
+        ["/api/work-calendar", "GET / POST", "hr, superuser (W), finance (R)", "Mengatur hari libur nasional, akhir pekan perusahaan, dan jendela cut-off (21-20)."],
+        ["/api/whatsapp/send-slip", "POST", "finance, superuser", "Mengirimkan slip gaji digital via socket Baileys WhatsApp ke nomor karyawan."],
+        ["/api/audit-logs", "GET", "hr, finance, superuser", "Pembacaan log kronologis mutasi sistem (Tabel bersifat Append-Only)."]
+    ]
+    format_table_headers_and_data(t_api_matrix, [1.7, 0.8, 1.3, 3.07], api_headers, api_data)
 
     doc.add_page_break()
 
