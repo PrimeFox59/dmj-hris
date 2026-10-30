@@ -731,12 +731,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
   const handleOpenAttendance = (action: 'CHECK_IN' | 'CHECK_OUT') => {
     handleToggleAttendanceAction(action);
     setCapturedPhoto(null);
-    if (mode === 'WFO' && !isWithinAnyAuthorizedGeofence) {
-      const assignedName = activeProject ? activeProject.name : (assignedProject ? assignedProject.name : (salaryRules?.officeGeofence?.name || 'Kantor Pusat & Innovation Hub'));
-      const distStr = effectiveTargetDistance >= 1000 ? `${(effectiveTargetDistance / 1000).toFixed(1)} km` : `${effectiveTargetDistance} meter`;
-      setSuccessToast(`📍 Luar Radius Geofence (${distStr} dari ${assignedName}). Presensi tetap diproses, butuh approval.`);
-      setTimeout(() => setSuccessToast(null), 5000);
-    }
+    setBiometricVerification(null);
     setIsAttendanceModalOpen(true);
   };
 
@@ -800,12 +795,12 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
 
   // Start camera only when modal popup is opened, stop when closed
   useEffect(() => {
-    if (isCameraModalOpen && !capturedPhoto) {
+    if (isAttendanceModalOpen && !capturedPhoto) {
       startCamera();
-    } else if (!isCameraModalOpen) {
+    } else if (!isAttendanceModalOpen) {
       stopCamera();
     }
-  }, [isCameraModalOpen, capturedPhoto]);
+  }, [isAttendanceModalOpen, capturedPhoto]);
 
   // Ensure camera stops when component unmounts
   useEffect(() => {
@@ -1207,7 +1202,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
 
     // Validasi Wajib Isi Catatan jika di luar radius area kerja
     let effectiveOutOfRangeReason = outOfRangeReason.trim();
-    if (mode === 'WFO' && !isWithinAnyAuthorizedGeofence) {
+    if (!isWithinAnyAuthorizedGeofence) {
       if (!effectiveOutOfRangeReason) {
         alert('Anda terdeteksi di luar area kerja resmi. Wajib mengisi catatan / alasan presensi di luar area sebelum mengirim!');
         return;
@@ -1226,7 +1221,13 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
 
     let photoToUse = capturedPhoto;
     if (!photoToUse) {
-      handleOpenBiometricCamera();
+      if (cameraActive && videoRef.current && videoRef.current.videoWidth > 0 && canvasRef.current) {
+        capturePhoto();
+        photoToUse = canvasRef.current.toDataURL('image/jpeg', 0.95);
+      }
+    }
+    if (!photoToUse) {
+      alert('Harap ambil atau unggah foto wajah Anda untuk verifikasi presensi.');
       return;
     }
 
@@ -1531,7 +1532,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
               </div>
               <button
                 type="button"
-                onClick={() => setIsAttendanceModalOpen(false)}
+                onClick={() => { setIsAttendanceModalOpen(false); stopCamera(); }}
                 className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
                 title="Tutup Form Presensi"
               >
@@ -1585,307 +1586,132 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
               </div>
             </div>
 
-            {/* 1. Mode Penugasan Kerja (WFO / DINAS LUAR / WFH) */}
-            <div className="space-y-2">
-              <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
-                <span>1. Mode Penugasan Kerja</span>
-                <span className="text-[10px] font-bold font-mono-code px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
-                  {mode === 'WFO' ? '🏢 WFO (Site Resmi)' : mode === 'DINAS_LUAR' ? '🚗 Dinas Luar (Lapangan)' : '🏠 WFH (Remote)'}
-                </span>
-              </label>
-
-              {/* Segmented Buttons: Dapat diakses & dipilih langsung oleh seluruh karyawan */}
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { id: 'WFO', label: 'WFO', desc: 'Kantor / Site', icon: Building, color: 'emerald' },
-                  { id: 'DINAS_LUAR', label: 'Dinas Luar', desc: 'Perjalanan', icon: Briefcase, color: 'amber' },
-                  { id: 'WFH', label: 'WFH', desc: 'Kerja Remote', icon: Clock, color: 'blue' }
-                ].map(item => {
-                  const Icon = item.icon;
-                  const isSelected = mode === item.id;
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => {
-                        setMode(item.id as AttendanceMode);
-                      }}
-                      className={`p-2.5 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center gap-1 active:scale-95 ${
-                        isSelected
-                          ? 'bg-gradient-to-b from-orange-50 to-orange-100/60 border-[#FF6B00] text-[#FF6B00] shadow-sm font-bold ring-2 ring-orange-500/20'
-                          : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
-                      }`}
-                    >
-                      <Icon className="w-4 h-4" />
-                      <span className="text-xs font-bold leading-tight">{item.label}</span>
-                      <span className="text-[9px] text-slate-400 font-mono-code">{item.desc}</span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Status Info Box sesuai Mode yang dipilih */}
-              {mode === 'WFH' && (
-                <div className="p-2.5 rounded-xl bg-blue-50/90 border border-blue-200 text-blue-900 text-xs flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse shrink-0" />
-                  <p className="text-[11px] leading-relaxed">
-                    <b>Mode WFH Aktif:</b> Anda bekerja dari rumah / jarak jauh. Sistem <b>tidak membatasi radius geofence</b> dan langsung memproses presensi Anda.
-                  </p>
-                </div>
-              )}
-
-              {mode === 'DINAS_LUAR' && (
-                <div className="p-2.5 rounded-xl bg-amber-50/90 border border-amber-200 text-amber-900 text-xs flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
-                  <p className="text-[11px] leading-relaxed">
-                    <b>Dinas Luar Aktif:</b> Bebas geofence site. Silakan lengkapi detail penugasan di formulir bawah sebelum mengambil foto.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* 1b. Pilihan Lokasi Site / Proyek Presensi */}
-            <div className="space-y-2 p-3 rounded-2xl bg-slate-50/90 border border-slate-200">
-              <div className="flex items-center justify-between">
-                <label className="text-[11px] font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                  <Building className="w-3.5 h-3.5 text-[#FF6B00]" />
-                  <span>Lokasi Site / Proyek Presensi</span>
-                </label>
-                {autoDetectedMatch ? (
-                  <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full flex items-center gap-1 font-mono-code border border-emerald-300">
-                    <Sparkles className="w-3 h-3 text-emerald-600" />
-                    <span>Auto-Detect Site</span>
-                  </span>
-                ) : isManualProjectOverride ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsManualProjectOverride(false);
-                      const matched = projectDistanceList.find(item => item.inGeofence);
-                      if (matched) setSelectedProjectId(matched.project.id);
-                      else if (assignedProject) setSelectedProjectId(assignedProject.id);
-                      else setSelectedProjectId('OFFICE');
-                    }}
-                    className="text-[10px] text-orange-600 hover:text-orange-700 font-bold underline cursor-pointer"
-                  >
-                    Reset ke Auto-Detect
-                  </button>
-                ) : null}
-              </div>
-
-              {/* Banner jika terdeteksi otomatis berada di dalam radius suatu proyek */}
-              {autoDetectedMatch && (
-                <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-900 text-xs flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span className="truncate text-[11px]">
-                      GPS HP terdeteksi di site <b>{autoDetectedMatch.project.name}</b> ({autoDetectedMatch.distance}m)
-                    </span>
-                  </div>
-                  <span className="text-[10px] font-bold bg-emerald-200 text-emerald-800 px-2 py-0.5 rounded-full shrink-0 font-mono-code">
-                    Geofence Valid
-                  </span>
-                </div>
-              )}
-
-              {/* Dropdown Pemilihan Proyek */}
-              <div className="space-y-1">
-                <select
-                  value={selectedProjectId}
-                  onChange={e => {
-                    setSelectedProjectId(e.target.value);
-                    setIsManualProjectOverride(true);
-                  }}
-                  className="w-full glass-input rounded-xl px-3 py-2 text-xs font-bold text-slate-800 border border-slate-300 focus:ring-2 focus:ring-orange-500/20 bg-white"
-                >
-                  <option value="OFFICE">🏢 Kantor Pusat & Workshop Terpadu ({realGeofenceDistance >= 1000 ? `${(realGeofenceDistance/1000).toFixed(1)} km` : `${realGeofenceDistance}m`})</option>
-                  {projects.map(p => {
-                    const pGeo = getProjectCoordinates(p);
-                    const d = pGeo && coords.lat && coords.lng ? calculateDistanceMeters(coords.lat, coords.lng, pGeo.lat, pGeo.lng) : null;
-                    const dStr = d !== null ? (d >= 1000 ? `${(d/1000).toFixed(1)} km` : `${d}m`) : 'Regional';
-                    const isAssigned = p.id === currentUser.assignedProjectId;
-                    return (
-                      <option key={p.id} value={p.id}>
-                        📍 {p.code} - {p.name} {isAssigned ? '★ [Proyek Penugasan]' : ''} ({p.location} • {dStr})
-                      </option>
-                    );
-                  })}
-                </select>
-                <div className="flex items-center justify-between text-[10px] text-slate-500 pt-0.5">
-                  <span>* Pilih proyek jika Anda sedang bertugas atau supervisi di site lain.</span>
-                  {activeProjectDist !== null && (
-                    <span className="font-mono-code font-bold text-slate-700">
-                      Jarak: {activeProjectDist >= 1000 ? `${(activeProjectDist/1000).toFixed(1)} km` : `${activeProjectDist}m`}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Kamera Biometrik & Validasi Kehadiran */}
-            <div className="space-y-2.5">
-              {/* Compact Photo Preview & Quick Shutter / Modal Trigger Card */}
-              {capturedPhoto ? (
-                <div className="p-3 rounded-2xl bg-emerald-50/70 border border-emerald-200/90 flex items-center justify-between gap-3 shadow-2xs motion-fade-in-up">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="relative shrink-0">
-                      <img
-                        src={capturedPhoto}
-                        alt="Preview Foto Presensi"
-                        className="w-14 h-14 rounded-xl object-cover border-2 border-emerald-500 shadow-sm"
-                      />
-                      <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[9px] font-bold">
-                        ✓
-                      </span>
+            {/* Live Camera Viewfinder & Biometrik */}
+            <div className="space-y-3">
+              <div className="relative aspect-4/3 w-full bg-slate-950 overflow-hidden flex items-center justify-center rounded-2xl shadow-inner border border-slate-800">
+                {capturedPhoto ? (
+                  <div className="relative w-full h-full">
+                    <img
+                      src={capturedPhoto}
+                      alt="Hasil Foto Snapshot"
+                      className="w-full h-full object-contain bg-slate-950"
+                    />
+                    <div className="absolute top-3 left-3 px-3 py-1.5 rounded-xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-400 text-xs font-bold backdrop-blur-md flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      <span>Foto Biometrik Terverifikasi</span>
                     </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="text-xs font-bold text-slate-900">Foto Biometrik Siap</span>
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-mono-code">
-                          Watermarked
-                        </span>
+                    {biometricVerification && (
+                      <div className="absolute top-3 right-3 px-3 py-1.5 rounded-xl bg-slate-900/80 border border-slate-700 text-xs font-mono-code font-bold backdrop-blur-md text-white">
+                        Match: {Math.round(biometricVerification.matchScore)}%
                       </div>
-                      <p className="text-[11px] text-slate-500 truncate mt-0.5">
-                        {biometricVerification?.isVerified ? 'Biometrik Cocok • GPS Terpatri' : 'Snapshot Siap Dikirim'}
-                      </p>
-                    </div>
+                    )}
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button
-                      type="button"
-                      onClick={handleOpenBiometricCamera}
-                      className="px-2.5 py-1.5 rounded-xl bg-white border border-slate-200 hover:border-slate-300 text-slate-700 text-xs font-bold transition-all shadow-2xs flex items-center gap-1 cursor-pointer"
-                      title="Lihat atau Foto Ulang"
-                    >
-                      <RefreshCw className="w-3 h-3 text-[#FF6B00]" />
-                      <span>Ulang</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={retakePhoto}
-                      className="p-1.5 rounded-xl bg-white border border-rose-200 hover:bg-rose-50 text-rose-600 transition-all shadow-2xs cursor-pointer"
-                      title="Hapus Foto"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                ) : (
+                  <div className="relative w-full h-full flex items-center justify-center">
+                    {cameraError ? (
+                      <div className="p-6 text-center text-slate-300 space-y-3 max-w-md">
+                        <div className="w-12 h-12 mx-auto rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400 flex items-center justify-center">
+                          <AlertTriangle className="w-6 h-6" />
+                        </div>
+                        <p className="text-xs text-rose-300 font-medium">{cameraError}</p>
+                        <button
+                          type="button"
+                          onClick={() => startCamera()}
+                          className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold transition-all shadow-md cursor-pointer"
+                        >
+                          Coba Nyalakan Lagi
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <video
+                          ref={videoRef}
+                          autoPlay
+                          playsInline
+                          muted
+                          className={`w-full h-full object-cover ${cameraFacingMode === 'user' ? 'scale-x-[-1]' : ''}`}
+                        />
+
+                        {/* Biometric Face Guide Reticle */}
+                        <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+                          <div className="w-44 h-56 sm:w-52 sm:h-64 border-2 border-dashed border-[#FF6B00]/70 rounded-[36px] shadow-[0_0_20px_rgba(255,107,0,0.2)] relative flex items-center justify-center">
+                            <div className="absolute -top-1 -left-1 w-5 h-5 border-t-2 border-l-2 border-[#FF6B00] rounded-tl-xl"></div>
+                            <div className="absolute -top-1 -right-1 w-5 h-5 border-t-2 border-r-2 border-[#FF6B00] rounded-tr-xl"></div>
+                            <div className="absolute -bottom-1 -left-1 w-5 h-5 border-b-2 border-l-2 border-[#FF6B00] rounded-bl-xl"></div>
+                            <div className="absolute -bottom-1 -right-1 w-5 h-5 border-b-2 border-r-2 border-[#FF6B00] rounded-br-xl"></div>
+                            <span className="text-[10px] font-mono-code text-white/80 bg-black/60 px-2 py-0.5 rounded-full backdrop-blur-xs absolute -bottom-7">
+                              Posisikan wajah di dalam bingkai
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Live Overlay GPS Badge */}
+                        <div className="absolute top-3 left-3 pointer-events-none">
+                          <div className="px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur-md border border-white/10 text-[10px] font-mono-code text-white flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                            <span>GPS: {coords.lat ? `${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}` : 'Scanning...'}</span>
+                          </div>
+                        </div>
+
+                        {/* Flip Camera */}
+                        <div className="absolute top-3 right-3 flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={toggleCameraFlip}
+                            className="p-2 rounded-xl bg-black/60 hover:bg-black/80 text-white backdrop-blur-md border border-white/10 transition-all cursor-pointer shadow-md"
+                            title="Putar Kamera"
+                          >
+                            <FlipHorizontal className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </div>
-                </div>
-              ) : (
-                <div 
-                  onClick={handleOpenBiometricCamera}
-                  className="p-3.5 rounded-2xl bg-slate-50/80 hover:bg-orange-50/50 border border-dashed border-slate-300 hover:border-[#FF6B00] transition-all cursor-pointer flex items-center justify-between gap-3 group"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 rounded-xl bg-white border border-slate-200 group-hover:border-orange-300 flex items-center justify-center text-[#FF6B00] shadow-2xs transition-colors">
-                      <Camera className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold text-slate-800 group-hover:text-[#FF6B00] transition-colors">
-                        Ambil Foto Biometrik
-                      </p>
-                      <p className="text-[11px] text-slate-400">
-                        Klik untuk membuka kamera & verifikasi wajah
-                      </p>
-                    </div>
-                  </div>
+                )}
+              </div>
+
+              {/* Shutter / Retake Controls */}
+              <div className="flex items-center justify-between gap-2 px-1">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileUpload}
+                  accept="image/*"
+                  className="hidden"
+                />
+
+                {capturedPhoto ? (
                   <button
                     type="button"
-                    onClick={(e) => { e.stopPropagation(); handleOpenBiometricCamera(); }}
-                    className="px-3.5 py-2 rounded-xl bg-[#FF6B00] text-white text-xs font-bold hover:bg-[#e56000] shadow-sm flex items-center gap-1.5 cursor-pointer shrink-0"
+                    onClick={retakePhoto}
+                    className="w-full py-2 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    <Camera className="w-3.5 h-3.5" />
-                    <span>Buka Kamera</span>
+                    <RefreshCw className="w-3.5 h-3.5 text-[#FF6B00]" />
+                    <span>Ambil Foto Ulang</span>
                   </button>
-                </div>
-              )}
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
+                      title="Upload foto dari galeri"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      <span className="text-[11px]">Upload</span>
+                    </button>
 
-              {/* Status Masuk Area Kerja: Jika Luar Geofence, Otomatis Muncul Input Wajib Catatan */}
-              {mode === 'WFO' && !isWithinAnyAuthorizedGeofence && (
-                <div className="p-3.5 rounded-2xl bg-amber-50/90 border border-amber-300 shadow-xs space-y-2 motion-fade-in-up">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 text-amber-900 font-bold text-xs">
-                      <MapPin className="w-4 h-4 text-amber-600 shrink-0" />
-                      <span>Presensi di Luar Radius Area Kerja ({assignedProjectDist !== null ? assignedProjectDist : realGeofenceDistance}m)</span>
-                    </div>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-200 text-amber-900 font-mono-code uppercase tracking-wider shrink-0">
-                      Wajib Isi Catatan
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-amber-800 leading-relaxed">
-                    GPS perangkat terdeteksi di luar area kerja resmi. Harap tuliskan catatan / alasan presensi di lokasi ini:
-                  </p>
-                  <textarea
-                    rows={2}
-                    required
-                    value={outOfRangeReason}
-                    onChange={e => setOutOfRangeReason(e.target.value)}
-                    placeholder="Tuliskan alasan presensi di luar radius (wajib diisi)..."
-                    className="w-full glass-input rounded-xl p-2.5 text-xs text-slate-800 placeholder-slate-400 resize-none border border-amber-300 focus:ring-2 focus:ring-amber-500/30 bg-white"
-                  />
-                  <div className="flex flex-wrap gap-1.5">
-                    {[
-                      'Supervisi Vendor di Luar Site',
-                      'Mobilisasi Perjalanan Dinas Lapangan',
-                      'Tugas Mendadak Luar Workshop',
-                      'Deviasi Akurasi GPS Perangkat'
-                    ].map(preset => (
-                      <button
-                        key={preset}
-                        type="button"
-                        onClick={() => setOutOfRangeReason(preset)}
-                        className="text-[10px] px-2 py-0.5 rounded-lg bg-white border border-amber-200 hover:border-amber-400 text-amber-800 font-medium transition-colors cursor-pointer"
-                      >
-                        + {preset}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Form Input Tambahan: Dinas Luar */}
-              {mode === 'DINAS_LUAR' && (
-                <div className="p-3.5 rounded-2xl bg-amber-50/90 border border-amber-200 space-y-2 motion-fade-in-up">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-amber-900">
-                    <Briefcase className="w-4 h-4 text-amber-600" />
-                    <span>Detail Surat Tugas Dinas Luar</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <input
-                      type="text"
-                      value={clientName}
-                      onChange={e => setClientName(e.target.value)}
-                      className="glass-input rounded-xl px-2.5 py-1.5 text-xs text-slate-800 bg-white"
-                      placeholder="Nama Klien / Perusahaan"
-                      required
-                    />
-                    <input
-                      type="text"
-                      value={projectCode}
-                      onChange={e => setProjectCode(e.target.value)}
-                      className="glass-input rounded-xl px-2.5 py-1.5 text-xs text-slate-800 font-mono-code bg-white"
-                      placeholder="Kode Proyek"
-                      required
-                    />
-                  </div>
-                  <input
-                    type="text"
-                    value={destination}
-                    onChange={e => setDestination(e.target.value)}
-                    className="w-full glass-input rounded-xl px-2.5 py-1.5 text-xs text-slate-800 bg-white"
-                    placeholder="Alamat / Site Tujuan"
-                    required
-                  />
-                  <textarea
-                    rows={2}
-                    value={dinasPurpose}
-                    onChange={e => setDinasPurpose(e.target.value)}
-                    className="w-full glass-input rounded-xl px-2.5 py-1.5 text-xs text-slate-800 resize-none bg-white"
-                    placeholder="Urgensi / catatan tugas dinas..."
-                    required
-                  />
-                </div>
-              )}
-
+                    <button
+                      type="button"
+                      onClick={capturePhoto}
+                      className="flex-1 py-2 px-4 rounded-xl bg-[#FF6B00] hover:bg-[#e56000] text-white text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-sm cursor-pointer active:scale-98"
+                    >
+                      <Camera className="w-4 h-4" />
+                      <span>Jepret Foto Sekarang</span>
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
 
             {/* Live GPS Coordinates Status Banner */}
@@ -1894,7 +1720,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                 <MapPin className="w-4 h-4 text-[#FF6B00] shrink-0" />
                 <div className="truncate">
                   <span className="font-bold text-slate-800">
-                    {mode === 'WFO' ? (assignedProject ? `Site ${assignedProject.name}` : 'Kantor Pusat') : mode === 'DINAS_LUAR' ? 'Lokasi Penugasan Dinas' : 'WFH Remote'}
+                    {autoDetectedMatch?.project?.name || (assignedProject ? `Site ${assignedProject.name}` : 'Kantor Pusat & Operasional')}
                   </span>
                   <span className="text-slate-400 font-mono-code text-[11px] ml-1.5">
                     ({coords.lat ? `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}` : 'Mendeteksi GPS...'})
@@ -1902,17 +1728,58 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                 </div>
               </div>
               <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold shrink-0 font-mono-code ${
-                isInOfficeGeofence || isInProjectGeofence
+                isWithinAnyAuthorizedGeofence
                   ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                   : 'bg-rose-100 text-rose-800 border border-rose-300'
               }`}>
-                {assignedProjectDist !== null && isInProjectGeofence
-                  ? `${assignedProjectDist}m • Masuk Area`
-                  : isWithinAnyAuthorizedGeofence
-                  ? `${realGeofenceDistance}m • Masuk Area`
+                {isWithinAnyAuthorizedGeofence
+                  ? `${realGeofenceDistance}m • Masuk Area Kerja (Valid)`
                   : `${realGeofenceDistance}m • Luar Area`}
               </span>
             </div>
+
+            {/* Status Masuk Area Kerja: Jika Luar Geofence, Otomatis Muncul Input Wajib Catatan */}
+            {!isWithinAnyAuthorizedGeofence && (
+              <div className="p-3.5 rounded-2xl bg-amber-50/90 border border-amber-300 shadow-xs space-y-2 motion-fade-in-up">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 text-amber-900 font-bold text-xs">
+                    <MapPin className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>Presensi di Luar Radius Area Kerja (${realGeofenceDistance}m)</span>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-200 text-amber-900 font-mono-code uppercase tracking-wider shrink-0">
+                    Wajib Isi Catatan
+                  </span>
+                </div>
+                <p className="text-[11px] text-amber-800 leading-relaxed">
+                  GPS perangkat terdeteksi di luar area kerja resmi. Harap tuliskan catatan / alasan presensi di lokasi ini:
+                </p>
+                <textarea
+                  rows={2}
+                  required
+                  value={outOfRangeReason}
+                  onChange={e => setOutOfRangeReason(e.target.value)}
+                  placeholder="Tuliskan catatan / alasan presensi di luar radius (wajib diisi)..."
+                  className="w-full glass-input rounded-xl p-2.5 text-xs text-slate-800 placeholder-slate-400 resize-none border border-amber-300 focus:ring-2 focus:ring-amber-500/30 bg-white"
+                />
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    'Supervisi Vendor di Luar Site',
+                    'Mobilisasi Perjalanan Dinas Lapangan',
+                    'Tugas Mendadak Luar Workshop',
+                    'Deviasi Akurasi GPS Perangkat'
+                  ].map(preset => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setOutOfRangeReason(preset)}
+                      className="text-[10px] px-2 py-0.5 rounded-lg bg-white border border-amber-200 hover:border-amber-400 text-amber-800 font-medium transition-colors cursor-pointer"
+                    >
+                      + {preset}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* 4. Submit Action Button */}
             <div className="space-y-2 pt-1">
@@ -2640,205 +2507,6 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                   </>
                 )}
               </button>
-            </div>
-
-          </div>
-        </div>,
-        document.body
-      )}
-
-      {/* 5. Biometric Camera Pop-up Modal Terminal */}
-      {isCameraModalOpen && createPortal(
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 overflow-y-auto animate-in fade-in duration-200">
-          <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-700/80 rounded-3xl shadow-2xl overflow-hidden flex flex-col my-auto motion-fade-in-up">
-            
-            {/* Modal Header */}
-            <div className="p-4 sm:px-6 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-orange-500/10 border border-orange-500/30 flex items-center justify-center text-[#FF6B00]">
-                  <Camera className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-bold text-white tracking-tight">
-                      Terminal Kamera Biometrik & AI Liveness
-                    </h3>
-                    <span className="px-2 py-0.5 rounded-full text-[9px] font-mono-code font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                      LIVE
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-400 font-mono-code">
-                    {currentUser.name} • NIK: {currentUser.nik}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsCameraModalOpen(false)}
-                className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
-                title="Tutup Modal Kamera"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Viewfinder Video / Photo Display */}
-            <div className="relative aspect-4/3 w-full bg-slate-950 overflow-hidden flex items-center justify-center">
-              {capturedPhoto ? (
-                <div className="relative w-full h-full">
-                  <img
-                    src={capturedPhoto}
-                    alt="Hasil Foto Snapshot"
-                    className="w-full h-full object-contain bg-slate-950"
-                  />
-                  {/* Status Overlay */}
-                  <div className="absolute top-3 left-3 px-3 py-1.5 rounded-xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-400 text-xs font-bold backdrop-blur-md flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                    <span>Foto Berhasil Diambil & Ter-watermark</span>
-                  </div>
-                  {biometricVerification && (
-                    <div className="absolute top-3 right-3 px-3 py-1.5 rounded-xl bg-slate-900/80 border border-slate-700 text-xs font-mono-code font-bold backdrop-blur-md text-white">
-                      Match: {Math.round(biometricVerification.matchScore)}%
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="relative w-full h-full flex items-center justify-center">
-                  {cameraError ? (
-                    <div className="p-6 text-center text-slate-300 space-y-3 max-w-md">
-                      <div className="w-12 h-12 mx-auto rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400 flex items-center justify-center">
-                        <AlertTriangle className="w-6 h-6" />
-                      </div>
-                      <p className="text-xs text-rose-300 font-medium">{cameraError}</p>
-                      <button
-                        type="button"
-                        onClick={() => startCamera()}
-                        className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold transition-all shadow-md cursor-pointer"
-                      >
-                        Coba Nyalakan Lagi
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <video
-                        ref={videoRef}
-                        autoPlay
-                        playsInline
-                        muted
-                        className={`w-full h-full object-cover ${cameraFacingMode === 'user' ? 'scale-x-[-1]' : ''}`}
-                      />
-
-                      {/* Biometric Face Guide Reticle */}
-                      <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                        <div className="w-52 h-64 sm:w-60 sm:h-72 border-2 border-dashed border-[#FF6B00]/70 rounded-[40px] shadow-[0_0_20px_rgba(255,107,0,0.2)] relative flex items-center justify-center">
-                          {/* Corner Reticle Accents */}
-                          <div className="absolute -top-1 -left-1 w-5 h-5 border-t-2 border-l-2 border-[#FF6B00] rounded-tl-xl"></div>
-                          <div className="absolute -top-1 -right-1 w-5 h-5 border-t-2 border-r-2 border-[#FF6B00] rounded-tr-xl"></div>
-                          <div className="absolute -bottom-1 -left-1 w-5 h-5 border-b-2 border-l-2 border-[#FF6B00] rounded-bl-xl"></div>
-                          <div className="absolute -bottom-1 -right-1 w-5 h-5 border-b-2 border-r-2 border-[#FF6B00] rounded-br-xl"></div>
-                          <span className="text-[10px] font-mono-code text-white/70 bg-black/50 px-2 py-0.5 rounded-full backdrop-blur-xs absolute -bottom-7">
-                            Posisikan wajah di dalam bingkai
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Live Overlay Badges */}
-                      <div className="absolute top-3 left-3 flex flex-col gap-1 pointer-events-none">
-                        <div className="px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur-md border border-white/10 text-[10px] font-mono-code text-white flex items-center gap-1.5">
-                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                          <span>GPS: {coords.lat ? `${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}` : 'Scanning...'}</span>
-                        </div>
-                        <div className="px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur-md border border-white/10 text-[10px] font-mono-code text-slate-300">
-                          Jarak: {realGeofenceDistance}m ({isInOfficeGeofence ? 'Valid WFO' : 'Luar Radius'})
-                        </div>
-                      </div>
-
-                      <div className="absolute top-3 right-3 flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={toggleCameraFlip}
-                          className="p-2 rounded-xl bg-black/60 hover:bg-black/80 text-white backdrop-blur-md border border-white/10 transition-all cursor-pointer shadow-md"
-                          title="Putar Kamera Depan/Belakang"
-                        >
-                          <FlipHorizontal className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Modal Controls & Action Footer */}
-            <div className="p-4 sm:p-5 bg-slate-900 border-t border-slate-800 flex items-center justify-between gap-3">
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileUpload}
-                accept="image/*"
-                className="hidden"
-              />
-
-              {capturedPhoto ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={retakePhoto}
-                    className="px-4 py-2.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-all flex items-center gap-2 cursor-pointer active:scale-95"
-                  >
-                    <RefreshCw className="w-4 h-4 text-[#FF6B00]" />
-                    <span>Ambil Foto Ulang</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                    setIsCameraModalOpen(false);
-                    setIsAttendanceModalOpen(true);
-                  }}
-                  className="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2 cursor-pointer active:scale-95 ml-auto"
-                  >
-                    <Check className="w-4 h-4" />
-                    <span>Gunakan Foto Ini & Selesai</span>
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="px-3.5 py-2.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
-                    title="Upload foto dari galeri atau kamera bawaan HP"
-                  >
-                    <Upload className="w-4 h-4" />
-                    <span className="hidden sm:inline">Upload File</span>
-                  </button>
-
-                  {/* Main Shutter Trigger */}
-                  <div className="flex-1 flex justify-center">
-                    <button
-                      type="button"
-                      onClick={capturePhoto}
-                      className="group relative flex items-center justify-center p-1 cursor-pointer active:scale-95"
-                      title="Ambil Foto Sekarang"
-                    >
-                      <div className="w-16 h-16 rounded-full border-4 border-white/30 flex items-center justify-center group-hover:border-[#FF6B00] transition-colors">
-                        <div className="w-12 h-12 rounded-full bg-[#FF6B00] group-hover:bg-[#ff7d1a] shadow-lg shadow-orange-500/30 flex items-center justify-center text-white transition-all">
-                          <Camera className="w-6 h-6" />
-                        </div>
-                      </div>
-                    </button>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => setIsCameraModalOpen(false)}
-                    className="px-4 py-2.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white text-xs font-semibold transition-all cursor-pointer"
-                  >
-                    Tutup
-                  </button>
-                </>
-              )}
             </div>
 
           </div>
