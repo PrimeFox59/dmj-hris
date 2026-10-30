@@ -49,6 +49,22 @@ export const INITIAL_SALARY_RULES: SalaryRuleConfig = {
     lng: 112.717574,
     radiusMeters: 350,
     address: "Kawasan Industri Terpadu, Jl. Raya Utama Prime Blok A1-A4, Jawa Timur"
+  },
+  smtpConfig: {
+    enabled: true,
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true,
+    user: "dmjhris@gmail.com",
+    pass: "rtca npjc atrh axog",
+    fromName: "DMJ HRIS",
+    fromEmail: "dmjhris@gmail.com",
+    notifyAttendanceSuccess: true,
+    notifyAttendanceLate: true,
+    notifyApprovalSubmitted: true,
+    notifyApprovalUpdates: true,
+    notifyMorningReminder: true,
+    morningReminderTime: "06:00"
   }
 };
 
