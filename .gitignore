@@ -51,6 +51,7 @@ download_*
 *.jpg
 *.jpeg
 *.png
+!docs/diagrams/*.png
 !public/**
 public/scratch_*
 

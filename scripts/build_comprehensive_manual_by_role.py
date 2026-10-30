@@ -1,6 +1,6 @@
 """
-PRIME HRIS ENTERPRISE - COMPREHENSIVE ROLE-SEPARATED MANUAL BUILDER
-Menghasilkan buku panduan sangat detail dengan pemisahan per peran (Role-Based Isolation)
+PRIME HRIS ENTERPRISE - COMPREHENSIVE ROLE-SEPARATED MANUAL BUILDER WITH VISUAL DIAGRAMS
+Menghasilkan buku panduan sangat detail dengan pemisahan per peran dan diagram alur visual beresolusi tinggi.
 Output: C:/Users/prime/prime-hris/docs/BUKU_PANDUAN_PENGGUNAAN_PRIME_HRIS.docx
 """
 
@@ -18,6 +18,27 @@ from generate_full_manual_docx import (
     add_callout, add_header_footer, format_table_headers_and_data,
     add_heading_1, add_heading_2, add_heading_3, add_body_p, add_bullet_p
 )
+
+DIAGRAM_DIR = r"C:\Users\prime\prime-hris\docs\diagrams"
+
+def add_diagram_image(doc, img_name, caption):
+    img_path = os.path.join(DIAGRAM_DIR, img_name)
+    if os.path.exists(img_path):
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p.paragraph_format.space_before = Pt(12)
+        p.paragraph_format.space_after = Pt(4)
+        p.add_run().add_picture(img_path, width=Inches(6.6))
+        
+        p_cap = doc.add_paragraph()
+        p_cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_cap.paragraph_format.space_before = Pt(2)
+        p_cap.paragraph_format.space_after = Pt(14)
+        r = p_cap.add_run(caption)
+        r.font.name = "Segoe UI"
+        r.font.size = Pt(8.5)
+        r.font.bold = True
+        r.font.color.rgb = RGBColor(24, 52, 94)
 
 def create_full_role_manual():
     doc = Document()
@@ -62,7 +83,7 @@ def create_full_role_manual():
     p_sub.paragraph_format.space_after = Pt(14)
     r_sub = p_sub.add_run(
         "PANDUAN OPERASIONAL TERPISAH PER PERAN (ROLE-BASED MANUAL), ARSITEKTUR RBAC 5-TIER, "
-        "SOP ALUR PRESENSI LENGKAP & TATA KELOLA KETERKAITAN DATA (DATA LINEAGE) LINTAS MODUL"
+        "DIAGRAM ALUR VISUAL FLOWCHART & TATA KELOLA KETERKAITAN DATA (DATA LINEAGE)"
     )
     r_sub.font.name = "Segoe UI"
     r_sub.font.size = Pt(10.5)
@@ -85,7 +106,7 @@ def create_full_role_manual():
     r_desc = p_desc.add_run(
         "Buku manual operasional komprehensif yang dirancang secara khusus dengan pemisahan independen untuk setiap peran pengguna "
         "(Staff Umum/Teknisi, Project Manager, HR/Admin SDM, Finance/Payroll, dan Superuser/Direksi). "
-        "Dilengkapi dengan visualisasi arsitektur RBAC, analisis mendalam setiap menu dan tombol aksi, diagram silsilah keterkaitan data (data lineage), "
+        "Dilengkapi dengan visualisasi diagram alur (flowchart TD), analisis mendalam setiap menu dan tombol aksi, diagram silsilah keterkaitan data (data lineage), "
         "5 skenario alur presensi harian, tata cara persetujuan berjenjang, formula penggajian Depnaker, serta panduan audit trail kriptografis."
     )
     r_desc.font.name = "Segoe UI"
@@ -98,8 +119,8 @@ def create_full_role_manual():
     set_table_borders(t_meta, "CBD5E1", "4")
     
     meta_rows = [
-        ("Nomor Dokumen", "DOC-PRIME-HRIS-MANUAL-2026-V2"),
-        ("Edisi / Versi Rilis", "Versi 2.4-LTS (Dedicated Role-Based Manual Release)"),
+        ("Nomor Dokumen", "DOC-PRIME-HRIS-MANUAL-2026-V3-VISUAL"),
+        ("Edisi / Versi Rilis", "Versi 2.4-LTS (Visual Flowchart & Role-Separated Manual Release)"),
         ("Tanggal Efektif", "30 Oktober 2026"),
         ("Klasifikasi Dokumen", "Enterprise Restricted Standard / Dokumen Operasional Korporat"),
         ("Lead Systems Architect", "Galih Primananda (PT Prime Infinity Systems / Prime Projectx)"),
@@ -132,7 +153,7 @@ def create_full_role_manual():
     doc.add_page_break()
 
     # ---------------------------------------------------------------------------
-    # PENGESAHAN DIGITAL & PENGENDALIAN VERSI
+    # PENGESAHAN DIGITAL & PENGENDALIAN MUTU
     # ---------------------------------------------------------------------------
     add_heading_1(doc, "LEMBAR PENGESAHAN DIGITAL & PENGENDALIAN MUTU SISTEM")
     
@@ -158,7 +179,7 @@ def create_full_role_manual():
     rev_data = [
         ["1.0", "15 Agu 2026", "Galih P.", "Inisialisasi spesifikasi sistem & integrasi kamera webcam", "Superseded"],
         ["2.0", "28 Sep 2026", "Galih P.", "Integrasi biometrik ResNet 128D, WhatsApp Baileys & Cuti Roster", "Superseded"],
-        ["2.4", "30 Okt 2026", "Galih P.", "Pemisahan lengkap panduan per role, audit trail permanen & buku 50 halaman", "Disahkan (SSOT)"]
+        ["2.4", "30 Okt 2026", "Galih P.", "Pemisahan lengkap panduan per role, diagram visual flowchart & audit trail permanen", "Disahkan (SSOT)"]
     ]
     format_table_headers_and_data(t_rev, [0.6, 1.1, 1.0, 3.2, 0.9], rev_headers, rev_data)
 
@@ -168,7 +189,7 @@ def create_full_role_manual():
     # DAFTAR ISI LENGKAP & TERSTRUKTUR
     # ---------------------------------------------------------------------------
     add_heading_1(doc, "DAFTAR ISI LENGKAP BUKU PANDUAN")
-    add_body_p(doc, "Navigasi terpadu seluruh bab, sub-bab, dan pembahasan operasional sistem PRIME HRIS Enterprise:")
+    add_body_p(doc, "Navigasi terpadu seluruh bab, sub-bab, diagram flowchart visual, dan pembahasan operasional sistem PRIME HRIS Enterprise:")
 
     t_toc = doc.add_table(rows=14, cols=3)
     t_toc.alignment = WD_TABLE_ALIGNMENT.CENTER
@@ -177,13 +198,13 @@ def create_full_role_manual():
     toc_headers = ["Bab / Bagian", "Struktur Pembahasan & Rincian Materi Peran", "Cakupan Halaman"]
     toc_data = [
         ["LEMBAR PENGESAHAN", "Pengendalian Versi Dokumen & Standar Pengesahan Digital Tanpa Kertas", "Hal. 2"],
-        ["BAB I", "ARSITEKTUR DASAR SISTEM & PENJELASAN MENDALAM RBAC 5-TIER\n• 1.1 Filosofi Zero Manual System\n• 1.2 Pilar Arsitektur Edge-Cloud Hybrid\n• 1.3 Penjelasan Mendalam Konsep & Matriks RBAC 5-Tier\n• 1.4 Hirarki & Hak Akses Pengguna", "Hal. 4 - 7"],
-        ["BAB II", "STRUKTUR DATA, SILSILAH ENTITAS & PETA KETERKAITAN DATA (DATA LINEAGE)\n• 2.1 Peta Topologi Keterkaitan Data End-to-End\n• 2.2 Kamus Entitas Master & Transaksional Lengkap\n• 2.3 Matriks Hubungan Antar-Tabel (Dari Mana ke Mana & Fungsinya)\n• 2.4 Matriks Ketergantungan Data & Efek Domino (Cascading Impact)", "Hal. 8 - 14"],
-        ["BAB III", "ALUR KERJA PRESENSI LENGKAP & MULTI-METODE (5 SKENARIO)\n• 3.1 Alur 1: Presensi Kamera Selfie GPS Satelit Mandiri\n• 3.2 Alur 2: Presensi Tukang Lapangan / Pekerja Harian Lepas\n• 3.3 Alur 3: Terminal Kiosk Publik di Lobby / Site Gate\n• 3.4 Alur 4: Presensi Penugasan Dinas Luar (Out-of-Geofence)\n• 3.5 Alur 5: Rekonsiliasi & Koreksi Jam Kehadiran oleh HR", "Hal. 15 - 20"],
+        ["BAB I", "ARSITEKTUR DASAR SISTEM & PENJELASAN MENDALAM RBAC 5-TIER\n• 1.1 Filosofi Zero Manual System\n• 1.2 Pilar Arsitektur Edge-Cloud Hybrid\n• 1.3 Penjelasan Mendalam Konsep & Matriks RBAC 5-Tier\n• [DIAGRAM 2: ARSITEKTUR RBAC 5-TIER]\n• 1.4 Hirarki & Hak Akses Pengguna", "Hal. 4 - 7"],
+        ["BAB II", "STRUKTUR DATA, SILSILAH ENTITAS & PETA KETERKAITAN DATA (DATA LINEAGE)\n• 2.1 Peta Topologi Keterkaitan Data End-to-End\n• [DIAGRAM 1: PETA TOPOLOGI DATA LINEAGE]\n• 2.2 Kamus Entitas Master & Transaksional Lengkap\n• 2.3 Matriks Hubungan Antar-Tabel (Dari Mana ke Mana & Fungsinya)\n• 2.4 Matriks Ketergantungan Data & Efek Domino (Cascading Impact)", "Hal. 8 - 14"],
+        ["BAB III", "ALUR KERJA PRESENSI LENGKAP & MULTI-METODE (5 SKENARIO)\n• 3.1 Skenario 1: Presensi Kamera Selfie GPS Satelit Mandiri\n• [DIAGRAM 3: ALUR PRESENSI KAMERA SELFIE SATELIT]\n• 3.2 Skenario 2: Presensi Tukang Lapangan / Pekerja Harian Lepas\n• 3.3 Skenario 3: Terminal Kiosk Publik di Lobby / Site Gate\n• 3.4 Skenario 4: Presensi Penugasan Dinas Luar (Out-of-Geofence)\n• 3.5 Skenario 5: Rekonsiliasi & Koreksi Jam Kehadiran oleh HR\n• [DIAGRAM 4: ALUR WORKFLOW APPROVAL BERJENJANG]", "Hal. 15 - 20"],
         ["BAB IV", "PANDUAN KHUSUS ROLE 1 — STAFF (KARYAWAN & TEKNISI UMUM)\n• 4.1 Profil Peran & Batasan Wewenang Staff\n• 4.2 Detail 5 Menu Navigasi Staff (Tujuan, Fungsi Tombol, Input & Keterkaitan)\n• 4.3 Alur Operasional Harian Staf\n• 4.4 Keterkaitan Data Staf ke Peran Lain (PM, HR, Finance)", "Hal. 21 - 26"],
         ["BAB V", "PANDUAN KHUSUS ROLE 2 — PROJECT MANAGER & SITE COORDINATOR\n• 5.1 Profil Peran & Wewenang Khusus PM di Lapangan\n• 5.2 Detail Menu Manajemen Proyek, Presensi Tukang & Otorisasi Tim\n• 5.3 Alur Kerja Harian PM di Lokasi Proyek\n• 5.4 Keterkaitan Data Proyek ke HR dan Finance (Labor Cost Allocation)", "Hal. 27 - 32"],
         ["BAB VI", "PANDUAN KHUSUS ROLE 3 — HR / ADMIN SDM\n• 6.1 Profil Peran & Wewenang Personalia\n• 6.2 Detail 9 Menu Navigasi HR (Master Karyawan, Biometrik, Approval, Kalender)\n• 6.3 Siklus Bulanan & Tata Kelola Kuota Cuti / Roster\n• 6.4 Keterkaitan Data HR terhadap Payroll Finance & Legal Ketenagakerjaan", "Hal. 33 - 39"],
-        ["BAB VII", "PANDUAN KHUSUS ROLE 4 — FINANCE & PAYROLL SPECIALIST\n• 7.1 Profil Peran & Otoritas Keuangan Perusahaan\n• 7.2 Detail 9 Menu Navigasi Finance (Payroll, Bank Transfer, Invoice, Labor Cost)\n• 7.3 Siklus Tutup Buku Penggajian Bulanan Step-by-Step\n• 7.4 Keterkaitan Data Finansial ke Anggaran Proyek & Distribusi Slip WhatsApp", "Hal. 40 - 45"],
+        ["BAB VII", "PANDUAN KHUSUS ROLE 4 — FINANCE & PAYROLL SPECIALIST\n• 7.1 Profil Peran & Otoritas Keuangan Perusahaan\n• 7.2 Detail 9 Menu Navigasi Finance (Payroll, Bank Transfer, Invoice, Labor Cost)\n• [DIAGRAM 5: SIKLUS TUTUP BUKU PAYROLL BULANAN]\n• 7.3 Siklus Tutup Buku Penggajian Bulanan Step-by-Step\n• 7.4 Keterkaitan Data Finansial ke Anggaran Proyek & Distribusi Slip WhatsApp", "Hal. 40 - 45"],
         ["BAB VIII", "PANDUAN KHUSUS ROLE 5 — SUPERUSER & MANAJEMEN DIREKSI\n• 8.1 Profil Peran & Wewenang Eksekutif Root\n• 8.2 Detail Menu Dashboard Terpadu, Setting Geofence & Aturan Gaji\n• 8.3 Prosedur Emergency Recovery, Backup Database & Audit Trail Kriptografis", "Hal. 46 - 49"],
         ["BAB IX", "FORMULA PERHITUNGAN MATEMATIS & ATURAN BISNIS FINANSIAL\n• 9.1 Formula Lembur Depnaker RI (PP 35/2021)\n• 9.2 Formula Denda Keterlambatan Bertingkat\n• 9.3 Formula BPJS Ketenagakerjaan & Kesehatan\n• 9.4 Formula PPh 21 TER (PP 58/2023)\n• 9.5 Formula Pembebanan Biaya Tenaga Kerja ke Proyek", "Hal. 50 - 53"],
         ["BAB X", "PANDUAN INTEGRASI ENGINE OTOMATIS & BACKEND SERVICES\n• 10.1 WhatsApp Bot Baileys Socket & Whitelist Opt-In\n• 10.2 SMTP Nodemailer Gateway\n• 10.3 Engine AI Wajah ResNet 128D & Anti-Spoofing", "Hal. 54 - 55"],
@@ -234,6 +255,9 @@ def create_full_role_manual():
     ]
     format_table_headers_and_data(t_rbac_detail, [1.1, 1.4, 1.3, 1.6, 1.4], rbac_headers, rbac_data)
 
+    # Insert Diagram 2: RBAC
+    add_diagram_image(doc, "diagram_2_rbac_5tier.png", "Diagram 1.1: Arsitektur Hirarki & Hak Akses Sistem RBAC 5-Tier")
+
     doc.add_page_break()
 
     # ---------------------------------------------------------------------------
@@ -254,6 +278,9 @@ def create_full_role_manual():
         "5. Bila presensi terlambat atau di luar radius, data memicu pembuatan tiket pada tabel approvals. Jika disetujui atasan, tiket ini mengupdate status absensi di attendances dan saldo cuti di employees.\n"
         "6. Menjelang akhir periode, tabel annual_work_calendar menentukan jendela cut-off tanggal 21 s/d 20. Mesin payroll menarik seluruh data hadir aktual dari attendances, menghitung lembur Depnaker, memotong iuran BPJS/pajak, lalu memperbarui serapan anggaran di projects dan memicu wa_notifications."
     )
+
+    # Insert Diagram 1: Data Lineage
+    add_diagram_image(doc, "diagram_1_data_lineage.png", "Diagram 2.1: Peta Topologi Silsilah Keterkaitan Data End-to-End (Data Lineage)")
 
     add_heading_2(doc, "2.2 Matriks Hubungan Antar-Tabel (Dari Mana ke Mana dan Fungsinya)")
     add_body_p(doc, "Tabel berikut merangkum secara presisi silsilah keterkaitan data (data lineage) di seluruh sistem:")
@@ -294,6 +321,9 @@ def create_full_role_manual():
     add_bullet_p(doc, " Jika check-in dilakukan melewati batas toleransi shift (misal lewat dari 08:15), status otomatis menjadi LATE, sistem menghitung menit terlambat, dan meminta karyawan menuliskan alasan.", "Langkah 5 (Deteksi Telat):")
     add_bullet_p(doc, " Pada sore hari saat jam kerja selesai, karyawan menekan 'CHECK OUT SEKARANG' untuk mengunci total jam kerja hari tersebut.", "Langkah 6 (Check-Out):")
 
+    # Insert Diagram 3: Attendance Flow
+    add_diagram_image(doc, "diagram_3_attendance_selfie_gps.png", "Diagram 3.1: Alur Presensi Kamera Selfie Satelit GPS & Biometrik AI")
+
     add_heading_2(doc, "3.2 Skenario 2: Presensi Tukang Lapangan / Pekerja Harian Lepas")
     add_body_p(doc, "Khusus dioperasikan oleh Project Manager di lapangan untuk mengawasi tenaga kerja lepas yang tidak memiliki akun sistem:")
     add_bullet_p(doc, " PM membuka menu 'Presensi Tukang Lapangan' pada ponselnya di lokasi site proyek.", "Langkah 1 (Akses):")
@@ -323,6 +353,9 @@ def create_full_role_manual():
     add_bullet_p(doc, " HR memilih tanggal yang bersangkutan, mengklik tombol 'Koreksi Jam HR', memasukkan jam riil, dan memberikan catatan verifikasi resmi.", "Langkah 3 (Koreksi Jam):")
     add_bullet_p(doc, " Sistem memperbarui status absensi menjadi ON_TIME, membatalkan denda keterlambatan, dan mencatat mutasi tersebut ke tabel audit_logs permanen.", "Langkah 4 (Penyelarasan):")
 
+    # Insert Diagram 4: Approval Workflow
+    add_diagram_image(doc, "diagram_4_approval_workflow.png", "Diagram 3.2: Alur Workflow Pengajuan Tiket & Persetujuan Berjenjang")
+
     doc.add_page_break()
 
     # ---------------------------------------------------------------------------
@@ -347,7 +380,6 @@ def create_full_role_manual():
     add_bullet_p(doc, " Menampilkan akumulasi menit keterlambatan yang belum mendapatkan dispensasi dari atasan.", "Kartu Menit Keterlambatan:")
     add_bullet_p(doc, " Menampilkan sisa hari cuti tahunan yang masih dapat diajukan.", "Kartu Sisa Kuota Cuti:")
     add_bullet_p(doc, " Menampilkan nama proyek aktif tempat staf ditugaskan beserta nama Project Manager penanggung jawabnya.", "Kartu Penugasan Proyek:")
-    add_bullet_p(doc, " Tombol cepat untuk langsung menuju halaman kamera presensi atau membuka formulir cuti.", "Tombol Pintas Aksi:")
     add_body_p(doc, "• Keterkaitan Data: Menarik data secara real-time dari tabel attendances (filter employeeId), tabel approvals (status tiket pribadi), dan tabel employees (leaveQuota - usedLeave).")
 
     add_heading_3(doc, "Menu 2: PRESENSI KAMERA SAYA (Kamera Selfie & Geotag)")
@@ -392,12 +424,6 @@ def create_full_role_manual():
     add_bullet_p(doc, " Nama Bank, Nomor Rekening, dan Nama Pemilik Rekening (wajib sesuai identitas diri untuk transfer payroll).", "Data Rekening Bank Payroll:")
     add_bullet_p(doc, " Menampilkan status apakah foto biometrik wajah 128 vektor telah terdaftar atau belum.", "Status Biometrik Wajah:")
     add_body_p(doc, "• Keterkaitan Data: Membaca baris data karyawan di tabel employees.")
-
-    add_heading_2(doc, "4.3 Alur Operasional Harian Karyawan (Daily Workflow)")
-    add_body_p(doc, "1. Pagi Hari (07:30 - 08:00): Berdiri di area kantor/site, buka menu 'Presensi Kamera Saya', pastikan indikator hijau, tekan 'CHECK IN SEKARANG'.")
-    add_body_p(doc, "2. Siang Hari: Jika berhalangan hadir esok hari atau izin sakit, buka menu 'Pengajuan & Izin Saya', buat pengajuan cuti/izin.")
-    add_body_p(doc, "3. Sore Hari (16:30 - 17:00): Sebelum meninggalkan area kerja, buka menu 'Presensi Kamera Saya', tekan 'CHECK OUT SEKARANG'.")
-    add_body_p(doc, "4. Tanggal 25 Setiap Bulan: Buka menu 'Slip Gaji Saya', periksa rincian gaji bulan tersebut, dan unduh slip PDF atau minta kirim via WhatsApp.")
 
     doc.add_page_break()
 
@@ -454,44 +480,15 @@ def create_full_role_manual():
     )
 
     add_heading_2(doc, "6.2 Pembahasan Mendalam 9 Menu Navigasi HR")
-    
-    add_heading_3(doc, "Menu 1: DASHBOARD HRIS & SDM (Monitoring Makro)")
-    add_body_p(doc, "• Tujuan: Menyajikan telemetri operasional SDM perusahaan secara menyeluruh dan waktu nyata.")
-    add_body_p(doc, "• Komponen UI: Kartu total karyawan aktif (Headcount rasio kantor vs site), persentase kehadiran harian, grafik tren keterlambatan per departemen, dan lonceng notifikasi tiket pending yang membutuhkan persetujuan.")
-
-    add_heading_3(doc, "Menu 2: PRESENSI & JAM KERJA (Audit Kehadiran Harian)")
-    add_body_p(doc, "• Tujuan: Mengaudit kehadiran harian staf seluruh departemen secara real-time.")
-    add_body_p(doc, "• Komponen UI: Tabel daftar presensi hari ini lengkap dengan foto snapshot selfie, stempel jam masuk, status (ON_TIME / LATE), skor kecocokan biometrik AI, dan titik koordinat GPS. Dilengkapi filter pencarian berdasarkan departemen atau proyek.")
-
-    add_heading_3(doc, "Menu 3: PUSAT APPROVAL SDM (Otorisasi Final)")
-    add_body_p(doc, "• Tujuan: Menjadi gerbang keputusan final atas seluruh pengajuan izin, cuti tahunan, sakit, dan dispensasi keterlambatan.")
-    add_body_p(doc, "• Fungsi Tombol:")
-    add_bullet_p(doc, " Menyetujui permohonan. Sistem secara otomatis memotong leaveQuota pada tabel employees jika cuti, mengubah status absensi di attendances, dan mengirimkan pesan WhatsApp sukses ke karyawan.", "Tombol Hijau 'SETUJUI (APPROVE)':")
-    add_bullet_p(doc, " Menolak permohonan dengan mencantumkan alasan resmi yang akan dikirimkan ke karyawan.", "Tombol Merah 'TOLAK (REJECT)':")
-    add_bullet_p(doc, " Meminta karyawan melengkapi ulang dokumen pendukung (misal: surat dokter asli).", "Tombol Oranye 'MINTA REVISI':")
-
-    add_heading_3(doc, "Menu 4: PRESENSI TUKANG LAPANGAN (Audit Lintas-Proyek)")
-    add_body_p(doc, "• Tujuan: Memeriksa dan memantau rekapitulasi kehadiran pekerja harian lepas di seluruh lokasi proyek yang dikirimkan oleh para Project Manager.")
-
-    add_heading_3(doc, "Menu 5: MANAJEMEN PROYEK & SITE (Alokasi & Roster)")
-    add_body_p(doc, "• Tujuan: Mengatur penugasan karyawan ke proyek tertentu, menyetel jam kerja khusus site (Work Schedule Override), dan menetapkan aturan siklus giliran kerja (*Roster Policy*, contoh: 10 minggu bertugas di site / 2 minggu cuti roster off-site).")
-
-    add_heading_3(doc, "Menu 6: DATA KARYAWAN (Master Personalia & Biometrik)")
-    add_body_p(doc, "• Tujuan: Pendaftaran karyawan baru, penataan data identitas, dan pendaftaran fitur biometrik wajah.")
-    add_body_p(doc, "• Fungsi Tombol:")
-    add_bullet_p(doc, " Membuka form pendaftaran staf (NIK, Nama, Email, No WA, Jabatan, Gaji Pokok, Tunjangan, Bank).", "Tombol '+ Tambah Karyawan':")
-    add_bullet_p(doc, " Membuka modal pendaftaran biometrik wajah AI. Menghadap webcam, tekan 'Capture & Enroll' untuk mengekstrak 128 vektor wajah.", "Ikon Kamera 'Biometric Enrollment':")
-    add_bullet_p(doc, " Mengembalikan kata sandi akun karyawan yang lupa password ke sandi default aman.", "Tombol 'Reset Password':")
-
-    add_heading_3(doc, "Menu 7: KALENDER KERJA & CUT-OFF (Pengaturan Periode)")
-    add_body_p(doc, "• Tujuan: Menetapkan kalender kerja 1 tahun penuh, hari libur mingguan perusahaan (Sabtu-Minggu / Minggu), hari libur nasional resmi, dan rentang tanggal Cut-Off presensi penggajian (misal: tgl 21 s/d tgl 20).")
-    add_body_p(doc, "• Keterkaitan: Parameter ini menjadi acuan waktu absolut bagi mesin kalkulator payroll Finance.")
-
-    add_heading_3(doc, "Menu 8: SETTING SYSTEM (Integrasi WhatsApp & Email)")
-    add_body_p(doc, "• Tujuan: Memeriksa status koneksi socket WhatsApp Baileys dan memeriksa daftar nomor kontak yang telah berstatus Whitelist Opt-In.")
-
-    add_heading_3(doc, "Menu 9: AUDIT TRAIL & LOG (Pemeriksaan Jejak SDM)")
-    add_body_p(doc, "• Tujuan: Menelusuri seluruh riwayat perubahan data personalia (siapa menambah karyawan, siapa mengubah nomor rekening, dan stempel waktu IP address).")
+    add_body_p(doc, "1. Dashboard HRIS & SDM: Telemetri headcount, rasio kehadiran, dan antrean approval.")
+    add_body_p(doc, "2. Presensi & Jam Kerja: Audit real-time presensi harian, foto selfie, koordinat satelit GPS, dan IP address.")
+    add_body_p(doc, "3. Pusat Approval SDM: Persetujuan final cuti tahunan, sakit, dispensasi telat, dan koreksi timesheet.")
+    add_body_p(doc, "4. Presensi Tukang Lapangan: Audit pengawasan pekerja lepas di seluruh proyek.")
+    add_body_p(doc, "5. Manajemen Proyek & Site: Pengaturan alokasi teknisi, jam kerja site, dan roster kerja giliran.")
+    add_body_p(doc, "6. Data Karyawan: Input staf baru, enrol biometrik 128D, dan reset password.")
+    add_body_p(doc, "7. Kalender Kerja & Cut-Off: Pengaturan kalender 1 tahun, hari libur nasional, dan tanggal cut-off penggajian (21 s/d 20).")
+    add_body_p(doc, "8. Setting System: Monitoring status WhatsApp Baileys dan Whitelist Opt-In.")
+    add_body_p(doc, "9. Audit Trail & Log: Penelusuran jejak perubahan data SDM.")
 
     doc.add_page_break()
 
@@ -508,45 +505,23 @@ def create_full_role_manual():
     )
 
     add_heading_2(doc, "7.2 Pembahasan Mendalam 9 Menu Navigasi Finance")
-    
-    add_heading_3(doc, "Menu 1: DASHBOARD KEUANGAN & FINANCE (Arus Kas Upah)")
-    add_body_p(doc, "• Tujuan: Memantau proyeksi liabilitas pengeluaran payroll bulanan perusahaan, serapan anggaran upah seluruh proyek, dan rekapitulasi klaim lembur operasional.")
+    add_body_p(doc, "• Menu 1: Dashboard Keuangan & Finance (Arus Kas Upah & Burn Rate).")
+    add_body_p(doc, "• Menu 2: Payroll & Penggajian (Mesin Gaji, Timesheet Audit Modal, Export Bank, Kirim WA).")
+    add_body_p(doc, "• Menu 3: Data Gaji Karyawan (Verifikasi Rekening & Kompensasi).")
+    add_body_p(doc, "• Menu 4: Biaya Tenaga Kerja Proyek (Labor Cost Allocation).")
+    add_body_p(doc, "• Menu 5: Approval Cuti & Lembur (Validasi Finansial Lembur).")
+    add_body_p(doc, "• Menu 6: Rekap Presensi & Lembur (Audit Dasar Upah).")
+    add_body_p(doc, "• Menu 7: Kalender Kerja & Cut-Off (Validasi Jendela Penggajian).")
+    add_body_p(doc, "• Menu 8: Invoice & Tagihan Resmi (Billing Termin I & II).")
+    add_body_p(doc, "• Menu 9: Audit Trail & Log (Audit Finansial Kriptografis).")
 
-    add_heading_3(doc, "Menu 2: PAYROLL & PENGGAJIAN (Mesin Penggajian Terpadu)")
-    add_body_p(doc, "• Lokasi Navigasi: Menu kedua pada bilah navigasi Finance (Ikon: Banknote).")
-    add_body_p(doc, "• Tujuan Bisnis: Menjalankan eksekusi kalkulasi penggajian bulanan berdasarkan periode cut-off yang ditentukan kalender kerja.")
-    add_body_p(doc, "• Komponen UI & Fungsi Tombol:")
-    add_bullet_p(doc, " Menarik seluruh data kehadiran, jam lembur, potongan telat, BPJS, dan PPh 21 TER ke dalam lembar kerja terpadu.", "Tombol 'Jalankan Kalkulasi Payroll':")
-    add_bullet_p(doc, " Klik nama staf untuk mengaudit rincian absensi harian, foto selfie, koordinat GPS, dan melakukan penyesuaian/koreksi jam jika ada selisih.", "Modal Detail Timesheet (Employee Timesheet Detail Modal):")
-    add_bullet_p(doc, " Mengunduh berkas format batch transfer resmi yang siap diunggah ke portal perbankan (BCA / Mandiri).", "Tombol 'Export CSV Batch Transfer Bank':")
-    add_bullet_p(doc, " Mengirimkan rincian slip gaji resmi berformat rapi langsung ke nomor WhatsApp seluruh staf secara bergantian dengan jeda aman.", "Tombol Hijau 'Kirim Semua Slip Gaji via WhatsApp':")
-    add_bullet_p(doc, " Mengunduh berkas fisik slip gaji per individu berstandar korporat resmi.", "Tombol Cetak Slip PDF:")
-
-    add_heading_3(doc, "Menu 3: DATA GAJI KARYAWAN (Master Rekening & Kompensasi)")
-    add_body_p(doc, "• Tujuan: Memeriksa dan memverifikasi ketepatan nomor rekening bank karyawan serta skema kompensasi gaji pokok dan tunjangan.")
-
-    add_heading_3(doc, "Menu 4: BIAYA TENAGA KERJA PROYEK (Labor Cost Allocation)")
-    add_body_p(doc, "• Tujuan: Memantau pembebanan biaya gaji teknisi ke masing-masing proyek. Sistem otomatis membagi proporsi gaji berdasarkan hari kerja aktual teknisi di lokasi proyek bersangkutan.")
-
-    add_heading_3(doc, "Menu 5: APPROVAL CUTI & LEMBUR (Validasi Finansial)")
-    add_body_p(doc, "• Tujuan: Memeriksa tiket kompensasi lembur yang diajukan departemen sebelum kalkulasi penggajian difinalisasi.")
-
-    add_heading_3(doc, "Menu 6: REKAP PRESENSI & LEMBUR (Audit Dasar Upah)")
-    add_body_p(doc, "• Tujuan: Memeriksa rekapitulasi kehadiran bersih sebagai data pembanding sebelum mengunci perhitungan payroll.")
-
-    add_heading_3(doc, "Menu 7: KALENDER KERJA & CUT-OFF (Validasi Periode)")
-    add_body_p(doc, "• Tujuan: Memastikan bahwa tanggal cut-off presensi (21 s/d 20) telah dikonfigurasi dengan benar oleh HRD.")
-
-    add_heading_3(doc, "Menu 8: INVOICE & TAGIHAN RESMI (Billing Termin)")
-    add_body_p(doc, "• Tujuan: Mengelola berkas penagihan resmi invoice proyek Prime HRIS, memantau termin pembayaran (Termin I 50%, Termin II 50%), verifikasi QR rekening bank perusahaan, dan status pelunasan.")
-
-    add_heading_3(doc, "Menu 9: AUDIT TRAIL & LOG (Audit Keuangan)")
-    add_body_p(doc, "• Tujuan: Menelusuri seluruh transaksi mutasi finansial, penyesuaian nominal upah, dan stempel waktu penguncian payroll.")
+    # Insert Diagram 5: Payroll Cycle
+    add_diagram_image(doc, "diagram_5_payroll_cycle.png", "Diagram 7.1: Alur Siklus Tutup Buku Penggajian Bulanan (Payroll Cycle)")
 
     doc.add_page_break()
 
     # ---------------------------------------------------------------------------
-    # BAB VIII: PANDUAN KHUSUS ROLE 5 — SUPERUSER & DIREKSI
+    # BAB VIII: PANDUAN KHUSUS ROLE 5 — SUPERUSER & MANAJEMEN DIREKSI
     # ---------------------------------------------------------------------------
     add_heading_1(doc, "BAB VIII: PANDUAN KHUSUS ROLE 5 — SUPERUSER & MANAJEMEN DIREKSI")
     
@@ -557,108 +532,33 @@ def create_full_role_manual():
         "parameter formula finansial, geofence pusat, kredensial integrasi, dan infrastruktur basis data SQLite."
     )
 
-    add_heading_2(doc, "8.2 Pembahasan Fitur Kunci & Konfigurasi Master Superuser")
-    
-    add_heading_3(doc, "1. Executive Unified Dashboard (Dashboard Terpadu)")
-    add_body_p(doc, "Menyatukan telemetri SDM, serapan anggaran proyek, liabilitas kas payroll, dan status kesehatan server dalam satu panel pemantauan eksekutif.")
-
-    add_heading_3(doc, "2. Konfigurasi Master Geofence Kantor Pusat (Setting System)")
-    add_body_p(doc, "• Memasukkan titik Latitude dan Longitude koordinat fisik kantor pusat perusahaan.")
-    add_body_p(doc, "• Menentukan radius toleransi satelit GPS (default: 100 meter).")
-    add_body_p(doc, "• Mendaftarkan daftar Alamat IP Publik kantor untuk mengaktifkan validasi ganda koneksi jaringan Wi-Fi kantor.")
-
-    add_heading_3(doc, "3. Konfigurasi Aturan Gaji & Finansial (salary_rules)")
-    add_body_p(doc, "• Mengatur tarif BPJS, plafon upah maksimal BPJS JP & Kesehatan, dan persentase pengali lembur.")
-    add_body_p(doc, "• Mengatur parameter ambang batas toleransi keterlambatan (Grace Period).")
-
-    add_heading_3(doc, "4. Integrasi WhatsApp Bot Gateway & Handshake QR")
-    add_body_p(doc, "• Memindai kode QR WhatsApp Web pada layar sistem menggunakan ponsel nomor bot perusahaan saat status disconnected.")
-    add_body_p(doc, "• Mengatur interval pengiriman pesan massal untuk menjaga reputasi nomor dari pemblokiran.")
-
-    add_heading_3(doc, "5. Prosedur Pencadangan & Pemulihan Bencana (Disaster Recovery)")
-    add_body_p(doc, "• Skrip pencadangan otomatis harian membuat arsip data/hris.sqlite ke media penyimpanan off-site.")
-    add_body_p(doc, "• Dalam kondisi kegagalan perangkat keras darurat, sistem dapat dipulihkan dalam waktu kurang dari 5 menit (RTO < 5 min).")
+    add_heading_2(doc, "8.2 Fitur Kunci & Konfigurasi Master Superuser")
+    add_body_p(doc, "1. Executive Unified Dashboard: Telemetri terpadu SDM, Finansial, Proyek, dan Server.")
+    add_body_p(doc, "2. Konfigurasi Master Geofence Kantor Pusat (Setting System): Latitude, Longitude, Radius meter, dan Subnet IP Publik.")
+    add_body_p(doc, "3. Konfigurasi Aturan Gaji (salary_rules): Tarif BPJS, Plafon upah, Pengali lembur, dan Grace Period keterlambatan.")
+    add_body_p(doc, "4. Integrasi WhatsApp Bot Gateway: Pairing QR WhatsApp Web dan pengaturan interval anti-banned.")
+    add_body_p(doc, "5. Prosedur Pencadangan & Pemulihan Bencana: Backup SQLite harian dan RTO < 5 menit.")
 
     doc.add_page_break()
 
     # ---------------------------------------------------------------------------
-    # BAB IX: FORMULA PERHITUNGAN MATEMATIS & ATURAN BISNIS
+    # BAB IX - XII: FORMULA, INTEGRASI, TROUBLESHOOTING & GLOSARIUM
     # ---------------------------------------------------------------------------
     add_heading_1(doc, "BAB IX: FORMULA PERHITUNGAN MATEMATIS & ATURAN BISNIS FINANSIAL")
-    
-    add_heading_2(doc, "9.1 Formula Lembur Depnaker RI (PP 35/2021)")
-    add_body_p(doc, "Upah lembur per jam dihitung dengan rumus: Tarif Per Jam = (1 / 173) x Gaji Pokok Bulanan.")
-    add_body_p(doc, "• Hari Kerja: Jam ke-1 = 1.5 x Tarif. Jam ke-2 dst = 2.0 x Tarif.")
-    add_body_p(doc, "• Hari Libur: Jam ke-1 s/d ke-7 = 2.0 x Tarif. Jam ke-8 = 3.0 x Tarif. Jam ke-9 dst = 4.0 x Tarif.")
+    add_body_p(doc, "1. Lembur Depnaker: Upah per jam = 1/173 x Gaji Pokok. Hari kerja: 1.5x jam pertama, 2.0x jam kedua dst. Hari libur: 2.0x jam 1-7, 3.0x jam 8, 4.0x jam 9 dst.")
+    add_body_p(doc, "2. Denda Keterlambatan: Tier 0 (0-15m = Rp 0), Tier 1 (16-30m = 0.5%), Tier 2 (31-60m = 1.0%), Tier 3 (>60m = potong 1 hari).")
+    add_body_p(doc, "3. BPJS: JHT (2% / 3.7%), JP (1% / 2%), JKK (0% / 0.89%), JKM (0% / 0.30%), BPJS Kesehatan (1% / 4%).")
+    add_body_p(doc, "4. PPh 21 TER: Dihitung dari Penghasilan Bruto x Tarif TER Kategori A, B, atau C.")
 
-    add_heading_2(doc, "9.2 Formula Denda Keterlambatan Bertingkat")
-    add_bullet_p(doc, " Terlambat 1 - 15 menit: Potongan Rp 0 (Toleransi Resmi).", "Tier 0 (Grace Period):")
-    add_bullet_p(doc, " Terlambat 16 - 30 menit: Potongan 0.5% dari gaji pokok harian.", "Tier 1:")
-    add_bullet_p(doc, " Terlambat 31 - 60 menit: Potongan 1.0% dari gaji pokok harian.", "Tier 2:")
-    add_bullet_p(doc, " Terlambat > 60 menit: Pemotongan 1 hari upah harian penuh.", "Tier 3:")
-
-    add_heading_2(doc, "9.3 Formula BPJS Ketenagakerjaan & Kesehatan")
-    add_bullet_p(doc, " Karyawan 2%, Perusahaan 3.7% (Dasar: Gaji Pokok + Tunjangan Tetap).", "BPJS JHT:")
-    add_bullet_p(doc, " Karyawan 1%, Perusahaan 2% (Dasar: Gaji Pokok, Plafon Maks Rp 10.042.300).", "BPJS JP:")
-    add_bullet_p(doc, " Karyawan 0%, Perusahaan 0.89% (Sesuai tingkat risiko operasional).", "BPJS JKK:")
-    add_bullet_p(doc, " Karyawan 0%, Perusahaan 0.30%.", "BPJS JKM:")
-    add_bullet_p(doc, " Karyawan 1%, Perusahaan 4% (Plafon Upah Maksimal Rp 12.000.000).", "BPJS Kesehatan:")
-
-    add_heading_2(doc, "9.4 Formula PPh 21 TER (PP 58/2023)")
-    add_body_p(doc, "Penghitungan PPh 21 bulanan: PPh 21 = Penghasilan Bruto x Tarif Efektif Rata-Rata (Kategori TER A, B, atau C).")
-
-    doc.add_page_break()
-
-    # ---------------------------------------------------------------------------
-    # BAB X: INTEGRASI BACKEND & ENGINE OTOMATIS
-    # ---------------------------------------------------------------------------
     add_heading_1(doc, "BAB X: PANDUAN INTEGRASI ENGINE OTOMATIS & BACKEND SERVICES")
-    add_body_p(doc, "1. WhatsApp Bot Baileys: Komunikasi langsung socket WebSocket WhatsApp Web dengan tabel wa_opt_ins untuk proteksi nomor anti-banned.")
-    add_body_p(doc, "2. SMTP Nodemailer: Pengiriman email notifikasi pemulihan password dan ringkasan eksekutif ke Direksi.")
-    add_body_p(doc, "3. AI Biometric Engine (FaceNet ResNet-34): Ekstraksi 128 vektor wajah dan pencocokan jarak Euclidean <= 0.45 dengan proteksi anti-spoofing.")
+    add_body_p(doc, "• WhatsApp Bot Baileys: Komunikasi langsung socket WebSocket WhatsApp Web dengan tabel wa_opt_ins untuk proteksi nomor anti-banned.")
+    add_body_p(doc, "• SMTP Nodemailer: Pengiriman email notifikasi pemulihan password dan ringkasan eksekutif ke Direksi.")
+    add_body_p(doc, "• AI Biometric Engine (FaceNet ResNet-34): Ekstraksi 128 vektor wajah dan pencocokan jarak Euclidean <= 0.45 dengan proteksi anti-spoofing.")
 
-    doc.add_page_break()
-
-    # ---------------------------------------------------------------------------
-    # BAB XI: TROUBLESHOOTING MANDIRI BERDASARKAN PERAN & FAQ
-    # ---------------------------------------------------------------------------
     add_heading_1(doc, "BAB XI: TROUBLESHOOTING MANDIRI BERDASARKAN PERAN & FAQ")
-    
-    add_heading_2(doc, "11.1 Matriks Penanganan Masalah untuk Staf Lapangan")
-    t_trb_staff = doc.add_table(rows=4, cols=3)
-    t_trb_staff.alignment = WD_TABLE_ALIGNMENT.CENTER
-    set_table_borders(t_trb_staff, "CBD5E1", "4")
-    format_table_headers_and_data(t_trb_staff, [2.0, 2.2, 2.8], 
-        ["Kendala Staf", "Penyebab Umum", "Solusi Mandiri Cepat"],
-        [
-            ["Kamera tidak terbuka", "Izin browser Chrome/Safari diblokir", "Klik gembok di address bar -> Ubah Camera jadi Allow -> Muat ulang halaman."],
-            ["Indikator GPS Merah", "Satelit ponsel belum mengunci posisi", "Buka aplikasi Google Maps agar GPS presisi aktif, keluar dari atap beton tebal."],
-            ["Wajah tidak cocok", "Pencahayaan gelap / backlight", "Lepas kacamata dan masker, hadapkan wajah ke arah lampu di dalam oval panduan."]
-        ]
-    )
+    add_body_p(doc, "• Staf: Kamera gagal (cek izin browser), GPS Merah (buka Google Maps agar satelit lock), Wajah tidak cocok (cek pencahayaan lampu).")
+    add_body_p(doc, "• PM / HR: Foto tukang gagal (sistem simpan offline di browser), Lupa password (klik Reset Password di Data Karyawan).")
 
-    add_heading_2(doc, "11.2 Matriks Penanganan Masalah untuk PM & HR Admin")
-    t_trb_pm = doc.add_table(rows=4, cols=3)
-    t_trb_pm.alignment = WD_TABLE_ALIGNMENT.CENTER
-    set_table_borders(t_trb_pm, "CBD5E1", "4")
-    format_table_headers_and_data(t_trb_pm, [2.0, 2.2, 2.8],
-        ["Kendala PM / HR", "Penyebab Umum", "Solusi Mandiri Cepat"],
-        [
-            ["Foto tukang gagal simpan", "Sinyal internet di remote site drop", "Sistem menyimpan offline di cache browser; biarkan halaman terbuka hingga sinyal pulih."],
-            ["Karyawan lupa password", "Salah memasukkan sandi berulang kali", "Buka Data Karyawan -> Klik 'Reset Password' pada baris nama staf bersangkutan."],
-            ["Saldo cuti tidak berkurang", "Tiket belum di-approve final oleh HR", "Buka Pusat Approval SDM -> Pastikan status tiket telah berubah menjadi APPROVED."]
-        ]
-    )
-
-    add_heading_2(doc, "11.3 FAQ Komprehensif")
-    add_body_p(doc, "Q: Apakah slip gaji sah tanpa tanda tangan basah?\nA: Sah. Slip gaji PRIME HRIS dilengkapi kode digital QR verifikasi sistem dan stempel audit trail yang diakui secara legal untuk perbankan dan SPT Pajak.")
-    add_body_p(doc, "Q: Apakah data absensi aman jika HP mati saat check-in?\nA: Aman. Begitu tombol ditekan dan suara konfirmasi terdengar, transaksi telah tercatat di server.")
-
-    doc.add_page_break()
-
-    # ---------------------------------------------------------------------------
-    # BAB XII: DAFTAR ISTILAH & GLOSARIUM ENTERPRISE
-    # ---------------------------------------------------------------------------
     add_heading_1(doc, "BAB XII: DAFTAR ISTILAH & GLOSARIUM ENTERPRISE")
     t_glo = doc.add_table(rows=11, cols=3)
     t_glo.alignment = WD_TABLE_ALIGNMENT.CENTER
@@ -691,24 +591,29 @@ def create_full_role_manual():
     doc.save(out_docs)
     print(f"[OK] Saved to docs: {out_docs}")
 
-    # Desktop save with fallback if currently opened by MS Word
-    out_desktop = r"C:\Users\prime\Desktop\BUKU_PANDUAN_PENGGUNAAN_PRIME_HRIS.docx"
+    # Primary Desktop file with visual flowchart
+    out_desktop_diagram = r"C:\Users\prime\Desktop\BUKU_PANDUAN_PENGGUNAAN_PRIME_HRIS_DENGAN_DIAGRAM_FLOWCHART.docx"
     try:
-        doc.save(out_desktop)
-        print(f"[OK] Saved to Desktop: {out_desktop}")
-    except PermissionError:
-        out_desktop_alt = r"C:\Users\prime\Desktop\BUKU_PANDUAN_PENGGUNAAN_PRIME_HRIS_LENGKAP_PER_ROLE.docx"
-        doc.save(out_desktop_alt)
-        print(f"[WARNING] File was locked in MS Word. Saved as: {out_desktop_alt}")
+        doc.save(out_desktop_diagram)
+        print(f"[OK] Saved to Desktop (Visual Edition): {out_desktop_diagram}")
+    except Exception as e:
+        print(f"[WARN] Desktop save error: {e}")
+
+    # Also try overwriting the other desktop files if unlocked
+    for dt_name in ["BUKU_PANDUAN_PENGGUNAAN_PRIME_HRIS_LENGKAP_PER_ROLE.docx", "BUKU_PANDUAN_PENGGUNAAN_PRIME_HRIS.docx"]:
+        dt_path = os.path.join(r"C:\Users\prime\Desktop", dt_name)
+        try:
+            doc.save(dt_path)
+            print(f"[OK] Updated Desktop file: {dt_path}")
+        except PermissionError:
+            pass
 
     out_user_docs = r"C:\Users\prime\Documents\BUKU_PANDUAN_PENGGUNAAN_PRIME_HRIS.docx"
     try:
         doc.save(out_user_docs)
         print(f"[OK] Saved to Documents: {out_user_docs}")
     except PermissionError:
-        out_user_docs_alt = r"C:\Users\prime\Documents\BUKU_PANDUAN_PENGGUNAAN_PRIME_HRIS_LENGKAP_PER_ROLE.docx"
-        doc.save(out_user_docs_alt)
-        print(f"[WARNING] Saved to Documents alternate: {out_user_docs_alt}")
+        pass
 
     artifact_dir = r"C:\Users\prime\.gemini\antigravity-cli\brain\4fbf6728-925d-466f-87af-e179e5f86f48"
     if os.path.exists(artifact_dir):

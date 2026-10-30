@@ -104,6 +104,21 @@ Untuk menjamin integritas data korporat dan menerapkan prinsip pemisahan wewenan
 | **4. Finance & Payroll** | Finance Manager, Payroll Specialist, dan Bagian Keuangan. | **9 Menu:**<br/>• Dashboard Keuangan<br/>• Payroll & Penggajian<br/>• Data Gaji Karyawan<br/>• Biaya Tenaga Kerja<br/>• Approval Lembur<br/>• Rekap Presensi<br/>• Kalender Kerja<br/>• Invoice Resmi<br/>• Audit Trail | Penuh pada data finansial: menjalankan kalkulasi payroll, penyesuaian gaji, ekspor CSV bank, dispatch slip WA. | **Tinggi (Komersial):** Otoritas penuh atas seluruh data payroll perusahaan, rekening bank, dan penagihan invoice. |
 | **5. Superuser / Direksi** | Direktur Utama, Technical Lead, dan Platform Architect sistem. | **10 Menu Terpadu:**<br/>Seluruh menu sistem tanpa batasan, termasuk konfigurasi master sistem dan database. | Bypass Otoritas Penuh: mengubah formula salary_rules, geofence pusat, pairing QR WA, reset password root. | **Tertinggi:** Akses mutlak ke seluruh data finansial, log audit root, dan pemulihan bencana database. |
 
+```mermaid
+graph TD
+    SU["SUPERUSER / DIREKSI<br/>(Akses Mutlak Root: Bypass, Master Geofence, Salary Rules, WA Pairing, Root Audit)"]
+    
+    SU --> HR["HR / ADMIN SDM<br/>(Master Personalia, Biometrik 128D, Approval Final Cuti, Kalender 1 Thn)"]
+    SU --> FIN["FINANCE & PAYROLL<br/>(Payroll Engine, Timesheet Audit, Transfer Bank, Invoice, Labor Cost)"]
+    
+    HR --> PM["PROJECT MANAGER / SITE LEAD<br/>(Presensi Tukang Site, First-Line Review Tiket Proyek, Burn Rate)"]
+    FIN -.->|Alokasi Biaya Upah| PM
+    
+    PM --> STF["STAFF / TEKNISI LAPANGAN<br/>(Portal Kinerja Pribadi, Presensi Kamera Satelit GPS, Pengajuan Izin, Slip Gaji WA)"]
+    HR -.->|Otorisasi Personalia| STF
+    FIN -.->|Pencairan Gaji & Slip WA| STF
+```
+
 ---
 
 ## BAB II: STRUKTUR DATA, SILSILAH ENTITAS & PETA KETERKAITAN DATA (DATA LINEAGE)
@@ -191,6 +206,36 @@ Digunakan setiap hari oleh staf kantor pusat, workshop, dan teknisi site yang me
 5. **Langkah 5 (Deteksi Telat):** Jika check-in dilakukan melewati batas toleransi shift (misal lewat dari 08:15), status otomatis menjadi `LATE`, sistem menghitung menit terlambat, dan meminta karyawan menuliskan alasan.
 6. **Langkah 6 (Check-Out):** Pada sore hari saat jam kerja berakhir, karyawan menekan **CHECK OUT SEKARANG** untuk mengunci total jam kerja hari tersebut.
 
+```mermaid
+flowchart TD
+    A["Buka Menu: Presensi Kamera Saya"] --> B["Request Izin: Kamera & Satelit GPS"]
+    B --> C{"Cek Radius Geofence (Haversine)"}
+    
+    C -->|"Jarak <= 100m"| D["Radar HIJAU: Dalam Radius Sah"]
+    C -->|"Jarak > 100m"| E["Radar KUNING/MERAH: Luar Radius"]
+    E --> F["Wajib Aktifkan Mode: DINAS LUAR & Isi Alasan"]
+    
+    D --> G["Deteksi Wajah FaceNet AI (Oval Frame)"]
+    F --> G
+    
+    G --> H{"Pencocokan Vektor 128D (Euclidean)"}
+    H -->|"Skor >= 90%"| I["Wajah Terverifikasi Sah"]
+    H -->|"Skor < 90%"| J["Tolak: Wajah Tidak Cocok / Pencahayaan Kurang"]
+    
+    I --> K["Klik Tombol: CHECK IN SEKARANG"]
+    K --> L{"Waktu Check-In vs Jadwal Shift"}
+    
+    L -->|"Jam Masuk <= 08:15"| M["Status: ON_TIME (Tepat Waktu)"]
+    L -->|"Jam Masuk > 08:15"| N["Status: LATE (Hitung Menit Telat)"]
+    
+    M --> O["Simpan ke Tabel attendances & audit_logs"]
+    N --> P["Input Alasan Telat -> Buat Tiket Dispensasi"]
+    P --> O
+    
+    O --> Q["Bot WhatsApp Kirim Bukti Konfirmasi Kehadiran"]
+    Q --> R["Sore Hari: Klik CHECK OUT SEKARANG (Kunci Jam Selesai)"]
+```
+
 ### 3.2 Skenario 2: Presensi Tukang Lapangan / Pekerja Harian Lepas
 Khusus dioperasikan oleh Project Manager di lapangan untuk mengawasi tenaga kerja lepas yang tidak memiliki akun sistem:
 1. **Langkah 1 (Akses):** PM membuka menu *Presensi Tukang Lapangan* pada ponselnya di lokasi site proyek.
@@ -219,6 +264,33 @@ Digunakan jika terjadi pemadaman listrik di site atau kegagalan perangkat keras:
 2. **Langkah 2 (Audit Timesheet):** HR Manager membuka menu *Payroll & Penggajian* $\rightarrow$ Klik nama staf $\rightarrow$ Buka *Employee Timesheet Detail Modal*.
 3. **Langkah 3 (Koreksi Jam):** HR memilih tanggal yang bersangkutan, mengklik tombol *Koreksi Jam HR*, memasukkan jam riil, dan memberikan catatan verifikasi resmi.
 4. **Langkah 4 (Penyelarasan):** Sistem memperbarui status absensi menjadi `ON_TIME`, membatalkan denda keterlambatan, dan mencatat mutasi tersebut ke tabel `audit_logs` permanen.
+
+```mermaid
+flowchart TD
+    T1["Karyawan Input Formulir Permohonan<br/>(Cuti Tahunan, Roster, Sakit, Dispensasi Telat, Koreksi Jam)"]
+    T1 --> T2{"Apakah Karyawan Ditugaskan di Proyek?"}
+    
+    T2 -->|"Ya (Staf Site)"| T3["Antrean Project Manager (PM)<br/>(Review Dampak Jadwal & Progress Proyek)"]
+    T2 -->|"Tidak (Staf Kantor Pusat)"| T4["Antrean HR Manager<br/>(Pusat Approval SDM)"]
+    
+    T3 -->|"PM Rekomendasi Tolak"| T5["Tiket Ditolak dengan Catatan PM"]
+    T3 -->|"PM Rekomendasi Setuju"| T4
+    
+    T4 --> T6{"Keputusan Final HR Manager"}
+    T6 -->|"Minta Revisi"| T7["Status: REVISION_REQUESTED<br/>(Karyawan Unggah Ulang Berkas/Bukti)"]
+    T7 --> T1
+    
+    T6 -->|"Ditolak"| T8["Status: REJECTED<br/>(Alasan Penolakan Resmi)"]
+    T6 -->|"Disetujui"| T9["Status: APPROVED"]
+    
+    T9 --> T10["UPDATE approvals SET status = 'APPROVED'"]
+    T10 --> T11["Kurangi Saldo Kuota: employees.usedLeave + N"]
+    T10 --> T12["Perbarui Status Kalender: attendances.status = 'LEAVE'"]
+    T10 --> T13["Batal Denda Keterlambatan di Payroll (Jika Dispensasi)"]
+    
+    T11 & T12 & T13 --> T14["Bot WhatsApp Kirim Notifikasi Sukses ke Karyawan"]
+    T8 --> T15["Bot WhatsApp Kirim Pemberitahuan Penolakan ke Karyawan"]
+```
 
 ---
 
@@ -374,6 +446,32 @@ Role Finance memegang otoritas penuh atas pemrosesan hak keuangan karyawan dan p
    Mengelola berkas penagihan resmi invoice proyek Prime HRIS, memantau termin pembayaran (Termin I 50%, Termin II 50%), verifikasi QR rekening bank perusahaan, dan status pelunasan.
 9. **AUDIT TRAIL & LOG (Audit Keuangan):**  
    Menelusuri seluruh transaksi mutasi finansial, penyesuaian nominal upah, dan stempel waktu penguncian payroll.
+
+```mermaid
+flowchart TD
+    P1["Fase 1: Penutupan Jendela Cut-Off Presensi<br/>(Tanggal 21 Bulan Berjalan: Siklus 21 s/d 20 Mengunci)"]
+    P1 --> P2["Fase 2: Eksekusi Mesin Kalkulasi Payroll<br/>(Finance Klik 'Jalankan Kalkulasi Payroll')"]
+    
+    P2 --> P3["Tarik Hari Hadir Riil dari attendances"]
+    P2 --> P4["Tarik Lembur Terverifikasi Depnaker (1.5x / 2.0x)"]
+    P2 --> P5["Hitung Penalti Keterlambatan Tanpa Dispensasi"]
+    P2 --> P6["Hitung Iuran BPJS Ketenagakerjaan & BPJS Kesehatan"]
+    P2 --> P7["Hitung Pemotongan PPh 21 TER (PP 58/2023)"]
+    
+    P3 & P4 & P5 & P6 & P7 --> P8["Fase 3: Audit Lembar Kerja & Timesheet Modal<br/>(Verifikasi Foto Selfie, Jam Riil & Koreksi Perselisihan)"]
+    
+    P8 --> P9{"Apakah Perhitungan Gaji Sudah Valid?"}
+    P9 -->|"Ada Selisih Jam Kerja"| P10["Koreksi Jam di Employee Timesheet Modal"]
+    P10 --> P2
+    
+    P9 -->|"Valid & Disetujui"| P11["Kunci Periode Penggajian (Finalize)"]
+    
+    P11 --> P12["Export CSV Batch Transfer Bank (BCA / Mandiri)"]
+    P11 --> P13["Update Pembebanan Biaya Upah ke projects.actualLaborCost"]
+    P11 --> P14["Klik 'Kirim Semua Slip Gaji via WhatsApp'"]
+    
+    P14 --> P15["Bot WhatsApp Kirim Slip Gaji Digital Resmi ke Seluruh Karyawan"]
+```
 
 ---
 
