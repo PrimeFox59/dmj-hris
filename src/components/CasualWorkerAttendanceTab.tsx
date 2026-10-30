@@ -21,7 +21,8 @@ import {
   RotateCcw,
   FlipHorizontal,
   Building2,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Upload
 } from 'lucide-react';
 import { Employee, Project, getEffectiveSystemRole, isProjectManager, CasualWorker, CasualWorkerAttendance } from '../types';
 import { api } from '../services/api';
@@ -104,6 +105,7 @@ export const CasualWorkerAttendanceTab: React.FC<CasualWorkerAttendanceTabProps>
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Load Data from Server
   const loadData = async (projId: string) => {
@@ -229,22 +231,29 @@ export const CasualWorkerAttendanceTab: React.FC<CasualWorkerAttendanceTabProps>
     stopCamera();
     try {
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: mode,
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-          },
-          audio: false
-        });
+        let stream: MediaStream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: { ideal: mode },
+              width: { ideal: 1280 },
+              height: { ideal: 720 }
+            },
+            audio: false
+          });
+        } catch {
+          // Fallback if ideal facingMode fails (e.g. desktop webcam without environment mode)
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: false
+          });
+        }
         streamRef.current = stream;
+        setCameraActive(true);
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
-          videoRef.current.onloadedmetadata = () => {
-            videoRef.current?.play().catch(e => console.warn(e));
-          };
+          videoRef.current.play().catch(e => console.warn(e));
         }
-        setCameraActive(true);
       } else {
         throw new Error('Kamera tidak didukung oleh browser');
       }
@@ -269,6 +278,40 @@ export const CasualWorkerAttendanceTab: React.FC<CasualWorkerAttendanceTabProps>
     }
     setCameraActive(false);
   };
+
+    // Upload file fallback
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string;
+      setCapturedPhoto(dataUrl);
+      stopCamera();
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  // Automatically start camera when in camera tab and photo not yet captured
+  useEffect(() => {
+    if (activeSubTab === 'record' && !capturedPhoto) {
+      startCamera(facingMode);
+    }
+    return () => {
+      stopCamera();
+    };
+  }, [activeSubTab, capturedPhoto]);
+
+  // Ensure stream is bound to video element whenever camera becomes active
+  useEffect(() => {
+    if (cameraActive && videoRef.current && streamRef.current) {
+      if (videoRef.current.srcObject !== streamRef.current) {
+        videoRef.current.srcObject = streamRef.current;
+      }
+      videoRef.current.play().catch(e => console.warn('Video play error:', e));
+    }
+  }, [cameraActive]);
 
   // Switch Camera Front / Back
   const toggleFacingMode = () => {
@@ -307,11 +350,8 @@ export const CasualWorkerAttendanceTab: React.FC<CasualWorkerAttendanceTabProps>
 
   // Submit Casual Attendance
   const handleSubmitAttendance = async () => {
-    const name = workerNameInput.trim();
-    if (!name) {
-      alert('Silakan masukkan nama tukang terlebih dahulu.');
-      return;
-    }
+    // Nama tukang bersifat opsional: jika kosong, beri penomoran otomatis
+    const name = workerNameInput.trim() || `Tukang Lapangan #${todayAttendances.length + 1}`;
     if (!capturedPhoto) {
       alert('Harap ambil foto wajah tukang di lapangan untuk bukti verifikasi.');
       return;
@@ -684,13 +724,14 @@ export const CasualWorkerAttendanceTab: React.FC<CasualWorkerAttendanceTabProps>
 
             {/* Input Nama Tukang */}
             <div className="relative">
-              <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                Nama Tukang / Pekerja Lapangan <span className="text-rose-500">*</span>
+              <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+                <span>Nama Tukang / Pekerja Lapangan <span className="text-slate-400 font-normal">(Opsional)</span></span>
+                <span className="text-[10.5px] text-orange-600 font-mono-code font-semibold">Otomatis jika kosong</span>
               </label>
               <div className="relative">
                 <input
                   type="text"
-                  placeholder="Ketik nama tukang (misal: Pak Joko, Supri, Bambang)..."
+                  placeholder={`Ketik nama tukang (Opsional: Misal Pak Joko, atau kosongkan untuk otomatis: Tukang Lapangan #${todayAttendances.length + 1})...`}
                   value={workerNameInput}
                   onChange={(e) => {
                     setWorkerNameInput(e.target.value);
@@ -735,6 +776,7 @@ export const CasualWorkerAttendanceTab: React.FC<CasualWorkerAttendanceTabProps>
             </div>
 
             {/* Camera Viewport / Photo Snapshot */}
+            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
@@ -742,16 +784,27 @@ export const CasualWorkerAttendanceTab: React.FC<CasualWorkerAttendanceTabProps>
                   Foto Wajah Tukang (Bukti Lapangan) <span className="text-rose-500">*</span>
                 </label>
 
-                {cameraActive && (
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={toggleFacingMode}
-                    className="text-xs text-slate-600 hover:text-orange-600 font-bold flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-orange-50 transition-colors"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="text-xs text-slate-600 hover:text-orange-600 font-bold flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-orange-50 transition-colors cursor-pointer"
+                    title="Upload foto dari galeri/file jika kamera bermasalah"
                   >
-                    <FlipHorizontal className="w-3.5 h-3.5" />
-                    Putar Kamera ({facingMode === 'environment' ? 'Kamera Belakang' : 'Kamera Depan'})
+                    <Upload className="w-3.5 h-3.5" />
+                    Upload Foto
                   </button>
-                )}
+                  {cameraActive && (
+                    <button
+                      type="button"
+                      onClick={toggleFacingMode}
+                      className="text-xs text-slate-600 hover:text-orange-600 font-bold flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-orange-50 transition-colors cursor-pointer"
+                    >
+                      <FlipHorizontal className="w-3.5 h-3.5" />
+                      Putar ({facingMode === 'environment' ? 'Belakang' : 'Depan'})
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="relative rounded-2xl overflow-hidden bg-slate-900 border-2 border-dashed border-slate-300 aspect-video flex flex-col items-center justify-center">
@@ -779,7 +832,14 @@ export const CasualWorkerAttendanceTab: React.FC<CasualWorkerAttendanceTabProps>
                   /* 2. Live Camera Stream */
                   <div className="relative w-full h-full flex items-center justify-center">
                     <video
-                      ref={videoRef}
+                      ref={(el) => {
+                        videoRef.current = el;
+                        if (el && streamRef.current && el.srcObject !== streamRef.current) {
+                          el.srcObject = streamRef.current;
+                          el.play().catch(e => console.warn('Video play error:', e));
+                        }
+                      }}
+                      autoPlay
                       playsInline
                       muted
                       className={`w-full h-full object-cover ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`}
@@ -820,14 +880,24 @@ export const CasualWorkerAttendanceTab: React.FC<CasualWorkerAttendanceTabProps>
                         {cameraError}
                       </p>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => startCamera(facingMode)}
-                      className="px-5 py-2.5 rounded-xl bg-[#FF6B00] hover:bg-[#FF8533] text-white font-bold text-xs shadow-md transition-all cursor-pointer inline-flex items-center gap-2"
-                    >
-                      <Camera className="w-4 h-4" />
-                      Buka Kamera Proyek
-                    </button>
+                    <div className="flex items-center justify-center gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => startCamera(facingMode)}
+                        className="px-5 py-2.5 rounded-xl bg-[#FF6B00] hover:bg-[#FF8533] text-white font-bold text-xs shadow-md transition-all cursor-pointer inline-flex items-center gap-2"
+                      >
+                        <Camera className="w-4 h-4" />
+                        Buka Kamera Proyek
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs shadow-md transition-all cursor-pointer inline-flex items-center gap-2 border border-slate-700"
+                      >
+                        <Upload className="w-4 h-4" />
+                        Pilih dari Galeri / File
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -873,9 +943,9 @@ export const CasualWorkerAttendanceTab: React.FC<CasualWorkerAttendanceTabProps>
             <button
               type="button"
               onClick={handleSubmitAttendance}
-              disabled={isSubmitting || !workerNameInput.trim() || !capturedPhoto}
+              disabled={isSubmitting || !capturedPhoto}
               className={`w-full py-3.5 rounded-2xl font-black text-sm tracking-wide transition-all shadow-lg flex items-center justify-center gap-2 ${
-                isSubmitting || !workerNameInput.trim() || !capturedPhoto
+                isSubmitting || !capturedPhoto
                   ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
                   : 'bg-gradient-to-r from-[#FF6B00] to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white shadow-orange-500/30 cursor-pointer hover:scale-[1.01] active:scale-95'
               }`}
