@@ -1846,23 +1846,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
 
             {/* 4. Submit Action Button */}
             <div className="space-y-2 pt-1">
-              {mode === 'WFO' && !isPhysicallyInGeofence && (
-                <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                    <span className="text-[11px] leading-relaxed">
-                      Luar radius ({effectiveTargetDistance >= 1000 ? `${(effectiveTargetDistance/1000).toFixed(1)} km` : `${effectiveTargetDistance}m`}). Presensi otomatis diteruskan dengan status <b>Menunggu Approval</b>.
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setMode('WFH')}
-                    className="text-[10px] font-bold bg-amber-200 text-amber-900 px-2 py-0.5 rounded-lg shrink-0 hover:bg-amber-300 transition-colors cursor-pointer"
-                  >
-                    Pilih WFH
-                  </button>
-                </div>
-              )}
+
 
               <button
                 type="submit"
