@@ -30,7 +30,7 @@ import {
   INITIAL_APPROVALS,
   INITIAL_SALARY_RULES
 } from './data/mockData';
-import { Employee, AttendanceRecord, AttendanceMode, AttendanceStatus, ApprovalItem, Project, SalaryRuleConfig, getEffectiveSystemRole, AuthUser, canAccessProjectModule, isProjectManager } from './types';
+import { Employee, AttendanceRecord, AttendanceMode, AttendanceStatus, ApprovalItem, Project, SalaryRuleConfig, getEffectiveSystemRole, AuthUser, canAccessProjectModule, isProjectManager, AnnualWorkCalendarConfig } from './types';
 import { api } from './services/api';
 import { rtcService } from './services/rtcService';
 
@@ -132,6 +132,7 @@ export function App() {
   // SQLite Database Sync State
   const [isDbLoading, setIsDbLoading] = useState<boolean>(true);
   const [dbInfo, setDbInfo] = useState<any>(null);
+  const [workCalendar, setWorkCalendar] = useState<AnnualWorkCalendarConfig | null>(null);
 
   // Active Tab - Default to URL query (?tab=...) or hash (#...) or 'dashboard'
   const [activeTab, setActiveTab] = useState<string>(() => {
@@ -160,6 +161,15 @@ export function App() {
   // SubView state for Unified Dashboard (hris, finance, performance)
   const [dashboardSubView, setDashboardSubView] = useState<'hris' | 'finance' | 'performance'>('hris');
   const [openLeaveModalDirectly, setOpenLeaveModalDirectly] = useState<boolean>(false);
+
+  useEffect(() => {
+    const unsub = rtcService.subscribe('WORK_CALENDAR_UPDATED', (packet) => {
+      if (packet.payload) {
+        setWorkCalendar(packet.payload);
+      }
+    });
+    return () => unsub();
+  }, []);
 
   // Real IP Network Detection & Smart Mapping state (Opsi 2: Status Kantor vs Luar Kantor)
   const [realDetectedIp, setRealDetectedIp] = useState<string>('103.31.205.218');

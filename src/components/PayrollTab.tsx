@@ -29,7 +29,7 @@ import {
   Send,
   Search
 } from 'lucide-react';
-import { Employee, PayrollRecord, Project, SalaryRuleConfig, AttendanceRecord, SystemRole, getEffectiveSystemRole } from '../types';
+import { Employee, PayrollRecord, Project, SalaryRuleConfig, AttendanceRecord, SystemRole, getEffectiveSystemRole, AnnualWorkCalendarConfig } from '../types';
 import { formatSalaryDisplay, calculateEmployeePayroll, EmployeeAuditOverride } from '../utils/payrollCalculator';
 import { EmployeeTimesheetDetailModal } from './EmployeeTimesheetDetailModal';
 
@@ -39,6 +39,7 @@ interface PayrollTabProps {
   projects: Project[];
   attendances: AttendanceRecord[];
   salaryRules: SalaryRuleConfig;
+  workCalendar?: AnnualWorkCalendarConfig | null;
   selectedProjectId?: string;
   onSelectProjectId?: (projectId: string) => void;
   onUpdateEmployee?: (emp: Employee) => void;
@@ -51,6 +52,7 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
   projects,
   attendances,
   salaryRules,
+  workCalendar,
   selectedProjectId = 'ALL',
   onSelectProjectId,
   onUpdateEmployee,
@@ -172,6 +174,8 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
   const [auditFormLateDays, setAuditFormLateDays] = useState<number>(0);
   const [auditFormLateMinutes, setAuditFormLateMinutes] = useState<number>(0);
   const [auditFormWaiveLate, setAuditFormWaiveLate] = useState<boolean>(false);
+  const [auditFormLateMode, setAuditFormLateMode] = useState<'AUTO' | 'MANUAL_RP' | 'WAIVED'>('AUTO');
+  const [auditFormCustomLatePenalty, setAuditFormCustomLatePenalty] = useState<number>(0);
   const [auditFormOvertimeHours, setAuditFormOvertimeHours] = useState<number>(16);
   const [auditFormNotes, setAuditFormNotes] = useState<string>('');
 
@@ -197,6 +201,69 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
     setCurrentProjectFilter(projId);
     if (onSelectProjectId) {
       onSelectProjectId(projId);
+    }
+  };
+
+  
+  // Derived active calendar periods from workCalendar (annual master)
+  const calendarPeriods = useMemo(() => {
+    if (workCalendar?.periods && workCalendar.periods.length > 0) {
+      return workCalendar.periods;
+    }
+    return [];
+  }, [workCalendar]);
+
+  // Auto-sync payroll period, cutoff dates, and working days with workCalendar
+  useEffect(() => {
+    if (calendarPeriods.length > 0) {
+      const currentMonthIndex = new Date().getMonth();
+      let target = calendarPeriods.find(p => p.periodName === selectedPeriod);
+      if (!target) {
+        target = calendarPeriods.find(p => p.monthIndex === currentMonthIndex) || calendarPeriods[0];
+      }
+      if (target) {
+        setSelectedPeriod(target.periodName);
+        setStartDate(target.startDate);
+        setEndDate(target.endDate);
+        setCustomWorkingDays(target.effectiveWorkDays || 22);
+        localStorage.setItem('prime_payroll_selected_period', target.periodName);
+        localStorage.setItem('prime_payroll_start_date', target.startDate);
+        localStorage.setItem('prime_payroll_end_date', target.endDate);
+        localStorage.setItem('prime_payroll_working_days', String(target.effectiveWorkDays || 22));
+      }
+    }
+  }, [calendarPeriods]);
+
+  const handleSelectPeriod = (periodName: string) => {
+    setSelectedPeriod(periodName);
+    const target = calendarPeriods.find(p => p.periodName === periodName);
+    if (target) {
+      setStartDate(target.startDate);
+      setEndDate(target.endDate);
+      setCustomWorkingDays(target.effectiveWorkDays || 22);
+      localStorage.setItem('prime_payroll_selected_period', periodName);
+      localStorage.setItem('prime_payroll_start_date', target.startDate);
+      localStorage.setItem('prime_payroll_end_date', target.endDate);
+      localStorage.setItem('prime_payroll_working_days', String(target.effectiveWorkDays || 22));
+    }
+  };
+
+  const handleSyncFromCalendar = () => {
+    if (calendarPeriods.length === 0) return;
+    const currentMonthIndex = new Date().getMonth();
+    let target = calendarPeriods.find(p => p.periodName === selectedPeriod);
+    if (!target) {
+      target = calendarPeriods.find(p => p.monthIndex === currentMonthIndex) || calendarPeriods[0];
+    }
+    if (target) {
+      setSelectedPeriod(target.periodName);
+      setStartDate(target.startDate);
+      setEndDate(target.endDate);
+      setCustomWorkingDays(target.effectiveWorkDays || 22);
+      localStorage.setItem('prime_payroll_selected_period', target.periodName);
+      localStorage.setItem('prime_payroll_start_date', target.startDate);
+      localStorage.setItem('prime_payroll_end_date', target.endDate);
+      localStorage.setItem('prime_payroll_working_days', String(target.effectiveWorkDays || 22));
     }
   };
 
@@ -734,6 +801,17 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
             {/* Cutoff Quick Presets */}
             <div className="flex items-center gap-1.5 flex-wrap">
               <span className="text-[10px] text-slate-400 font-mono-code uppercase mr-1">Preset:</span>
+              {calendarPeriods.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleSyncFromCalendar}
+                  className="px-2 py-0.5 rounded-lg text-[11px] font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 transition-all cursor-pointer flex items-center gap-1"
+                  title="Terapkan rentang tanggal & hari kerja resmi dari Kalender Tahunan"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  Sesuai Kalender ({calendarPeriods.find(p => p.periodName === selectedPeriod)?.effectiveWorkDays || customWorkingDays} Hari)
+                </button>
+              )}
               <button
                 onClick={() => handleSetPresetCutoff('STANDARD')}
                 className={`px-2 py-0.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${

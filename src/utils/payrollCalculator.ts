@@ -19,6 +19,7 @@ export function formatSalaryDisplay(amount: number, isVisible: boolean = false):
 }
 
 export interface EmployeeAuditOverride {
+  customLatePenaltyAmount?: number;
   presentDays?: number;
   leaveDays?: number;
   unpaidLeaveDays?: number;
@@ -77,6 +78,9 @@ export function calculateEmployeePayroll(
 
   let unapprovedLateDeduction = 0;
   if (!auditOverride?.isLatePenaltyWaived) {
+    if (auditOverride?.customLatePenaltyAmount !== undefined) {
+      unapprovedLateDeduction = Math.max(0, auditOverride.customLatePenaltyAmount);
+    } else 
     if (auditOverride?.lateMinutes !== undefined) {
       const blocks = Math.ceil(Math.max(0, auditOverride.lateMinutes - rules.lateGracePeriodMinutes) / 15);
       unapprovedLateDeduction = blocks * rules.latePenaltyPerBlock;
