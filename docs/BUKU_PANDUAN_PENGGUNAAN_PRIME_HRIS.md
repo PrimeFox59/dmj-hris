@@ -1,592 +1,473 @@
 # BUKU PANDUAN PENGGUNAAN SISTEM PRIME HRIS ENTERPRISE
-**Versi Sistem:** 2026.10-LTS (Long Term Support)  
-**Klasifikasi Dokumen:** Manual Resmi Operasional Sistem & Tata Kelola Data  
-**Penyusun:** Systems Architecture & Analytics Platform Lead — Prime Projectx  
-**Aplikasi SSOT:** PRIME HRIS (`https://github.com/PrimeFox59/prime-hris.git`)  
+**Edisi:** v2.4-LTS (Dedicated Role-Based Manual Release)  
+**Nomor Dokumen:** `DOC-PRIME-HRIS-MANUAL-2026-V2`  
+**Klasifikasi:** Enterprise Restricted Standard / Manual Operasional Resmi Korporat  
+**Lead Systems Architect:** Galih Primananda (PT Prime Infinity Systems / Prime Projectx)  
+**Repositori SSOT:** `https://github.com/PrimeFox59/prime-hris.git`  
 
 ---
 
-## DAFTAR ISI
+## DAFTAR ISI LENGKAP & TERSTRUKTUR
 
-1. [BAB I: PENGENALAN SISTEM & ARSITEKTUR PRIME HRIS](#bab-i-pengenalan-sistem--arsitektur-prime-hris)
-   - 1.1 Gambaran Umum & Filosofi Zero Manual System
-   - 1.2 Pilar Arsitektur Teknologi & Keamanan
-   - 1.3 Matriks Peran & Hak Akses (Role-Based Access Control / RBAC)
-2. [BAB II: STRUKTUR DATA, ENTITAS & KETERKAITAN DATA (DATA LINEAGE)](#bab-ii-struktur-data-entitas--keterkaitan-data-data-lineage)
-   - 2.1 Diagram Aliran & Keterkaitan Data Antar-Modul (End-to-End)
-   - 2.2 Kamus Entitas Data Master & Transaksional
-   - 2.3 Matriks Ketergantungan Data (Data Dependency & Impact Matrix)
-3. [BAB III: PANDUAN OPERASIONAL PENGGUNA BERDASARKAN PERAN (USER GUIDE)](#bab-iii-panduan-operasional-pengguna-berdasarkan-peran-user-guide)
-   - 3.1 Panduan untuk Karyawan / Staf Lapangan & Kantor
-   - 3.2 Panduan untuk Project Manager / Site Manager
-   - 3.3 Panduan untuk HR / Admin SDM
-   - 3.4 Panduan untuk Finance & Payroll Specialist
-   - 3.5 Panduan untuk Superuser / Manajemen Direksi
-4. [BAB IV: ALUR KERJA OPERASIONAL STANDAR (SOP STEP-BY-STEP)](#bab-iv-alur-kerja-operasional-standar-sop-step-by-step)
-   - 4.1 SOP 01: Presensi Harian (Kamera Selfie, Geotag Satelit & Biometrik Wajah)
-   - 4.2 SOP 02: Pengajuan Tiket Approval (Cuti, Izin, Lembur, Dinas Luar & Koreksi)
-   - 4.3 SOP 03: Presensi Harian Pekerja Lapangan Lepas (Casual Workers / Tukang)
-   - 4.4 SOP 04: Siklus Penggajian Bulanan (Cut-Off, Kalkulasi Upah, Pajak & Kirim WA)
-   - 4.5 SOP 05: Terminal Presensi Cepat Kiosk Publik (Lobby & Site Gate)
-5. [BAB V: PANDUAN INTEGRASI & SISTEM NOTIFIKASI OTOMATIS](#bab-v-panduan-integrasi--sistem-notifikasi-otomatis)
-   - 5.1 Integrasi WhatsApp Bot Gateway (Baileys Engine & Verified Opt-In)
-   - 5.2 Integrasi SMTP Email Gateway (Nodemailer Transporter)
-   - 5.3 Engine Pengenalan Wajah AI (Face Descriptor Matching & Anti-Spoofing)
-6. [BAB VI: TROUBLESHOOTING, AUDIT TRAIL & FAQ](#bab-vi-troubleshooting-audit-trail--faq)
-   - 6.1 Audit Trail Kriptografis & Penelusuran Insiden Data
-   - 6.2 Panduan Penanganan Masalah Lapangan (GPS, Kamera, Jaringan, Akun)
-   - 6.3 Pertanyaan yang Sering Diajukan (FAQ)
-
----
-
-## BAB I: PENGENALAN SISTEM & ARSITEKTUR PRIME HRIS
-
-### 1.1 Gambaran Umum & Filosofi Zero Manual System
-**PRIME HRIS** adalah sistem manajemen sumber daya manusia enterprise yang dirancang khusus untuk memenuhi kebutuhan operasional multi-cabang, multi-proyek, dan tenaga kerja hibrida (kantor pusat, workshop perakitan, dan site tambang/konstruksi).
-
-Filosofi inti PRIME HRIS adalah **Zero Manual System**:
-- **Otomatisasi Penuh:** Eliminasi total pencatatan presensi kertas, spreadsheet rekapitulasi lembur manual, dan distribusi slip gaji fisik.
-- **Validasi Berlapis Multi-Faktor:** Presensi divalidasi silang menggunakan biometrik wajah AI 128-vektor, koordinat GPS satelit radius meter (Geofencing), serta deteksi IP Gateway jaringan kantor.
-- **Integritas Waktu Nyata:** Setiap transaksi absensi dan persetujuan langsung mengalir otomatis ke dalam kalkulator penggajian, buku besar anggaran proyek, dan notifikasi pesan instan WhatsApp secara *real-time*.
-
-### 1.2 Pilar Arsitektur Teknologi & Keamanan
-PRIME HRIS dibangun dengan tumpukan teknologi modern berkecepatan tinggi:
-1. **Frontend Layer:** React 18, TypeScript, Tailwind CSS, Lucide Icons, dan Apache ECharts untuk visualisasi telemetri analitik. Responsif penuh untuk penggunaan desktop kantor, tablet kios lobby, maupun smartphone Android/iOS.
-2. **Backend Engine:** Node.js HTTP Server mandiri dengan kompresi data otomatis GZIP, Server-Sent Events (SSE) / WebSocket untuk sinkronisasi live data, serta integrasi engine AI Python (`face_engine_vps.py`).
-3. **Database Layer:** Engine SQLite 3 native (`node:sqlite`) dengan arsitektur **WAL (Write-Ahead Logging)** dan `PRAGMA synchronous = NORMAL`. Memastikan performa baca/tulis instan di bawah 5 milidetik dengan jaminan integritas data ACID tanpa ketergantungan database eksternal yang rentan putus koneksi.
-4. **Security & Cryptography:**
-   - Password disimpan menggunakan hashing **PBKDF2/SHA-512** dengan garam acak (*unique salt*) per akun.
-   - Sesi autentikasi diamankan menggunakan JSON Web Signature (JWT) berbasis header `Authorization: Bearer <token>`.
-   - Modul **Audit Trail** merekam setiap mutasi data finansial dan presensi secara permanen dengan stempel waktu UTC, identitas pelaku, NIK, dan alamat IP Address asal.
-
-### 1.3 Matriks Peran & Hak Akses (Role-Based Access Control / RBAC)
-Sistem menerapkan pemisahan tugas (*Segregation of Duties*) melalui 5 tingkatan peran sistem:
-
-| Peran Sistem (`systemRole`) | Profil Pengguna | Cakupan Akses & Tanggung Jawab Utama |
-| :--- | :--- | :--- |
-| **`superuser`** | Direksi, Technical Director, Platform Architect | Akses tanpa batas ke seluruh sistem, master konfigurasi gaji & geofence, audit trail level root, tagihan invoice, dan pemulihan database. |
-| **`hr` / `admin`** | HR Manager, Supervisor Personalia | Pengelolaan master data karyawan, pendaftaran biometrik wajah, approval berjenjang cuti/izin/lembur, kalender kerja cut-off, dan koreksi timesheet. |
-| **`finance`** | Finance Manager, Payroll Officer | Pengelolaan perhitungan penggajian (Payroll), rekap lembur formula Depnaker, pembebanan biaya ke proyek, export transfer bank, dan distribusi slip gaji WA. |
-| **`staff` (Project Manager)** | Site Lead, Site Coordinator, PM Lapangan | Dashboard proyek yang dikelola, otorisasi dispensasi teknisi lapangan, dan pencatatan presensi foto harian tukang/pekerja harian lepas (*Casual Workers*). |
-| **`staff` (General Staff)** | Karyawan Kantor, Teknisi, Operator | Portal kehadiran mandiri (Selfie + GPS), pengajuan cuti & izin, monitoring sisa jatah cuti tahunan, dan pencetakan slip gaji pribadi. |
+- [LEMBAR PENGESAHAN ARSITEKTUR DIGITAL & PENGENDALIAN MUTU](#lembar-pengesahan-arsitektur-digital--pengendalian-mutu)
+- [BAB I: ARSITEKTUR DASAR SISTEM & PENJELASAN MENDALAM RBAC 5-TIER](#bab-i-arsitektur-dasar-sistem--penjelasan-mendalam-rbac-5-tier)
+  - 1.1 Filosofi Zero Manual System
+  - 1.2 Pilar Arsitektur Edge-Cloud Hybrid
+  - 1.3 Penjelasan Mendalam Konsep & Matriks RBAC 5-Tier
+  - 1.4 Hirarki & Hak Akses Pengguna
+- [BAB II: STRUKTUR DATA, SILSILAH ENTITAS & PETA KETERKAITAN DATA (DATA LINEAGE)](#bab-ii-struktur-data-silsilah-entitas--peta-keterkaitan-data-data-lineage)
+  - 2.1 Peta Topologi Keterkaitan Data End-to-End
+  - 2.2 Kamus Entitas Master & Transaksional Lengkap
+  - 2.3 Matriks Hubungan Antar-Tabel (Dari Mana ke Mana & Fungsinya)
+  - 2.4 Matriks Ketergantungan Data & Efek Domino (Cascading Impact)
+- [BAB III: ALUR KERJA PRESENSI LENGKAP & MULTI-METODE (5 SKENARIO)](#bab-iii-alur-kerja-presensi-lengkap--multi-metode-5-skenario)
+  - 3.1 Skenario 1: Presensi Kamera Selfie GPS Satelit Mandiri
+  - 3.2 Skenario 2: Presensi Tukang Lapangan / Pekerja Harian Lepas
+  - 3.3 Skenario 3: Terminal Kiosk Publik di Lobby / Site Gate
+  - 3.4 Skenario 4: Presensi Penugasan Dinas Luar (Out-of-Geofence)
+  - 3.5 Skenario 5: Rekonsiliasi & Koreksi Jam Kehadiran oleh HR
+- [BAB IV: PANDUAN KHUSUS ROLE 1 — STAFF (KARYAWAN & TEKNISI UMUM)](#bab-iv-panduan-khusus-role-1--staff-karyawan--teknisi-umum)
+  - 4.1 Profil Peran & Batasan Wewenang Staff
+  - 4.2 Detail 5 Menu Navigasi Staff (Tujuan, Fungsi Tombol, Input & Keterkaitan)
+  - 4.3 Alur Operasional Harian Staf (Daily Workflow)
+  - 4.4 Keterkaitan Data Staf ke Peran Lain (PM, HR, Finance)
+- [BAB V: PANDUAN KHUSUS ROLE 2 — PROJECT MANAGER & SITE COORDINATOR](#bab-v-panduan-khusus-role-2--project-manager--site-coordinator)
+  - 5.1 Profil Peran & Wewenang Khusus PM di Lapangan
+  - 5.2 Detail Menu Manajemen Proyek, Presensi Tukang & Otorisasi Tim
+  - 5.3 Alur Kerja Harian PM di Lokasi Proyek
+  - 5.4 Keterkaitan Data Proyek ke HR dan Finance (Labor Cost Allocation)
+- [BAB VI: PANDUAN KHUSUS ROLE 3 — HR / ADMIN SDM](#bab-vi-panduan-khusus-role-3--hr--admin-sdm)
+  - 6.1 Profil Peran & Wewenang Personalia
+  - 6.2 Detail 9 Menu Navigasi HR (Master Karyawan, Biometrik, Approval, Kalender)
+  - 6.3 Siklus Bulanan & Tata Kelola Kuota Cuti / Roster
+  - 6.4 Keterkaitan Data HR terhadap Payroll Finance & Legal Ketenagakerjaan
+- [BAB VII: PANDUAN KHUSUS ROLE 4 — FINANCE & PAYROLL SPECIALIST](#bab-vii-panduan-khusus-role-4--finance--payroll-specialist)
+  - 7.1 Profil Peran & Otoritas Keuangan Perusahaan
+  - 7.2 Detail 9 Menu Navigasi Finance (Payroll, Bank Transfer, Invoice, Labor Cost)
+  - 7.3 Siklus Tutup Buku Penggajian Bulanan Step-by-Step
+  - 7.4 Keterkaitan Data Finansial ke Anggaran Proyek & Distribusi Slip WhatsApp
+- [BAB VIII: PANDUAN KHUSUS ROLE 5 — SUPERUSER & MANAJEMEN DIREKSI](#bab-viii-panduan-khusus-role-5--superuser--manajemen-direksi)
+  - 8.1 Profil Peran & Wewenang Eksekutif Root
+  - 8.2 Detail Menu Dashboard Terpadu, Setting Geofence & Aturan Gaji
+  - 8.3 Prosedur Emergency Recovery, Backup Database & Audit Trail Kriptografis
+- [BAB IX: FORMULA PERHITUNGAN MATEMATIS & ATURAN BISNIS FINANSIAL](#bab-ix-formula-perhitungan-matematis--aturan-bisnis-finansial)
+  - 9.1 Formula Lembur Depnaker RI (PP 35/2021)
+  - 9.2 Formula Denda Keterlambatan Bertingkat
+  - 9.3 Formula BPJS Ketenagakerjaan & Kesehatan
+  - 9.4 Formula PPh 21 TER (PP 58/2023)
+  - 9.5 Formula Pembebanan Biaya Tenaga Kerja ke Proyek
+- [BAB X: PANDUAN INTEGRASI ENGINE OTOMATIS & BACKEND SERVICES](#bab-x-panduan-integrasi-engine-otomatis--backend-services)
+  - 10.1 WhatsApp Bot Baileys Socket & Whitelist Opt-In
+  - 10.2 SMTP Nodemailer Gateway
+  - 10.3 Engine AI Wajah ResNet 128D & Anti-Spoofing
+- [BAB XI: TROUBLESHOOTING MANDIRI BERDASARKAN PERAN & FAQ](#bab-xi-troubleshooting-mandiri-berdasarkan-peran--faq)
+  - 11.1 Matriks Solusi Masalah untuk Staf Lapangan
+  - 11.2 Matriks Solusi Masalah untuk PM & HR Admin
+  - 11.3 FAQ Komprehensif
+- [BAB XII: DAFTAR ISTILAH & GLOSARIUM ENTERPRISE](#bab-xii-daftar-istilah--glosarium-enterprise)
 
 ---
 
-## BAB II: STRUKTUR DATA, ENTITAS & KETERKAITAN DATA (DATA LINEAGE)
+## LEMBAR PENGESAHAN ARSITEKTUR DIGITAL & PENGENDALIAN MUTU
 
-### 2.1 Diagram Aliran & Keterkaitan Data Antar-Modul (End-to-End)
+Sesuai Kebijakan Rekayasa Sistem Prime Projectx, dokumen manual operasional ini merupakan **System-Automated Digital Enterprise Report**. Kebenaran logika arsitektur, relasi entitas basis data SQLite WAL, integrasi socket WhatsApp Baileys, serta formula kalkulator payroll diverifikasi langsung terhadap basis kode produksi aktif pada repositori `https://github.com/PrimeFox59/prime-hris.git`.
+
+> [!NOTE]
+> **Prinsip Pemisahan Buku Panduan Per Peran (Role Separation):**  
+> Untuk mencegah kebingungan pengguna di lapangan, buku panduan ini membagi panduan operasional ke dalam bab-bab khusus independen untuk setiap peran (Staff, Project Manager, HR, Finance, Superuser). Pengguna hanya perlu membaca bab yang sesuai dengan perannya masing-masing untuk memahami seluruh tugas, fungsi tombol, input data, dan keterkaitan data yang dihasilkannya.
+
+---
+
+## BAB I: ARSITEKTUR DASAR SISTEM & PENJELASAN MENDALAM RBAC 5-TIER
+
+### 1.1 Filosofi Zero Manual System
+PRIME HRIS Enterprise dibangun dengan visi tunggal: **Zero Manual System**. Seluruh gesekan operasional yang lazim memperlambat produktivitas perusahaan manufaktur, kontraktor, dan multi-cabang dieliminasi melalui otomatisasi cerdas:
+- Tidak ada lagi pencatatan presensi kertas yang rentan manipulasi atau hilang.
+- Tidak ada lagi rekap lembur manual di spreadsheet berhari-hari menjelang tanggal gajian.
+- Tidak ada lagi pencetakan dan pembagian slip gaji fisik secara manual.
+
+### 1.2 Pilar Arsitektur Edge-Cloud Hybrid
+Sistem beroperasi di atas 4 pilar arsitektur modern:
+1. **Frontend Responsif Multi-Platform:** React 18, TypeScript, Tailwind CSS, Lucide Icons, dan Apache ECharts dengan caching cerdas lokal.
+2. **Backend Runtime Node.js:** Server HTTP mandiri dengan kompresi data otomatis GZIP, Server-Sent Events (SSE) untuk sinkronisasi live data.
+3. **Database SQLite 3 Native Berbasis WAL:** Menggunakan modul native `node:sqlite` dengan Write-Ahead Logging (WAL) dan `PRAGMA synchronous = NORMAL`, latensi baca/tulis instan di bawah 5 milidetik, tanpa dependensi server database eksternal.
+4. **WhatsApp Gateway Mandiri:** Engine Baileys multi-device socket yang terhubung langsung ke WhatsApp Web tanpa vendor berbayar pihak ketiga.
+
+### 1.3 Penjelasan Mendalam Konsep & Matriks RBAC 5-Tier (Role-Based Access Control)
+Untuk menjamin integritas data korporat dan menerapkan prinsip pemisahan wewenang (*Segregation of Duties*), sistem membagi otorisasi ke dalam 5 tingkatan peran:
+
+| Tingkatan Peran | Definisi & Profil Pengguna | Menu Navigasi yang Terlihat | Otoritas Tulis / Modifikasi | Batas Kerahasiaan Finansial |
+| :--- | :--- | :--- | :--- | :--- |
+| **1. Staff (Umum / Teknisi)** | Karyawan kantor, operator workshop, dan teknisi lapangan. | **5 Menu:**<br/>• Portal Kinerja Saya<br/>• Presensi Kamera Saya<br/>• Pengajuan & Izin Saya<br/>• Slip Gaji Saya<br/>• Profil Data Saya | Hanya dapat menginput presensi diri sendiri dan mengirim formulir permohonan izin/cuti pribadi. | **Pribadi:** Hanya melihat slip gaji dan nomor rekening bank miliknya sendiri. |
+| **2. Staff (Project Manager)** | Site Manager, Site Lead, Mandor yang memimpin proyek di lapangan. | **6 Menu:**<br/>• 5 Menu Staf di atas<br/>• PLUS: Presensi Tukang Lapangan<br/>• Otorisasi Tim Proyek | Mendaftarkan tukang harian lepas, mencatat foto absensi tukang, dan mereview tiket staf proyek. | **Proyek:** Memantau serapan anggaran upah proyek yang dikelolanya (tidak melihat gaji staf lain). |
+| **3. HR / Admin SDM** | HR Manager, Supervisor Personalia, dan Admin Personalia. | **9 Menu:**<br/>• Dashboard HRIS<br/>• Presensi & Jam Kerja<br/>• Pusat Approval SDM<br/>• Presensi Tukang<br/>• Manajemen Proyek<br/>• Data Karyawan<br/>• Kalender Kerja<br/>• Setting System<br/>• Audit Trail | Penuh pada data personalia: input staf baru, enrol biometrik, jadwal cut-off, approval tiket, koreksi timesheet. | **Personalia:** Melihat profil kompensasi seluruh staf untuk keperluan administrasi cuti dan roster. |
+| **4. Finance & Payroll** | Finance Manager, Payroll Specialist, dan Bagian Keuangan. | **9 Menu:**<br/>• Dashboard Keuangan<br/>• Payroll & Penggajian<br/>• Data Gaji Karyawan<br/>• Biaya Tenaga Kerja<br/>• Approval Lembur<br/>• Rekap Presensi<br/>• Kalender Kerja<br/>• Invoice Resmi<br/>• Audit Trail | Penuh pada data finansial: menjalankan kalkulasi payroll, penyesuaian gaji, ekspor CSV bank, dispatch slip WA. | **Tinggi (Komersial):** Otoritas penuh atas seluruh data payroll perusahaan, rekening bank, dan penagihan invoice. |
+| **5. Superuser / Direksi** | Direktur Utama, Technical Lead, dan Platform Architect sistem. | **10 Menu Terpadu:**<br/>Seluruh menu sistem tanpa batasan, termasuk konfigurasi master sistem dan database. | Bypass Otoritas Penuh: mengubah formula salary_rules, geofence pusat, pairing QR WA, reset password root. | **Tertinggi:** Akses mutlak ke seluruh data finansial, log audit root, dan pemulihan bencana database. |
+
+---
+
+## BAB II: STRUKTUR DATA, SILSILAH ENTITAS & PETA KETERKAITAN DATA (DATA LINEAGE)
+
+### 2.1 Peta Topologi Keterkaitan Data End-to-End
 
 ```mermaid
 flowchart TD
-    subgraph MASTER_DATA ["1. PONDASI DATA MASTER"]
-        EMP["Tabel: employees<br/>(NIK, Nama, Gaji Pokok, Kuota Cuti, Biometrik Wajah, Lokasi/Roster)"]
-        PRJ["Tabel: projects<br/>(Kode, Klien, Pagu Budget, Jam Kerja Site, Geofence Proyek)"]
-        CAL["Tabel: annual_work_calendar<br/>(Periode Cut-Off, Libur Nasional, Hari Kerja)"]
-        RUL["Tabel: salary_rules<br/>(Rumus BPJS, PPh 21 TER, Lembur Depnaker, Geofence Pusat)"]
+    subgraph MASTER_HULU ["1. Data Master Hulu"]
+        EMP["employees<br/>(Master Karyawan, Gaji Pokok, Kuota Cuti, Biometrik 128D)"]
+        PRJ["projects<br/>(Master Proyek, Pagu Anggaran, Jam Site, Geofence)"]
+        CAL["annual_work_calendar<br/>(Jendela Cut-Off 21-20, Libur Nasional, Hari Kerja)"]
+        RUL["salary_rules<br/>(Rumus BPJS, PPh 21 TER, Lembur Depnaker)"]
     end
 
-    subgraph OPERATIONAL ["2. OPERASIONAL HARIAN LAPANGAN & KANTOR"]
-        ATT["Tabel: attendances<br/>(Selfie Geotag, GPS Satelit, Waktu Masuk/Keluar, Status Keterlambatan)"]
-        APP["Tabel: approvals<br/>(Tiket Izin, Cuti Tahunan, Roster, Dispensasi Lembur, Koreksi Absensi)"]
-        CAS["Tabel: casual_worker_attendances<br/>(Presensi Mandor/Tukang Harian Proyek)"]
+    subgraph TRANSAKSI_OPERASIONAL ["2. Transaksi Operasional Harian"]
+        ATT["attendances<br/>(Selfie Geotag, Jam Masuk/Pulang, Telat, Distance)"]
+        APP["approvals<br/>(Tiket Cuti, Sakit, Dispensasi Telat, Dinas Luar)"]
+        CAS["casual_worker_attendances<br/>(Presensi Tukang/Pekerja Lapangan oleh PM)"]
     end
 
-    subgraph PROCESSING ["3. ENGINE PENGOLAHAN & VALIDASI OTOMATIS"]
-        VAL["Validasi Geofence & Jam Kerja Site<br/>(Sistem mencocokkan koordinat dengan Proyek / Pusat)"]
-        ADJ["Penyesuaian Kuota & Status Kehadiran<br/>(Persetujuan Approval mengupdate status Absensi)"]
-        PAY_ENG["Kalkulator Payroll Otomatis<br/>(src/utils/payrollCalculator.ts)"]
+    subgraph ENGINE_PENGOLAHAN ["3. Engine Validasi & Kalkulator"]
+        VAL["Validasi Geofence & Jam Kerja<br/>(Mencocokkan GPS dengan Site Proyek / Kantor)"]
+        SYNC["Sinkronisasi Kuota & Timesheet<br/>(Persetujuan Approval mengupdate Absensi & Cuti)"]
+        PAY["Mesin Payroll Otomatis<br/>(src/utils/payrollCalculator.ts)"]
     end
 
-    subgraph OUTPUT_FINANCE ["4. OUTPUT KEUANGAN & AUDIT KORPORAT"]
-        PAY_REC["Rekapitulasi Gaji & Slip Resmi<br/>(Gaji Pokok + Tunjangan + Lembur - Potongan)"]
-        PRJ_COST["Alokasi Biaya Tenaga Kerja Proyek<br/>(Burn Rate & Realisasi Anggaran Proyek)"]
-        WA_OUT["WhatsApp Bot Dispatch<br/>(Notifikasi Tiket & Pengiriman Slip Gaji Digital)"]
-        AUD_LOG["Tabel: audit_logs<br/>(Catatan Jejak Mutasi Kriptografis Permanen)"]
+    subgraph OUTPUT_HILIR ["4. Output Hilir & Eksternal"]
+        SLIP["Slip Gaji Digital Resmi<br/>(Take Home Pay Bersih)"]
+        COST["Alokasi Biaya Tenaga Kerja Proyek<br/>(Burn Rate & Realisasi Anggaran)"]
+        WA["Bot WhatsApp Gateway<br/>(Dispatch Slip Gaji & Konfirmasi Tiket)"]
+        AUD["audit_logs<br/>(Rekaman Kriptografis Permanen)"]
     end
 
-    %% Keterkaitan & Relasi
     EMP -->|Penugasan Proyek| PRJ
-    EMP -->|Input Presensi Mandiri| ATT
-    EMP -->|Pengajuan Formulir| APP
-    PRJ -->|Aturan Jam & Radius Site| ATT
-    PRJ -->|Monitoring Pekerja Lepas| CAS
-    ATT -->|Jika Terlambat / Di Luar Radius| APP
-    APP -->|Jika Disetujui: Update Kuota/Status| ATT
-    APP -->|Jika Cuti Disetujui: Kurangi Kuota| EMP
-    
+    EMP -->|Input Presensi Selfie Mandiri| ATT
+    EMP -->|Pengajuan Formulir Cuti/Izin| APP
+    PRJ -->|Jam Kerja & Radius Site| ATT
+    PRJ -->|Pengawasan Tukang Lepas| CAS
+
     ATT --> VAL
-    CAL -->|Rentang Tanggal Cut-Off| PAY_ENG
-    RUL -->|Parameter Tarif & Formula| PAY_ENG
-    EMP -->|Data Gaji Pokok & Rekening| PAY_ENG
-    ATT -->|Hari Hadir Aktual & Jam Lembur| PAY_ENG
-    APP -->|Dispensasi Diterima / Cuti Resmi| PAY_ENG
-    
-    PAY_ENG --> PAY_REC
-    PAY_ENG --> PRJ_COST
-    PRJ_COST -->|Update Realisasi Anggaran| PRJ
-    PAY_REC --> WA_OUT
-    
-    %% Semua aksi memicu Audit Trail
-    APP -.->|Audit Mutasi| AUD_LOG
-    PAY_ENG -.->|Audit Perhitungan| AUD_LOG
-    ATT -.->|Audit Presensi| AUD_LOG
+    ATT -->|Jika Terlambat / Di Luar Radius| APP
+    APP -->|Approval HR / PM| SYNC
+    SYNC -->|Kurangi usedLeave| EMP
+    SYNC -->|Ubah Status Menjadi Disetujui| ATT
+
+    CAL -->|Rentang Tanggal Cut-Off| PAY
+    RUL -->|Tarif Pajak & BPJS| PAY
+    EMP -->|Data Rekening & Gaji Pokok| PAY
+    ATT -->|Hari Hadir Aktual & Jam Lembur| PAY
+    APP -->|Dispensasi Terlambat Disetujui| PAY
+
+    PAY --> SLIP
+    PAY --> COST
+    COST -->|Update Realisasi Anggaran| PRJ
+    SLIP --> WA
+
+    ATT -.->|Catat Log Presensi| AUD
+    APP -.->|Catat Log Approval| AUD
+    PAY -.->|Catat Log Payroll| AUD
 ```
 
-### 2.2 Kamus Entitas Data Master & Transaksional
+### 2.2 Matriks Hubungan Antar-Tabel (Dari Mana ke Mana dan Fungsinya)
 
-#### A. Entitas `employees` (Master Karyawan)
-Menyimpan profil lengkap identitas karyawan, kompensasi finansial, saldo hak cuti, hingga fitur biometrik.
-- **Kunci Utama (`id`):** Format `EMP-XXX` (Contoh: `EMP-001`, `EMP-002`). Unik dan tidak berubah.
-- **`nik`:** Nomor Induk Karyawan perusahaan yang digunakan sebagai nomor referensi resmi dan ID Kiosk.
-- **`baseSalary`, `fixedAllowance`, `dailyAllowance`:** Komponen gaji pokok, tunjangan tetap (jabatan/keahlian), dan tunjangan harian (transportasi & konsumsi yang hanya cair jika hadir kerja).
-- **`assignedProjectId`:** Menghubungkan karyawan dengan proyek aktif di tabel `projects`. Mengatur jadwal kerja, geofence, dan alokasi pembebanan biaya gaji.
-- **`leaveQuota` & `usedLeave`:** Saldo kuota hak cuti tahunan dan jumlah hari cuti yang telah digunakan. Terpotong otomatis saat tiket approval cuti disetujui HR.
-- **`biometric` (Objek JSON):** Menyimpan array 128-float representasi vektor wajah hasil ekstraksi AI model FaceNet/ResNet, tanggal pendaftaran (*enrolledAt*), dan foto acuan biometrik.
-- **`workLocationType` ('LOKAL' | 'NON_LOKAL'):**
-  - **LOKAL:** Karyawan dengan skema kerja reguler mingguan (Senin-Jumat/Sabtu).
-  - **NON_LOKAL:** Karyawan spesialis lapangan/site dengan skema kerja giliran (*Roster Cycle*, misal: 10 minggu bertugas di site, 2 minggu cuti roster off-site).
-- **`bankAccount`:** Menyimpan informasi nama bank, nomor rekening, dan nama pemilik rekening untuk kebutuhan transfer batch payroll.
-
-#### B. Entitas `projects` (Master Proyek & Manajemen Site)
-Menyimpan spesifikasi proyek korporat tempat karyawan dan teknisi ditugaskan.
-- **Kunci Utama (`id`):** Format `PRJ-XXX` (Contoh: `PRJ-001`, `PRJ-002`).
-- **`code` & `name`:** Kode unik kontrak proyek (contoh: `DMJ-CORP-2026`) dan nama operasional proyek.
-- **`allocatedBudget`:** Pagu anggaran total yang dialokasikan untuk tenaga kerja (*Labor Budget*).
-- **`actualLaborCost`:** Akumulasi realisasi biaya upah tenaga kerja yang telah dibayarkan dari siklus payroll.
-- **`projectManagerId`:** NIK/ID dari Project Manager yang berwenang menyetujui dispensasi tim dan presensi tukang proyek.
-- **`customRules` (Pengaturan Khusus Proyek):**
-  - `workSchedule`: Mengesampingkan (*override*) jam masuk dan keluar standar kantor (contoh: shift tambang/pabrik masuk 07:00, keluar 16:00).
-  - `geofence`: Titik koordinat Latitude, Longitude, dan radius toleransi GPS meter khusus site proyek bersangkutan.
-
-#### C. Entitas `attendances` (Data Presensi Transaksional)
-Mencatat setiap peristiwa kehadiran masuk dan pulang karyawan secara harian.
-- **Kunci Utama (`id`):** Menggunakan format stempel waktu unik (contoh: `ATT-1730302800000`).
-- **`employeeId` & `employeeNik`:** Merujuk langsung ke tabel `employees`.
-- **`date`:** Format tanggal `YYYY-MM-DD` (Kunci partisi pencarian presensi harian).
-- **`checkInTime` & `checkOutTime`:** Format waktu `HH:mm:ss`. Waktu kepulangan dapat kosong hingga karyawan melakukan absen pulang.
-- **`mode`:** Pilihan tipe presensi (`OFFICE` = Kantor Pusat, `PROJECT_SITE` = Site Proyek, `REMOTE` = Dinas/WFH, `KIOSK` = Terminal Presensi).
-- **`status`:** Status kehadiran akhir (`ON_TIME`, `LATE`, `DINAS_LUAR`, `LEAVE`, `SICK`, `ALPHA`).
-- **`photoUrl`:** Bukti tangkapan foto selfie dari kamera webcam/smartphone saat menekan tombol presensi.
-- **`lateMinutes` & `lateReason`:** Menit keterlambatan yang dihitung otomatis dari selisih waktu masuk terhadap batas toleransi jadwal, beserta alasan tertulis dari karyawan.
-- **`data_json`:** Metadata komprehensif berformat JSON yang memuat koordinat GPS riil, akurasi GPS satelit, skor kecocokan biometrik wajah (*matchScore*), dan IP Gateway perangkat.
-
-#### D. Entitas `approvals` (Workflow Tiket Persetujuan SDM & Proyek)
-Menyimpan seluruh pengajuan perizinan karyawan yang membutuhkan otorisasi berjenjang.
-- **`type`:**
-  - `LEAVE`: Cuti Tahunan, Cuti Sakit, Cuti Roster Non-Lokal, Cuti Melahirkan, Cuti Menikah, Cuti Duka.
-  - `PERMIT`: Izin Pribadi, Izin Medis, Dispensasi Khusus.
-  - `LATE_JUSTIFICATION`: Permohonan pembatalan/penghapusan penalti potongan keterlambatan absensi karena alasan valid (macet parah, kecelakaan kerja, kerusakan sistem).
-  - `DINAS_LUAR`: Penugasan kerja di luar wilayah kantor/site proyek yang sah.
-  - `ATTENDANCE_CORRECTION`: Permohonan koreksi jam absensi jika karyawan lupa melakukan scan check-in/out.
-  - `OUT_OF_GEOFENCE`: Izin presensi di luar radius satelit GPS yang ditentukan.
-- **`status`:** `PENDING` (Menunggu Otorisasi), `APPROVED` (Disetujui), `REJECTED` (Ditolak), `REVISION_REQUESTED` (Meminta Revisi Lampiran).
-- **`targetApproverRole`:** Mengarahkan tiket ke antrean otorisasi yang tepat:
-  - `PM`: Diperiksa terlebih dahulu oleh Project Manager terkait.
-  - `HR`: Diputuskan secara final oleh HR Manager.
-
-#### E. Entitas `annual_work_calendar` (Kalender Kerja & Pengaturan Cut-Off)
-Mengontrol validitas hari kerja korporat dan siklus penggajian bulanan.
-- **`year`:** Tahun kalender operasional.
-- **`weeklyOffDays`:** Array hari libur mingguan perusahaan (contoh: `[0, 6]` untuk Sabtu & Minggu libur, atau `[0]` untuk hanya hari Minggu libur).
-- **`defaultCutoffStartDay` & `defaultCutoffEndDay`:** Batas siklus pencatatan absensi untuk penggajian (Default standar industri: tanggal **21** bulan lalu s/d tanggal **20** bulan berjalan).
-- **`defaultPaydayDate`:** Tanggal pembayaran gaji resmi (Default: tanggal **25**).
-
-#### F. Entitas `casual_workers` & `casual_worker_attendances` (Pekerja Lapangan Lepas)
-Khusus mengelola tenaga kerja harian lepas, kuli, tukang, dan spesialis sub-kontraktor di lokasi proyek tanpa perlu membuatkan akun login ke sistem.
-- Diinput dan diawasi langsung oleh Project Manager di lapangan menggunakan kamera ponsel, mencatat nama tukang, jam masuk, titik GPS proyek, dan foto bukti fisik harian di lapangan.
+| Tabel Asal & Kunci | Tabel Tujuan (Relasi) | Arah Aliran & Kardinalitas | Fungsi Bisnis & Dampak Operasional |
+| :--- | :--- | :--- | :--- |
+| `employees.id` | `attendances.employeeId` | `employees` $\rightarrow$ `attendances` (1 : N) | Mengikat setiap transaksi absensi harian (jam masuk/pulang, foto, koordinat) ke identitas karyawan pemilik data. |
+| `employees.assignedProjectId` | `projects.id` | `employees` $\rightarrow$ `projects` (N : 1) | Menentukan di proyek mana staf bertugas. Menentukan aturan jam kerja khusus site dan radius toleransi GPS proyek. |
+| `attendances.id` | `approvals.attendanceRecordId` | `attendances` $\rightarrow$ `approvals` (1 : 1) | Jika presensi berstatus terlambat (`LATE`) atau di luar geofence, sistem mengaitkan tiket dispensasi ke rekaman absensi terkait. |
+| `approvals.employeeId` | `employees.id` | `approvals` $\rightarrow$ `employees` (N : 1) | Tiket permohonan cuti tahunan yang disetujui HR secara seketika memotong saldo `employees.leaveQuota` dan menambah `usedLeave`. |
+| `projects.id` | `casual_workers.projectId` | `projects` $\rightarrow$ `casual_workers` (1 : N) | Mengelompokkan daftar tukang harian lepas yang bekerja pada kontrak proyek tertentu di bawah pengawasan PM. |
+| `attendances` + `approvals` | `payrollCalculator` Engine | `attendances` $\rightarrow$ `Payroll` $\rightarrow$ `projects` | Menjadi bahan baku penghitungan hari hadir riil, jam lembur Depnaker, dan pembebanan biaya upah ke anggaran proyek. |
+| `payrollCalculator` | `wa_notifications.recipient_phone` | `Payroll` $\rightarrow$ `wa_notifications` $\rightarrow$ WhatsApp | Memicu bot WhatsApp mengirimkan rincian slip gaji resmi secara digital ke nomor ponsel masing-masing staf. |
 
 ---
 
-## BAB III: PANDUAN OPERASIONAL PENGGUNA BERDASARKAN PERAN (USER GUIDE)
+## BAB III: ALUR KERJA PRESENSI LENGKAP & MULTI-METODE (5 SKENARIO)
 
-### 3.1 Panduan untuk Karyawan / Staf Lapangan & Kantor
+### 3.1 Skenario 1: Presensi Kamera Selfie GPS Satelit Mandiri
+Digunakan setiap hari oleh staf kantor pusat, workshop, dan teknisi site yang memegang smartphone/komputer pribadi:
+1. **Langkah 1 (Sensor):** Karyawan membuka menu *Presensi Kamera Saya*. Browser meminta izin sensor kamera depan dan lokasi GPS.
+2. **Langkah 2 (Geofence):** Sistem membaca koordinat satelit (Latitude & Longitude) dan menghitung jarak ke lokasi kerja menggunakan rumus bola bumi Haversine. Jika jarak $\le 100$ meter, indikator berubah **HIJAU** (*Dalam Radius*).
+3. **Langkah 3 (Biometrik):** Karyawan memposisikan wajah di dalam oval panduan layar. Algoritma FaceNet AI mendeteksi landmark wajah dan menampilkan indikator *Wajah Terdeteksi*.
+4. **Langkah 4 (Check-In):** Karyawan menekan tombol **CHECK IN SEKARANG**. Sistem mengambil snapshot foto, memverifikasi kecocokan vektor biometrik dengan master data (skor $\ge 90\%$), dan mencatat jam masuk.
+5. **Langkah 5 (Deteksi Telat):** Jika check-in dilakukan melewati batas toleransi shift (misal lewat dari 08:15), status otomatis menjadi `LATE`, sistem menghitung menit terlambat, dan meminta karyawan menuliskan alasan.
+6. **Langkah 6 (Check-Out):** Pada sore hari saat jam kerja berakhir, karyawan menekan **CHECK OUT SEKARANG** untuk mengunci total jam kerja hari tersebut.
 
-#### A. Halaman "Portal Kinerja Saya" (Dashboard Pribadi)
-Setelah login menggunakan Username/Email dan Password, karyawan akan langsung disambut oleh ringkasan pribadi:
-- **Kartu Statistik Kehadiran:** Menampilkan jumlah hadir tepat waktu, menit keterlambatan bulan ini, sisa kuota cuti tahunan, dan pengajuan tiket yang sedang diproses.
-- **Roster & Penugasan Proyek:** Menampilkan nama proyek aktif tempat karyawan ditugaskan beserta nama Project Manager yang bertanggung jawab.
-- **Quick Actions:** Akses cepat untuk menuju menu Presensi Kamera atau Mengajukan Cuti.
+### 3.2 Skenario 2: Presensi Tukang Lapangan / Pekerja Harian Lepas
+Khusus dioperasikan oleh Project Manager di lapangan untuk mengawasi tenaga kerja lepas yang tidak memiliki akun sistem:
+1. **Langkah 1 (Akses):** PM membuka menu *Presensi Tukang Lapangan* pada ponselnya di lokasi site proyek.
+2. **Langkah 2 (Pilih Proyek):** PM memilih proyek aktif, lalu mengklik *Ambil Absen Harian Tukang*.
+3. **Langkah 3 (Foto Site):** Kamera smartphone PM terbuka. PM mengarahkan kamera ke wajah pekerja tukang yang hadir di lokasi proyek pagi itu.
+4. **Langkah 4 (Watermark):** Sistem mengambil foto, menyematkan watermark tanggal, jam, koordinat GPS proyek, dan nama PM yang memverifikasi.
+5. **Langkah 5 (Arsip):** Presensi tersimpan di tabel `casual_worker_attendances` sebagai bukti fisik untuk klaim kas proyek dan progress billing.
 
-#### B. Melakukan Presensi Masuk & Pulang (Presensi Kamera Saya)
-1. Buka menu **PRESENSI KAMERA SAYA** pada bilah navigasi kiri.
-2. Izinkan browser untuk mengakses **Kamera** dan **Lokasi (GPS Satelit)**.
-3. Posisikan wajah tepat di dalam lingkaran panduan oval di layar hingga sistem mendeteksi wajah dengan status *"Wajah Terdeteksi (Kualitas Baik)"*.
-4. Periksa indikator satelit:
-   - **Indikator Hijau (Dalam Radius Kantor/Proyek):** Jarak Anda berada di dalam radius resmi.
-   - **Indikator Kuning/Merah (Di Luar Radius):** Anda berada di luar area kantor/proyek. Jika memilih mode *Dinas Luar*, sistem akan meminta Anda menuliskan keterangan dinas luar secara jujur.
-5. Tekan tombol besar **"CHECK IN SEKARANG"** (pada pagi hari) atau **"CHECK OUT SEKARANG"** (saat jam kerja berakhir).
-6. Sistem akan memverifikasi kecocokan wajah dengan biometrik master Anda dalam 0.5 detik, menyimpan foto snapshot, dan menampilkan pesan konfirmasi sukses beserta notifikasi WhatsApp otomatis ke ponsel Anda.
+### 3.3 Skenario 3: Terminal Kiosk Publik di Lobby / Site Gate
+Dioperasikan pada tablet layar sentuh permanen di lobby kantor atau pos satpam gerbang workshop:
+1. **Langkah 1 (Setup Kiosk):** Tablet dioperasikan dengan URL khusus: `https://hris.primeprojectx.net/?tab=kiosk` (*Mode Sandboxed Publik Bebas Login*).
+2. **Langkah 2 (Proteksi Data):** Layar kiosk bersih dan aman, sama sekali tidak menampilkan data rahasia seperti besaran gaji atau nomor rekening.
+3. **Langkah 3 (Pindai Kilat):** Karyawan mendekati tablet: Kamera kiosk mendeteksi wajah dan mencocokkan dengan galeri biometrik dalam tempo $< 0.8$ detik (Opsi Wajah), atau karyawan mengetikkan 4 digit NIK pada keypad (Opsi PIN).
+4. **Langkah 4 (Konfirmasi):** Layar menampilkan konfirmasi hijau: *Selamat Bekerja, [Nama Karyawan]* dan membunyikan nada sukses.
 
-#### C. Mengajukan Izin, Cuti & Dispensasi Lembur (Pengajuan & Izin Saya)
-1. Buka menu **PENGAJUAN & IZIN SAYA**, lalu klik tombol biru **"+ BUAT PENGAJUAN BARU"**.
-2. Pilih kategori permohonan:
-   - **Cuti Tahunan / Roster:** Masukkan rentang tanggal (mulai s/d selesai). Sistem secara cerdas akan menghitung jumlah hari kerja bersih (mengabaikan hari libur nasional dan hari libur mingguan) serta menampilkan sisa kuota cuti Anda.
-   - **Izin Sakit / Keperluan Pribadi:** Masukkan tanggal dan unggah bukti pendukung (contoh: surat keterangan dokter / foto surat resmi).
-   - **Dispensasi Keterlambatan (Late Justification):** Pilih absensi hari terkait yang terlambat, lalu tuliskan justifikasi logis agar potongan keterlambatan tidak dikenakan pada gaji Anda.
-3. Klik tombol **"KIRIM PENGAJUAN"**. Status pengajuan dapat Anda pantau secara langsung apakah masih `PENDING`, telah `APPROVED`, atau `REVISION_REQUESTED`.
+### 3.4 Skenario 4: Presensi Penugasan Dinas Luar (Out-of-Geofence)
+Digunakan saat karyawan harus langsung berangkat ke lokasi vendor/klien di luar perimeter kantor:
+1. **Langkah 1 (Mode Dinas):** Karyawan membuka menu presensi kamera di lokasi klien, memilih tombol mode **DINAS LUAR**.
+2. **Langkah 2 (Snapshot GPS):** Sistem mengambil snapshot foto dan koordinat GPS riil di lokasi klien tersebut.
+3. **Langkah 3 (Keterangan):** Karyawan menuliskan keterangan tugas dinas luar (nama klien, agenda meeting, nomor surat tugas).
+4. **Langkah 4 (Tiket Otomatis):** Sistem mencatat presensi sebagai `DINAS_LUAR` dan secara otomatis membuat tiket dispensasi di antrean HR/PM untuk disetujui.
 
-#### D. Memeriksa & Mencetak Slip Gaji (Slip Gaji Saya)
-1. Buka menu **SLIP GAJI SAYA**.
-2. Pilih periode bulan penggajian yang ingin dilihat.
-3. Layar akan menampilkan rincian transparansi slip gaji berstandar resmi:
-   - Penghasilan Kotor (*Gross Earnings*): Gaji Pokok, Tunjangan Tetap, Tunjangan Kehadiran Harian, dan Upah Lembur Aktual.
-   - Potongan (*Deductions*): Potongan keterlambatan tidak terjustifikasi, iuran BPJS Ketenagakerjaan (JHT 2%, JP 1%), iuran BPJS Kesehatan (1%), dan estimasi Pajak Penghasilan PPh 21 TER.
-   - Penghasilan Bersih (*Take Home Pay*).
-4. Klik tombol **"CETAK SLIP RESMI (PDF)"** untuk mengunduh slip dalam format siap cetak dengan logo resmi PRIME HRIS, atau klik **"KIRIM KE WHATSAPP SAYA"** untuk meminta sistem mengirimkan salinan digital langsung ke nomor WhatsApp Anda.
-
----
-
-### 3.2 Panduan untuk Project Manager / Site Manager
-
-#### A. Mengelola Proyek & Penugasan Tim (Manajemen Proyek & Site)
-1. Buka menu **MANAJEMEN PROYEK & SITE**.
-2. Klik nama proyek Anda untuk melihat detail informasi:
-   - Alokasi Anggaran Tenaga Kerja (*Allocated Labor Cost*) vs Realisasi Upah Berjalan (*Actual Labor Cost*).
-   - Jam Kerja Proyek (*Site Work Schedule*): Anda dapat mengaktifkan jam kerja khusus jika proyek memiliki jam masuk berbeda dari kantor pusat.
-   - Radius Geofence Site: Memastikan teknisi yang bertugas hanya dapat melakukan check-in ketika berada di area fisik proyek konstruksi/workshop.
-
-#### B. Presensi Harian Pekerja Lapangan Lepas (Presensi Tukang Lapangan)
-Untuk proyek yang melibatkan mandor dan kuli bangunan tanpa akun sistem:
-1. Masuk ke menu **PRESENSI TUKANG LAPANGAN**.
-2. Pilih proyek yang sedang aktif.
-3. Pada tab **Daftar Pekerja**, klik **"+ Tambah Pekerja Lepas"** untuk mendaftarkan nama tukang baru (contoh: Pak Joko - Tukang Las).
-4. Pada tab **Presensi Harian Lapangan**:
-   - Klik **"Ambil Absen Tukang"**.
-   - Arahkan kamera smartphone ke pekerja bersangkutan di lokasi proyek.
-   - Sistem akan menyematkan *watermark* koordinat GPS, tanggal, dan nama Project Manager yang memverifikasi.
-   - Klik **"Simpan Presensi Tukang"**. Seluruh arsip foto dan log kehadiran harian tersimpan rapi untuk bukti klaim biaya operasional (*reimbursement/progress billing*).
-
-#### C. Otorisasi Tiket Anggota Tim Proyek (Pusat Approval SDM)
-1. Setiap kali staf yang terdaftar di bawah proyek Anda mengajukan lembur, dinas luar, atau perizinan, notifikasi akan masuk ke menu **APPROVAL & PENGAJUAN**.
-2. Filter status berdasarkan proyek Anda.
-3. Periksa kesesuaian uraian tugas lapangan.
-4. Klik **"SETUJUI (APPROVE)"** atau **"TOLAK (REJECT)"** dengan memberikan catatan evaluasi tertulis.
+### 3.5 Skenario 5: Rekonsiliasi & Koreksi Jam Kehadiran oleh HR
+Digunakan jika terjadi pemadaman listrik di site atau kegagalan perangkat keras:
+1. **Langkah 1 (Pengajuan):** Karyawan mengajukan tiket *Koreksi Absensi* dengan melampirkan jam masuk/pulang yang seharusnya.
+2. **Langkah 2 (Audit Timesheet):** HR Manager membuka menu *Payroll & Penggajian* $\rightarrow$ Klik nama staf $\rightarrow$ Buka *Employee Timesheet Detail Modal*.
+3. **Langkah 3 (Koreksi Jam):** HR memilih tanggal yang bersangkutan, mengklik tombol *Koreksi Jam HR*, memasukkan jam riil, dan memberikan catatan verifikasi resmi.
+4. **Langkah 4 (Penyelarasan):** Sistem memperbarui status absensi menjadi `ON_TIME`, membatalkan denda keterlambatan, dan mencatat mutasi tersebut ke tabel `audit_logs` permanen.
 
 ---
 
-### 3.3 Panduan untuk HR / Admin SDM
+## BAB IV: PANDUAN KHUSUS ROLE 1 — STAFF (KARYAWAN & TEKNISI UMUM)
 
-#### A. Master Data Karyawan & Pendaftaran Biometrik (Data Karyawan)
-1. Masuk ke menu **DATA KARYAWAN**.
-2. Untuk mendaftarkan karyawan baru, klik **"+ TAMBAH KARYAWAN"**:
-   - Isi NIK unik, Nama Lengkap, Email, Nomor WhatsApp aktif (format `628...`), Departemen, Jabatan, dan Tanggal Bergabung.
-   - Tentukan tipe kompensasi (Gaji Pokok, Tunjangan Tetap, Tunjangan Makan/Transport Harian).
-   - Tentukan lokasi kerja: **LOKAL** atau **NON_LOKAL** (serta konfigurasi siklus rostering-nya).
-   - Masukkan nomor rekening bank tujuan payroll.
-3. **Pendaftaran Biometrik Wajah (Biometric Enrollment):**
-   - Pada baris data karyawan bersangkutan, klik ikon **Kamera / Biometrik**.
-   - Minta karyawan menghadap ke kamera dengan pencahayaan terang dan tanpa masker/kacamata hitam.
-   - Klik tombol **"CAPTURE & ENROLL BIOMETRIC"**.
-   - Engine AI akan mengekstrak 128 titik landmark wajah menjadi representasi vektor unik dan menyimpannya secara terenkripsi ke database SQLite.
+### 4.1 Profil Peran & Batasan Wewenang Staff
+Role Staff diperuntukkan bagi seluruh karyawan operasional, teknisi workshop, staf administrasi, dan pekerja lapangan. Peran ini berfokus pada kemandirian pencatatan kehadiran pribadi dan transparansi hak kompensasi kerja. Staff sama sekali tidak memiliki akses ke data personalia staf lain, pengaturan sistem, maupun kalkulasi penggajian perusahaan.
 
-#### B. Mengelola Kalender Kerja Tahunan & Periode Cut-Off (Kalender Kerja & Cut-Off)
-1. Masuk ke menu **KALENDER KERJA & CUT-OFF**.
-2. Tentukan hari libur mingguan perusahaan (misal mencentang hari Sabtu dan Minggu).
-3. Tandai hari libur nasional resmi pemerintah dan cuti bersama dengan mengklik tanggal pada kalender interaktif.
-4. Tentukan parameter Cut-Off siklus penggajian:
-   - **Tanggal Mulai Cut-Off:** Default tanggal **21** bulan sebelumnya.
-   - **Tanggal Akhir Cut-Off:** Default tanggal **20** bulan berjalan.
-   - **Tanggal Pembayaran Gaji (Payday):** Default tanggal **25**.
-5. Klik **"SIMPAN KONFIGURASI KALENDER"**. Konfigurasi ini secara instan menjadi acuan mesin payroll dalam mengagregasi hari kerja dan jam lembur staf.
+### 4.2 Pembahasan Mendalam 5 Menu Navigasi Staff
 
-#### C. Otorisasi SDM & Rekonsiliasi Timesheet (Pusat Approval SDM & Timesheet Modal)
-1. Pada menu **PUSAT APPROVAL SDM**, tinjau pengajuan cuti tahunan, sakit, dan dispensasi.
-2. Saat menyetujui cuti tahunan, sistem otomatis memotong saldo `leaveQuota` karyawan.
-3. Jika terdapat perselisihan absensi (misal: karyawan lupa check-out karena pemadaman listrik di site):
-   - Masuk ke tab **Payroll & Penggajian**, lalu klik nama karyawan untuk membuka **Employee Timesheet Detail Modal**.
-   - Pilih tanggal yang bermasalah, klik **"Koreksi Jam HR"**.
-   - Masukkan jam check-in/out yang benar beserta alasan koreksi resmi.
-   - Sistem akan memperbarui status kehadiran, menghapus denda keterlambatan jika dijustifikasi, dan mencatat mutasi tersebut ke dalam log audit HR.
+#### Menu 1: PORTAL KINERJA SAYA (Dashboard Pribadi)
+- **Lokasi Navigasi:** Menu paling atas pada bilah navigasi kiri (Ikon: `LayoutDashboard`).
+- **Tujuan Bisnis:** Memberikan gambaran seketika kepada karyawan mengenai performa kedisiplinan dan hak cuti bulan berjalan.
+- **Komponen UI & Fungsi Tombol:**
+  - *Kartu Hadir Tepat Waktu:* Menampilkan jumlah hari masuk kerja tepat waktu bulan ini.
+  - *Kartu Menit Keterlambatan:* Menampilkan akumulasi menit keterlambatan yang belum mendapatkan dispensasi dari atasan.
+  - *Kartu Sisa Kuota Cuti:* Menampilkan sisa hari cuti tahunan yang masih dapat diajukan.
+  - *Kartu Penugasan Proyek:* Menampilkan nama proyek aktif tempat staf ditugaskan beserta nama Project Manager penanggung jawabnya.
+- **Keterkaitan Data:** Menarik data secara real-time dari tabel `attendances` (filter `employeeId`), tabel `approvals` (status tiket pribadi), dan tabel `employees` (`leaveQuota - usedLeave`).
 
----
+#### Menu 2: PRESENSI KAMERA SAYA (Kamera Selfie & Geotag)
+- **Lokasi Navigasi:** Menu kedua pada bilah navigasi kiri (Ikon: `Camera`).
+- **Tujuan Bisnis:** Melakukan pencatatan kehadiran masuk dan pulang secara mandiri dengan validasi satelit GPS dan biometrik wajah.
+- **Komponen UI & Fungsi Tombol:**
+  - *Viewport Video Kamera:* Menampilkan live feed kamera depan perangkat dengan lingkaran oval panduan wajah.
+  - *Indikator Status Radius Geofence:* Lingkaran radar satelit. Berwarna HIJAU jika jarak ke kantor/proyek $\le 100$m. Berwarna KUNING/MERAH jika di luar radius toleransi.
+  - *Tombol 'CHECK IN SEKARANG':* Tombol besar berwarna hijau/navy yang diklik pada pagi hari untuk merekam jam masuk kerja.
+  - *Tombol 'CHECK OUT SEKARANG':* Tombol yang aktif pada sore/malam hari saat jam kerja berakhir untuk merekam jam kepulangan.
+  - *Pilihan Mode 'Dinas Luar':* Opsi yang dapat dicentang jika karyawan ditugaskan di luar lokasi kantor/proyek secara resmi.
+- **Keterkaitan Data:** Menulis baris baru ke tabel `attendances`, memicu notifikasi bot WhatsApp ke nomor ponsel karyawan, dan memicu kalkulasi lembur jika check-out melebihi jam kerja normal.
 
-### 3.4 Panduan untuk Finance & Payroll Specialist
+#### Menu 3: PENGAJUAN & IZIN SAYA (Approval Hub Staf)
+- **Lokasi Navigasi:** Menu ketiga pada bilah navigasi kiri (Ikon: `CheckSquare`).
+- **Tujuan Bisnis:** Mengajukan permohonan hak cuti tahunan, cuti roster, izin sakit, dan dispensasi keterlambatan secara transparan.
+- **Komponen UI & Fungsi Tombol:**
+  - *Tombol '+ Buat Pengajuan Baru':* Membuka jendela dialog pembuatan tiket permohonan baru.
+  - *Dropdown Kategori Izin:* Memilih jenis izin (Cuti Tahunan, Cuti Roster Non-Lokal, Sakit, Izin Pribadi, Dispensasi Keterlambatan, Koreksi Absensi).
+  - *Pemilih Rentang Tanggal:* Menentukan tanggal awal dan akhir. Sistem secara otomatis menampilkan jumlah hari kerja bersih (mengabaikan hari libur nasional dan akhir pekan).
+  - *Formulir Unggah Lampiran:* Mengunggah foto surat dokter atau surat penugasan resmi.
+  - *Tabel Riwayat Pengajuan:* Menampilkan daftar seluruh tiket yang pernah diajukan beserta statusnya: `PENDING` (Kuning), `APPROVED` (Hijau), atau `REVISION_REQUESTED` (Oranye).
+- **Keterkaitan Data:** Menyimpan data ke tabel `approvals`. Begitu disetujui HR, tiket ini otomatis mengurangi `leaveQuota` pada tabel `employees` dan mengubah status tanggal terkait di `attendances` menjadi `LEAVE`.
 
-#### A. Rekapitulasi Penggajian Otomatis (Payroll & Penggajian)
-1. Buka menu **PAYROLL & PENGGAJIAN**.
-2. Pilih **Periode Penggajian** (secara otomatis disesuaikan dengan rentang tanggal cut-off yang aktif pada kalender kerja).
-3. Anda dapat memfilter tabel berdasarkan departemen atau proyek tertentu untuk melihat alokasi biaya per unit bisnis.
-4. Sistem secara otomatis menghitung secara presisi:
-   - **Hari Hadir Aktual:** Jumlah hari absensi masuk kerja yang valid.
-   - **Lembur Depnaker:**
-     - Jam pertama dikalikan $1.5 \times \text{Upah Per Jam}$.
-     - Jam kedua dan seterusnya dikalikan $2.0 \times \text{Upah Per Jam}$ ($\text{Upah Per Jam} = \frac{1}{173} \times \text{Gaji Pokok}$).
-   - **Potongan Keterlambatan:** Dihitung dari akumulasi menit keterlambatan yang tidak memiliki approval dispensasi.
-   - **Kewajiban Iuran Jaminan Sosial & Pajak:**
-     - BPJS Ketenagakerjaan: JHT (2% karyawan, 3.7% perusahaan), JP (1% karyawan, 2% perusahaan), JKK & JKM.
-     - BPJS Kesehatan: 1% ditanggung karyawan, 4% ditanggung perusahaan (dengan batas plafon gaji maksimal).
-     - PPh 21 TER: Dihitung sesuai kategori status PTKP karyawan (TER A, TER B, atau TER C).
+#### Menu 4: SLIP GAJI SAYA (Transparansi Kompensasi & Slip WA)
+- **Lokasi Navigasi:** Menu keempat pada bilah navigasi kiri (Ikon: `Banknote`).
+- **Tujuan Bisnis:** Memeriksa rincian transparansi penghasilan bulanan dan mengunduh slip gaji resmi perusahaan.
+- **Komponen UI & Fungsi Tombol:**
+  - *Dropdown Periode Gaji:* Memilih bulan dan tahun penggajian yang ingin diperiksa.
+  - *Rincian Pendapatan (Earnings):* Gaji Pokok, Tunjangan Tetap Jabatan, Tunjangan Kehadiran Harian (Makan/Transport), dan Upah Lembur Depnaker Aktual.
+  - *Rincian Potongan (Deductions):* Potongan keterlambatan tidak terjustifikasi, iuran BPJS Ketenagakerjaan (JHT 2%, JP 1%), iuran BPJS Kesehatan (1%), dan estimasi Pajak PPh 21 TER.
+  - *Penghasilan Bersih (Take Home Pay):* Nominal bersih upah yang ditransfer perusahaan ke rekening bank karyawan.
+  - *Tombol 'CETAK SLIP RESMI (PDF)':* Mengunduh berkas slip gaji resmi berlogo PRIME HRIS dan stempel verifikasi sistem.
+  - *Tombol 'KIRIM KE WHATSAPP SAYA':* Memerintahkan bot sistem untuk mengirimkan salinan digital rincian slip gaji ke nomor WhatsApp pribadi.
+- **Keterkaitan Data:** Membaca hasil kalkulasi payroll bulanan dari tabel `attendances` dan `salary_rules`.
 
-#### B. Pembayaran Massal & Distribusi Slip Gaji Digital
-1. **Export Bank Transfer File:** Klik tombol **"EXPORT CSV TRANSFER BANK"** untuk mengunduh daftar transfer batch format siap pakai (sesuai format BCA / Mandiri Corporate Cash Management).
-2. **Kirim Slip Gaji via WhatsApp Massal:**
-   - Klik tombol hijau **"KIRIM SEMUA SLIP GAJI VIA WHATSAPP"**.
-   - Sistem WhatsApp Bot akan memproses pengiriman berkas rincian slip gaji ke nomor masing-masing karyawan secara bergantian dengan jeda jeda aman untuk mencegah spam.
-
-#### C. Pengendalian Biaya Tenaga Kerja Proyek (Biaya Tenaga Kerja Proyek)
-1. Masuk ke sub-tab **Biaya Tenaga Kerja Proyek**.
-2. Pantau metrik *Burn Rate*:
-   - Apakah realisasi gaji teknisi pada proyek tertentu melebihi pagu anggaran (*Overbudget*)?
-   - Estimasi biaya tenaga kerja hingga proyek selesai (*Estimate at Completion / EAC*).
+#### Menu 5: PROFIL DATA SAYA (Master Profil Pribadi)
+- **Lokasi Navigasi:** Menu kelima pada bilah navigasi kiri (Ikon: `UserCheck`).
+- **Tujuan Bisnis:** Memastikan identitas resmi, nomor rekening bank payroll, dan data biometrik karyawan terdaftar dengan benar.
+- **Komponen UI & Fungsi Tombol:**
+  - *Informasi Personalia:* NIK, Nama Lengkap, Departemen, Jabatan, dan Tanggal Bergabung.
+  - *Data Rekening Bank Payroll:* Nama Bank, Nomor Rekening, dan Nama Pemilik Rekening (wajib sesuai identitas diri untuk transfer payroll).
+  - *Status Biometrik Wajah:* Menampilkan status apakah foto biometrik wajah 128 vektor telah terdaftar atau belum.
+- **Keterkaitan Data:** Membaca baris data karyawan di tabel `employees`.
 
 ---
 
-### 3.5 Panduan untuk Superuser / Manajemen Direksi
+## BAB V: PANDUAN KHUSUS ROLE 2 — PROJECT MANAGER & SITE COORDINATOR
 
-#### A. Dashboard Terpadu Eksekutif (Dashboard Terpadu)
-Menampilkan metrik performa tingkat tinggi organisasi:
-- Total tenaga kerja aktif (Headcount rasio Staff Kantor vs Teknisi Lapangan).
-- Persentase tingkat kehadiran harian perusahaan (*Attendance Rate*).
-- Total liabilitas pengeluaran payroll bulan berjalan.
-- Log transaksi terbaru dan status kesehatan engine background service.
+### 5.1 Profil Peran & Wewenang Khusus PM di Lapangan
+Project Manager (PM) atau Site Lead adalah perpanjangan tangan manajemen di lokasi proyek. Selain memiliki hak akses penuh terhadap seluruh fitur Staff mandiri, PM memegang kendali atas pengawasan tenaga kerja proyek: mencatat kehadiran pekerja harian lepas (tukang/mandor), memantau serapan anggaran upah proyek, dan mereview tiket perizinan staf proyeknya.
 
-#### B. Konfigurasi Aturan Perusahaan & Master Geofence (Setting System)
-1. Buka menu **SETTING SYSTEM**.
-2. **Aturan Geofence Kantor Pusat:**
-   - Masukkan Latitude dan Longitude koordinat kantor pusat.
-   - Atur batas radius toleransi GPS (misal: 100 meter).
-   - Masukkan daftar Alamat IP Publik kantor untuk mengaktifkan validasi ganda koneksi Wi-Fi kantor.
-3. **Konfigurasi WhatsApp Bot Gateway:**
-   - Pindai kode QR WhatsApp jika bot terputus (*Unpaired*).
-   - Periksa daftar nomor telepon karyawan yang telah berstatus *Opt-In Terverifikasi*.
-4. **Konfigurasi SMTP Email Server:**
-   - Atur Host SMTP (misal: `smtp.gmail.com`), Port (587 / 465), dan Kredensial Email Pengirim untuk pengiriman notifikasi formal dan reset kata sandi.
+### 5.2 Pembahasan Mendalam Fitur Khusus Project Manager
 
-#### C. Pengawasan Keamanan & Integritas Data (Audit Trail & Log)
-1. Masuk ke menu **AUDIT TRAIL & LOG**.
-2. Seluruh mutasi sistem terekam secara kronologis dengan informasi:
-   - Siapa yang melakukan perubahan (Nama, NIK, dan Peran).
-   - Modul yang dimodifikasi (`EMPLOYEES`, `PROJECTS`, `ATTENDANCE`, `PAYROLL`, `APPROVALS`).
-   - Alamat IP perangkat pengguna dan stempel waktu presisi milidetik.
-   - Rincian perubahan data sebelum dan sesudah diedit.
-3. Log audit bersifat *Append-Only* (tidak dapat diubah maupun dihapus oleh pengguna manapun) demi menjamin kepatuhan audit IATF / ISO korporat.
+#### Menu Khusus: PRESENSI TUKANG LAPANGAN (Pekerja Harian Lepas)
+- **Lokasi Navigasi:** Menu baris ketiga pada navigasi PM (Ikon: `HardHat`).
+- **Tujuan Bisnis:** Mengontrol dan mengaudit kehadiran tenaga kerja harian lepas di lokasi proyek tanpa perlu membuatkan akun login.
+- **Komponen UI & Fungsi Tombol:**
+  - *Dropdown Pilih Proyek Aktif:* Memilih kontrak proyek aktif yang sedang dipimpin PM.
+  - *Tab 'Daftar Pekerja' & Tombol '+ Tambah Pekerja':* Mendaftarkan nama pekerja baru beserta bidang keahliannya (contoh: Tukang Batu, Tukang Las, Mandor).
+  - *Tombol 'Ambil Absen Harian Tukang':* Mengaktifkan kamera smartphone PM untuk mengambil foto selfie pekerja tukang di lokasi proyek.
+  - *Tombol 'Simpan Presensi Tukang':* Menyimpan foto ke server dengan cap otomatis: Nama Pekerja, Nama PM, Tanggal, Jam, dan Koordinat GPS Proyek.
+  - *Tab 'Log Presensi Harian':* Menampilkan arsip foto dan log kehadiran harian seluruh tukang untuk bukti klaim pencairan kas kecil proyek.
+- **Keterkaitan Data:** Menyimpan data ke tabel `casual_workers` dan `casual_worker_attendances`. Menjadi dokumen pendukung resmi saat pengajuan reimbursement operasional proyek ke Finance.
 
----
+#### Fitur Khusus: Otorisasi Tiket Anggota Proyek (First-Line Approval)
+- **Lokasi Navigasi:** Menu *Pengajuan & Izin Saya* (Tab Tiket Anggota Proyek).
+- **Tujuan Bisnis:** Memeriksa dan memberikan rekomendasi persetujuan awal terhadap permohonan lembur, dinas luar, atau cuti teknisi site.
+- **Fungsi Aksi:** PM memeriksa apakah ketidakhadiran teknisi akan mengganggu jadwal milestone proyek. PM dapat mengklik *Rekomendasikan Setuju* atau *Tolak dengan Catatan* sebelum tiket masuk ke persetujuan final HR Manager.
+- **Keterkaitan Data:** Memperbarui kolom `reviewedBy` dan `reviewNote` pada tabel `approvals`.
 
-## BAB IV: ALUR KERJA OPERASIONAL STANDAR (SOP STEP-BY-STEP)
-
-### 4.1 SOP 01: Presensi Harian (Kamera Selfie, Geotag Satelit & Biometrik Wajah)
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor K as Karyawan / Staf
-    participant UI as Browser / Kiosk UI
-    participant GPS as Satelit GPS & IP
-    participant SVR as Server Backend (Node.js)
-    participant AI as Python Biometric Engine
-    participant DB as SQLite 3 (WAL)
-    participant WA as WhatsApp Bot Gateway
-
-    K->>UI: Buka Menu "Presensi Kamera Saya"
-    UI->>GPS: Minta Akses Koordinat GPS & Geofence
-    GPS-->>UI: Return Latitude, Longitude, Akurasi
-    UI->>K: Tampilkan Video Live Stream & Kotak Panduan Wajah
-    K->>UI: Klik Tombol "CHECK IN SEKARANG"
-    UI->>UI: Ambil Snapshot Foto (Canvas Base64)
-    UI->>SVR: POST /api/attendances (Foto, GPS, Mode)
-    
-    SVR->>AI: Verifikasi Foto vs Biometrik Terdaftar
-    AI-->>SVR: Skor Kesesuaian (Contoh: 94.8% Match)
-    
-    alt Skor Cocok & Dalam Radius Geofence
-        SVR->>DB: INSERT INTO attendances (Status: 'ON_TIME' / 'LATE')
-        SVR->>DB: INSERT INTO audit_logs (Aksi: 'CHECK_IN_SUCCESS')
-        SVR-->>UI: Respon Sukses (Notifikasi Audio & Visual Hijau)
-        SVR->>WA: Kirim Tiket Konfirmasi Kehadiran ke Nomor Karyawan
-        WA-->>K: Notifikasi WA Masuk: "Halo Budi, Anda Berhasil Check-In Pukul 07:58"
-    else Di Luar Radius Geofence (Tanpa Izin)
-        SVR->>DB: INSERT INTO attendances (Status: 'OUT_OF_GEOFENCE', Perlu Tiket)
-        SVR-->>UI: Peringatan Kuning: "Di Luar Jangkauan. Pengajuan Justifikasi Dibutuhkan."
-    else Wajah Tidak Dikenali / Terindikasi Foto Palsu
-        SVR-->>UI: Tolak Presensi: "Wajah Tidak Cocok. Silakan Ulangi."
-    end
-```
-
-**Langkah-Langkah Operasional Pengguna:**
-1. Karyawan berdiri di area kantor atau proyek resmi, menyalakan koneksi GPS pada perangkat.
-2. Membuka sistem PRIME HRIS dan memilih tab **Presensi Kamera**.
-3. Memastikan wajah bersih dari penghalang, mengarahkan kamera ke wajah, lalu menekan tombol **Check-In**.
-4. Sistem memeriksa tiga lapis validasi secara simultan:
-   - **Geofence Check:** Menghitung jarak Euclidean koordinat perangkat terhadap pusat lokasi kerja menggunakan rumus *Haversine*. Toleransi standar: $\le 100$ meter.
-   - **Biometric Landmark Check:** Membandingkan fitur wajah dengan master data pendaftaran awal.
-   - **Time Threshold Check:** Membandingkan jam saat tombol ditekan dengan jadwal shift kerja (misal: jadwal masuk 08:00, toleransi s/d 08:15).
-5. Jika check-in dilakukan setelah jam toleransi, sistem otomatis menandai status `LATE`, menghitung jumlah menit keterlambatan, dan menampilkan dialog formulir alasan terlambat.
+#### Fitur Khusus: Pemantauan Anggaran Tenaga Kerja Proyek (Burn Rate Control)
+- **Tujuan Bisnis:** Mencegah proyek mengalami pembengkakan biaya tenaga kerja (*overbudget labor cost*).
+- **Komponen Analitik:**
+  - *Allocated Budget:* Pagu total biaya upah yang dialokasikan dalam kontrak proyek.
+  - *Actual Labor Cost:* Total upah riil yang telah dibayarkan kepada teknisi dan tukang hingga bulan berjalan.
+  - *Burn Rate Ratio:* Persentase serapan anggaran terhadap progress fisik pekerjaan di lapangan.
 
 ---
 
-### 4.2 SOP 02: Pengajuan Tiket Approval (Cuti, Izin, Lembur, Dinas Luar & Koreksi)
+## BAB VI: PANDUAN KHUSUS ROLE 3 — HR / ADMIN SDM
 
-```mermaid
-sequenceDiagram
-    autonumber
-    actor K as Karyawan Pemohon
-    participant SYS as Modul Approval Hub
-    actor PM as Project Manager
-    actor HR as HR Manager
-    participant DB as SQLite Master
-    participant WA as WhatsApp Bot
+### 6.1 Profil Peran & Wewenang Personalia
+HR Manager dan Admin Personalia memegang kendali penuh atas tata kelola sumber daya manusia perusahaan. Wewenang HR mencakup pengelolaan master karyawan, pendaftaran biometrik wajah, pengaturan kalender kerja tahunan, penetapan periode cut-off penggajian, persetujuan final tiket perizinan, dan rekonsiliasi timesheet absensi.
 
-    K->>SYS: Isi Formulir Permohonan (Contoh: Cuti Tahunan 3 Hari)
-    SYS->>DB: Validasi Saldo Kuota (Sisa Kuota >= 3 Hari)
-    SYS->>DB: Simpan Tiket (Status: 'PENDING')
-    SYS->>WA: Kirim Notifikasi WhatsApp ke Atasan Terkait
-    
-    alt Jika Karyawan Ditugaskan di Proyek Tertentu
-        WA-->>PM: "Tiket Baru Menunggu Otorisasi dari Anggota Tim Proyek Anda"
-        PM->>SYS: Review Alasan & Dampak Jadwal Proyek
-        PM->>SYS: Berikan Rekomendasi Persetujuan (PM Approval)
-    end
-    
-    WA-->>HR: "Tiket Cuti Menunggu Persetujuan Final HR Manager"
-    HR->>SYS: Buka Pusat Approval SDM, Tinjau Riwayat Sisa Cuti
-    
-    alt HR Menyetujui Tiket
-        HR->>SYS: Klik "SETUJUI (APPROVE)"
-        SYS->>DB: UPDATE approvals SET status = 'APPROVED'
-        SYS->>DB: Kurangi Saldo Kuota Karyawan (usedLeave + 3)
-        SYS->>DB: Update Status Kalender Absensi Karyawan menjadi 'LEAVE'
-        SYS->>WA: Kirim Pesan WA Sukses ke Karyawan: "Pengajuan Cuti Anda Telah Disetujui"
-    else HR Meminta Kelengkapan Ulang
-        HR->>SYS: Klik "REVISI" + Catatan: "Harap Lampirkan Surat Dokter Asli"
-        SYS->>DB: UPDATE approvals SET status = 'REVISION_REQUESTED'
-        SYS->>WA: Beri Tahu Karyawan untuk Mengunggah Revisi Dokumen
-    end
-```
+### 6.2 Pembahasan Mendalam 9 Menu Navigasi HR
+
+1. **DASHBOARD HRIS & SDM (Monitoring Makro):**  
+   Menyajikan telemetri operasional SDM perusahaan secara menyeluruh dan waktu nyata (Headcount rasio kantor vs site, persentase kehadiran harian, grafik tren keterlambatan per departemen, dan lonceng notifikasi tiket pending).
+2. **PRESENSI & JAM KERJA (Audit Kehadiran Harian):**  
+   Tabel daftar presensi hari ini lengkap dengan foto snapshot selfie, stempel jam masuk, status (`ON_TIME` / `LATE`), skor kecocokan biometrik AI, dan titik koordinat GPS.
+3. **PUSAT APPROVAL SDM (Otorisasi Final):**  
+   Menjadi gerbang keputusan final atas seluruh pengajuan izin, cuti tahunan, sakit, dan dispensasi keterlambatan. Tombol Hijau *SETUJUI*, Tombol Merah *TOLAK*, Tombol Oranye *MINTA REVISI*.
+4. **PRESENSI TUKANG LAPANGAN (Audit Lintas-Proyek):**  
+   Memeriksa dan memantau rekapitulasi kehadiran pekerja harian lepas di seluruh lokasi proyek yang dikirimkan oleh para Project Manager.
+5. **MANAJEMEN PROYEK & SITE (Alokasi & Roster):**  
+   Mengatur penugasan karyawan ke proyek tertentu, menyetel jam kerja khusus site (*Work Schedule Override*), dan menetapkan aturan siklus giliran kerja (*Roster Policy*).
+6. **DATA KARYAWAN (Master Personalia & Biometrik):**  
+   Pendaftaran karyawan baru, penataan data identitas, tombol *Reset Password*, dan tombol kamera *Biometric Enrollment* (mengekstrak 128 vektor wajah).
+7. **KALENDER KERJA & CUT-OFF (Pengaturan Periode):**  
+   Menetapkan kalender kerja 1 tahun penuh, hari libur mingguan perusahaan, hari libur nasional resmi, dan rentang tanggal Cut-Off presensi penggajian (misal: tgl 21 s/d tgl 20).
+8. **SETTING SYSTEM (Integrasi WhatsApp & Email):**  
+   Memeriksa status koneksi socket WhatsApp Baileys dan memeriksa daftar nomor kontak yang telah berstatus Whitelist Opt-In.
+9. **AUDIT TRAIL & LOG (Pemeriksaan Jejak SDM):**  
+   Menelusuri seluruh riwayat perubahan data personalia (siapa menambah karyawan, siapa mengubah nomor rekening, dan stempel waktu IP address).
 
 ---
 
-### 4.3 SOP 03: Presensi Harian Pekerja Lapangan Lepas (Casual Workers / Tukang)
-1. **Pendaftaran Nama Tukang Lapangan:**
-   - Dilakukan oleh Project Manager / Mandor Proyek saat pekerja pertama kali mulai bekerja di lokasi site.
-   - Buka menu **Presensi Tukang Lapangan** $\rightarrow$ Tab **Daftar Pekerja** $\rightarrow$ Masukkan nama lengkap tukang dan pilih proyek penugasan aktif.
-2. **Pengambilan Presensi Harian di Site:**
-   - Setiap pagi hari di lokasi proyek, Project Manager membuka menu **Presensi Tukang Lapangan** $\rightarrow$ Klik **Ambil Absen Harian**.
-   - Kamera smartphone akan aktif. Arahkan kamera ke pekerja bersangkutan di lokasi kerja proyek.
-   - Klik **Ambil Foto & Simpan Presensi**.
-   - Sistem secara otomatis menempelkan informasi permanen: Nama Pekerja, Nama Project Manager Pemverifikasi, Titik Koordinat GPS Proyek, Tanggal, dan Jam Masuk.
-3. **Audit & Rekapitulasi Proyek:**
-   - Data presensi tukang langsung terhubung ke modul **Biaya Tenaga Kerja Proyek** untuk perhitungan upah harian lepas dan pencairan kas kecil lapangan (*Site Petty Cash*).
+## BAB VII: PANDUAN KHUSUS ROLE 4 — FINANCE & PAYROLL SPECIALIST
+
+### 7.1 Profil Peran & Otoritas Keuangan Perusahaan
+Role Finance memegang otoritas penuh atas pemrosesan hak keuangan karyawan dan pengendalian biaya operasional proyek. Finance bertanggung jawab menjalankan mesin kalkulasi payroll bulanan, mengaudit lembur Depnaker, mengekspor berkas transfer bank, mengontrol alokasi biaya tenaga kerja ke pagu anggaran proyek, serta menerbitkan invoice resmi klien.
+
+### 7.2 Pembahasan Mendalam 9 Menu Navigasi Finance
+
+1. **DASHBOARD KEUANGAN & FINANCE (Arus Kas Upah):**  
+   Memantau proyeksi liabilitas pengeluaran payroll bulanan perusahaan, serapan anggaran upah seluruh proyek, dan rekapitulasi klaim lembur operasional.
+2. **PAYROLL & PENGGAJIAN (Mesin Penggajian Terpadu):**  
+   - *Tombol 'Jalankan Kalkulasi Payroll':* Menarik seluruh data kehadiran, jam lembur, potongan telat, BPJS, dan PPh 21 TER ke dalam lembar kerja terpadu.
+   - *Modal Detail Timesheet (Employee Timesheet Detail Modal):* Mengaudit rincian absensi harian, foto selfie, koordinat GPS, dan melakukan penyesuaian/koreksi jam jika ada selisih.
+   - *Tombol 'Export CSV Batch Transfer Bank':* Mengunduh berkas format batch transfer resmi yang siap diunggah ke portal perbankan (BCA KlikBisnis / Mandiri MCM).
+   - *Tombol Hijau 'Kirim Semua Slip Gaji via WhatsApp':* Mengirimkan rincian slip gaji resmi berformat rapi langsung ke nomor WhatsApp seluruh staf secara otomatis.
+   - *Tombol Cetak Slip PDF:* Mengunduh berkas fisik slip gaji per individu berstandar korporat resmi.
+3. **DATA GAJI KARYAWAN (Master Rekening & Kompensasi):**  
+   Memeriksa dan memverifikasi ketepatan nomor rekening bank karyawan serta skema kompensasi gaji pokok dan tunjangan.
+4. **BIAYA TENAGA KERJA PROYEK (Labor Cost Allocation):**  
+   Memantau pembebanan biaya gaji teknisi ke masing-masing proyek secara proporsional berdasarkan hari kerja aktual teknisi di lokasi proyek.
+5. **APPROVAL CUTI & LEMBUR (Validasi Finansial):**  
+   Memeriksa tiket kompensasi lembur yang diajukan departemen sebelum kalkulasi penggajian difinalisasi.
+6. **REKAP PRESENSI & LEMBUR (Audit Dasar Upah):**  
+   Memeriksa rekapitulasi kehadiran bersih sebagai data pembanding sebelum mengunci perhitungan payroll.
+7. **KALENDER KERJA & CUT-OFF (Validasi Periode):**  
+   Memastikan bahwa tanggal cut-off presensi (21 s/d 20) telah dikonfigurasi dengan benar oleh HRD.
+8. **INVOICE & TAGIHAN RESMI (Billing Termin):**  
+   Mengelola berkas penagihan resmi invoice proyek Prime HRIS, memantau termin pembayaran (Termin I 50%, Termin II 50%), verifikasi QR rekening bank perusahaan, dan status pelunasan.
+9. **AUDIT TRAIL & LOG (Audit Keuangan):**  
+   Menelusuri seluruh transaksi mutasi finansial, penyesuaian nominal upah, dan stempel waktu penguncian payroll.
 
 ---
 
-### 4.4 SOP 04: Siklus Penggajian Bulanan (Cut-Off, Kalkulasi Upah, Pajak & Kirim WA)
+## BAB VIII: PANDUAN KHUSUS ROLE 5 — SUPERUSER & MANAJEMEN DIREKSI
 
-```mermaid
-sequenceDiagram
-    autonumber
-    actor FIN as Finance / Payroll Officer
-    participant CAL as Kalender Cut-Off
-    participant ENG as Mesin Payroll (Calculator)
-    participant DB as Database SQLite
-    participant WA as WhatsApp Bot Gateway
-    actor EMP as Seluruh Karyawan
+### 8.1 Profil Peran & Wewenang Eksekutif Root
+Role Superuser diperuntukkan bagi Direksi, Technical Director, dan Lead Platform Architect. Peran ini memegang wewenang tertinggi tanpa batas (*unrestricted access*) ke seluruh modul operasional, parameter formula finansial, geofence pusat, kredensial integrasi, dan infrastruktur basis data SQLite.
 
-    FIN->>CAL: Periksa Siklus Tanggal Cut-Off (Contoh: 21 Sep - 20 Okt)
-    FIN->>ENG: Jalankan Kalkulasi Penggajian Bulanan
-    ENG->>DB: Tarik Data Gaji Pokok & Tunjangan (employees)
-    ENG->>DB: Tarik Rekapitulasi Kehadiran & Lembur Terverifikasi (attendances)
-    ENG->>DB: Tarik Tiket Cuti & Dispensasi yang Disetujui (approvals)
-    ENG->>ENG: Eksekusi Formula: Lembur Depnaker, Potongan Telat, BPJS & PPh 21
-    ENG-->>FIN: Tampilkan Lembar Kerja Payroll Terpadu (Live Preview)
-    
-    FIN->>ENG: Review & Lakukan Penyesuaian Khusus (Bonus / Penalti Manual)
-    FIN->>ENG: Klik "Kunci Penggajian Periode Ini (Finalize)"
-    ENG->>DB: INSERT INTO audit_logs (Aksi: 'PAYROLL_FINALIZED')
-    
-    FIN->>ENG: Klik "Export CSV Batch Transfer Bank"
-    ENG-->>FIN: Unduh Berkas Siap Upload ke Portal Internet Banking Bank
-    
-    FIN->>WA: Klik "Kirim Semua Slip Gaji via WhatsApp"
-    loop Setiap Karyawan
-        WA->>EMP: Kirim Pesan Format Rapi Berisi Rincian Take Home Pay & Link Slip Digital
-    end
-```
+### 8.2 Fitur Kunci & Konfigurasi Master Superuser
+1. **Executive Unified Dashboard:** Menyatukan telemetri SDM, serapan anggaran proyek, liabilitas kas payroll, dan status kesehatan server dalam satu panel pemantauan eksekutif.
+2. **Konfigurasi Master Geofence Kantor Pusat (Setting System):**  
+   - Memasukkan titik Latitude dan Longitude koordinat fisik kantor pusat.
+   - Menentukan radius toleransi satelit GPS (default: 100 meter).
+   - Mendaftarkan daftar Alamat IP Publik kantor untuk mengaktifkan validasi ganda koneksi jaringan Wi-Fi kantor.
+3. **Konfigurasi Aturan Gaji & Finansial (`salary_rules`):**  
+   Mengatur tarif BPJS, plafon upah maksimal BPJS JP & Kesehatan, persentase pengali lembur, dan batas toleransi keterlambatan (*Grace Period*).
+4. **Integrasi WhatsApp Bot Gateway & Handshake QR:**  
+   Memindai kode QR WhatsApp Web pada layar sistem menggunakan ponsel nomor bot perusahaan saat status disconnected.
+5. **Prosedur Pencadangan & Pemulihan Bencana (Disaster Recovery):**  
+   Skrip pencadangan otomatis harian membuat arsip `data/hris.sqlite` ke media penyimpanan off-site. Sistem dapat dipulihkan dalam waktu kurang dari 5 menit (RTO $< 5$ min).
 
 ---
 
-### 4.5 SOP 05: Terminal Presensi Cepat Kiosk Publik (Lobby & Site Gate)
-Terminal Kiosk dirancang untuk perangkat tablet/layar sentuh yang dipasang permanen di pintu masuk kantor atau pos keamanan workshop:
-1. **Cara Mengakses Mode Kiosk:**
-   - Buka browser pada tablet kiosk dan akses alamat web dengan menambahkan parameter kiosk:
-     `https://hris.primeprojectx.net/?tab=kiosk` atau `?kiosk=true`
-2. **Keamanan Data Publik:**
-   - Mode Kiosk beroperasi dalam isolasi aman (*Sandboxed Public Mode*).
-   - Layar kiosk **sama sekali tidak menampilkan** data rahasia seperti besaran gaji, nomor rekening bank, kartu keluarga, maupun alamat tempat tinggal staf.
-3. **Alur Presensi Kiosk:**
-   - Karyawan mendekati tablet kiosk.
-   - Pilihan 1: **Pengenalan Wajah Otomatis:** Karyawan menatap kamera kiosk; sistem secara otomatis mencocokkan wajah dengan galeri biometrik dalam waktu $< 0.8$ detik dan langsung mencatat absensi masuk/pulang.
-   - Pilihan 2: **PIN Cepat / NIK:** Karyawan mengetikkan 4 digit NIK/PIN pada keypad layar sentuh, lalu sistem mengambil foto verifikasi kilat dan mencatat kehadiran.
+## BAB IX: FORMULA PERHITUNGAN MATEMATIS & ATURAN BISNIS FINANSIAL
+
+### 9.1 Formula Lembur Depnaker RI (PP 35/2021)
+$$\text{Tarif Per Jam} = \frac{1}{173} \times \text{Gaji Pokok Bulanan}$$
+- **Hari Kerja Reguler:**
+  - Jam Pertama = $1.5 \times \text{Tarif Per Jam}$
+  - Jam Kedua dan seterusnya = $2.0 \times \text{Tarif Per Jam}$
+- **Hari Libur Resmi / Akhir Pekan:**
+  - Jam ke-1 s/d Jam ke-7 = $2.0 \times \text{Tarif Per Jam}$
+  - Jam ke-8 = $3.0 \times \text{Tarif Per Jam}$
+  - Jam ke-9 dan seterusnya = $4.0 \times \text{Tarif Per Jam}$
+
+### 9.2 Formula Denda Keterlambatan Bertingkat
+- **Tier 0 (Grace Period 1 - 15 Menit):** Potongan Rp 0 (Toleransi Resmi).
+- **Tier 1 (Keterlambatan 16 - 30 Menit):** Potongan 0.5% dari gaji pokok harian.
+- **Tier 2 (Keterlambatan 31 - 60 Menit):** Potongan 1.0% dari gaji pokok harian.
+- **Tier 3 (Keterlambatan > 60 Menit):** Pemotongan 1 hari upah harian penuh.
+*(Dibatalkan jika memiliki approval tiket dispensasi).*
+
+### 9.3 Formula BPJS Ketenagakerjaan & Kesehatan
+- **BPJS JHT:** Karyawan 2%, Perusahaan 3.7% (Dasar: Gaji Pokok + Tunjangan Tetap).
+- **BPJS JP:** Karyawan 1%, Perusahaan 2% (Dasar: Gaji Pokok, Plafon Maksimal Rp 10.042.300).
+- **BPJS JKK:** Karyawan 0%, Perusahaan 0.89% (Sesuai risiko operasional).
+- **BPJS JKM:** Karyawan 0%, Perusahaan 0.30%.
+- **BPJS Kesehatan:** Karyawan 1%, Perusahaan 4% (Plafon Upah Maksimal Rp 12.000.000).
+
+### 9.4 Formula PPh 21 TER (PP 58/2023)
+$$\text{PPh 21 Terutang} = \text{Penghasilan Bruto Bulan Berjalan} \times \text{Tarif Efektif TER (Kategori A, B, atau C)}$$
 
 ---
 
-## BAB V: PANDUAN INTEGRASI & SISTEM NOTIFIKASI OTOMATIS
+## BAB X: PANDUAN INTEGRASI ENGINE OTOMATIS & BACKEND SERVICES
 
-### 5.1 Integrasi WhatsApp Bot Gateway (Baileys Engine & Verified Opt-In)
-PRIME HRIS dilengkapi dengan mesin gateway WhatsApp mandiri berbasis library **Baileys Multi-Device**:
-- **Koneksi Stabil Tanpa Biaya Pihak Ketiga:** Terhubung langsung ke WhatsApp Web socket tanpa memerlukan gateway berbayar bulanan.
-- **Mekanisme Anti-Banned (Verified Opt-In):**
-  - Untuk melindungi nomor WhatsApp operasional perusahaan dari pemblokiran otomatis sistem keamanan WhatsApp, sistem menerapkan tabel `wa_opt_ins`.
-  - Karyawan baru dianjurkan mengirimkan pesan pertama kali (misal mengetik pesan *"Halo HRIS"*) ke nomor WhatsApp Bot perusahaan.
-  - Setelah tercatat di sistem, nomor tersebut memiliki status aman (*Whitelisted Opt-In*) untuk menerima slip gaji dan notifikasi sistem tanpa risiko dianggap spam.
-- **Pengecekan Status Bot:**
-  - Buka menu **Setting System** $\rightarrow$ Tab **WhatsApp Gateway**.
-  - Jika status menunjukkan *Disconnected / Unpaired*, klik tombol **"TAMPILKAN QR PAIRING"** dan pindai kode QR menggunakan menu Perangkat Tertaut pada smartphone WhatsApp kantor.
-
-### 5.2 Integrasi SMTP Email Gateway (Nodemailer Transporter)
-- Digunakan untuk pengiriman notifikasi formal berkas resmi korporat, laporan mingguan eksekutif ke Direksi, serta tautan pemulihan kata sandi (*Password Reset*).
-- Konfigurasi parameter pada menu **Setting System** $\rightarrow$ Tab **Email Server**:
-  - `SMTP Host`: `smtp.gmail.com` (atau SMTP server korporat).
-  - `SMTP Port`: `587` (TLS) atau `465` (SSL).
-  - `User`: Alamat email resmi HRD (contoh: `hris@primeprojectx.net`).
-  - `Password`: Kredensial *Google App Password* 16 digit.
-
-### 5.3 Engine Pengenalan Wajah AI (Face Descriptor Matching & Anti-Spoofing)
-- Menggunakan arsitektur jaringan saraf tiruan dalam ekstraksi 68 titik kontur wajah (mata, hidung, rahang, bibir).
-- **Vektor 128-Dimensi:** Setiap wajah diubah menjadi representasi koordinat matematis 128 dimensi.
-- **Pencocokan Euclidean Distance:**
-  - Jarak Euclidean $\le 0.45$: Dinyatakan sebagai orang yang sama dengan tingkat keyakinan sangat tinggi ($> 95\%$).
-  - Jarak Euclidean $> 0.60$: Ditolak sebagai orang yang berbeda.
-- **Anti-Spoofing:** Mendeteksi kedalaman kontur dan mikro-kedipan mata untuk mencegah kecurangan absensi menggunakan foto cetak atau rekaman layar smartphone.
+1. **WhatsApp Bot Baileys Socket:** Komunikasi langsung socket WebSocket WhatsApp Web dengan tabel `wa_opt_ins` untuk proteksi nomor anti-banned.
+2. **SMTP Nodemailer:** Pengiriman email notifikasi pemulihan password dan ringkasan eksekutif ke Direksi.
+3. **AI Biometric Engine (FaceNet ResNet-34):** Ekstraksi 128 vektor wajah dan pencocokan jarak Euclidean $\le 0.45$ dengan proteksi anti-spoofing.
 
 ---
 
-## BAB VI: TROUBLESHOOTING, AUDIT TRAIL & FAQ
+## BAB XI: TROUBLESHOOTING MANDIRI BERDASARKAN PERAN & FAQ
 
-### 6.1 Audit Trail Kriptografis & Penelusuran Insiden Data
-Jika terjadi perselisihan data (contoh: kecurigaan manipulasi jam lembur atau perubahan nomor rekening karyawan):
-1. Masuk ke menu **AUDIT TRAIL & LOG**.
-2. Gunakan kolom pencarian dengan kata kunci nama karyawan, NIK, atau modul yang dicurigai (misal: `PAYROLL` atau `EMPLOYEES`).
-3. Periksa rincian rekaman audit:
-   - Tanggal dan jam kejadian presisi.
-   - Identitas akun yang melakukan aksi (`userName`, `userNik`, `userRole`).
-   - Alamat IP komputer pembuat perubahan.
-   - Status eksekusi transaksi (`SUCCESS`, `WARNING`, `FAILED`).
-4. Setiap rekaman dilindungi integritasnya sehingga menjadi bukti sah dan valid dalam investigasi internal perusahaan.
+### 11.1 Matriks Solusi Masalah untuk Staf Lapangan
 
-### 6.2 Panduan Penanganan Masalah Lapangan (Troubleshooting)
-
-| Gejala Masalah | Kemungkinan Penyebab | Tindakan Solusi Mandiri |
+| Kendala Staf | Penyebab Umum | Solusi Mandiri Cepat |
 | :--- | :--- | :--- |
-| **Kamera tidak muncul pada halaman presensi** | Izin kamera diblokir oleh browser Chrome/Safari pada perangkat. | Klik ikon gembok di bilah alamat browser $\rightarrow$ Pilih *Site Settings* $\rightarrow$ Ubah *Camera* menjadi **Allow (Izinkan)** $\rightarrow$ Muat ulang halaman. |
-| **Indikator GPS berwarna merah (Di luar radius)** | Akurasi satelit ponsel sedang rendah atau karyawan berada di luar kantor. | Pastikan mode *High Accuracy / Lokasi Presisi* pada ponsel aktif. Berdiri di area yang tidak terhalang atap beton tebal, atau gunakan mode *Dinas Luar* jika sedang tugas resmi. |
-| **Wajah tidak dikenali saat verifikasi** | Pencahayaan minim / backlight, atau menggunakan kacamata hitam/masker. | Lepas kacamata dan masker, hadap ke arah sumber cahaya, posisikan wajah di dalam garis oval panduan layar. Jika masih gagal, hubungi HR untuk *Re-Enroll* biometrik. |
-| **Pesan WhatsApp Slip Gaji tidak diterima** | Nomor ponsel salah ketik, atau belum melakukan Opt-In pesan pertama. | Periksa nomor telepon di menu Data Karyawan (wajib awalan `628...`). Minta karyawan mengirim pesan WhatsApp apapun ke nomor Bot kantor terlebih dahulu. |
-| **Karyawan lupa kata sandi akun** | Lupa password lama. | Hubungi HR atau Superuser. HR dapat membuka menu Data Karyawan $\rightarrow$ Klik aksi **"Reset Password"** untuk mengembalikan kata sandi ke standar default aman. |
+| **Kamera tidak terbuka** | Izin browser Chrome/Safari diblokir | Klik ikon gembok di address bar $\rightarrow$ Ubah Camera jadi *Allow* $\rightarrow$ Muat ulang halaman. |
+| **Indikator GPS Merah** | Satelit ponsel belum mengunci posisi | Buka aplikasi Google Maps agar GPS presisi aktif, keluar dari atap beton tebal. |
+| **Wajah tidak cocok** | Pencahayaan gelap / backlight | Lepas kacamata dan masker, hadapkan wajah ke arah lampu di dalam oval panduan. |
 
-### 6.3 Pertanyaan yang Sering Diajukan (FAQ)
+### 11.2 Matriks Solusi Masalah untuk PM & HR Admin
 
-**Q1: Apakah data absensi tetap tersimpan jika koneksi internet terputus di tengah jalan?**  
-*A1: Ya. Frontend PRIME HRIS dilengkapi dengan penyimpanan lokal sementara (*Local Caching*). Saat koneksi terhubung kembali, sistem akan mengirimkan data absensi yang tertunda ke server SQLite pusat.*
+| Kendala PM / HR | Penyebab Umum | Solusi Mandiri Cepat |
+| :--- | :--- | :--- |
+| **Foto tukang gagal simpan** | Sinyal internet di remote site drop | Sistem menyimpan offline di cache browser; biarkan halaman terbuka hingga sinyal pulih. |
+| **Karyawan lupa password** | Salah memasukkan sandi berulang kali | Buka Data Karyawan $\rightarrow$ Klik *Reset Password* pada baris nama staf bersangkutan. |
+| **Saldo cuti tidak berkurang** | Tiket belum di-approve final oleh HR | Buka Pusat Approval SDM $\rightarrow$ Pastikan status tiket telah berubah menjadi `APPROVED`. |
 
-**Q2: Bagaimana jika seorang teknisi ditugaskan ke beberapa proyek yang berbeda dalam satu bulan?**  
-*A2: Sistem mendukung pencatatan jam kerja berbasis multi-proyek. Project Manager masing-masing proyek dapat menyetujui porsi jam kerja teknisi bersangkutan, dan sistem payroll akan secara otomatis membagi proporsi pembebanan biaya gaji (*Labor Cost Allocation*) ke masing-masing proyek secara adil.*
+---
 
-**Q3: Kapan saldo hak cuti tahunan karyawan diperbarui?**  
-*A3: Hak cuti tahunan diberikan sesuai kebijakan perusahaan (misal 12 hari per tahun setelah melewati masa kerja 1 tahun). Pengurangan saldo terjadi secara otomatis dan seketika (*real-time*) tepat saat HR Manager menekan tombol persetujuan tiket cuti.*
+## BAB XII: DAFTAR ISTILAH & GLOSARIUM ENTERPRISE
 
-**Q4: Apakah sistem mendukung ekspor data untuk laporan audit eksternal?**  
-*A4: Seluruh modul (Presensi, Payroll, Approval, dan Audit Trail) memiliki fitur ekspor instan ke format file Excel (CSV/XLSX) dan format cetak PDF berstandar korporat.*
+- **RBAC (Role-Based Access Control):** Metode pembatasan akses sistem berdasarkan peran formal pengguna (5-Tier: Staff, PM, HR, Finance, Superuser).
+- **Data Lineage:** Peta silsilah aliran data dari entitas hulu (master) ke proses pengolahan hingga entitas hilir (output).
+- **Geofencing Satelit:** Perimeter virtual berbasis koordinat lintang/bujur dan radius meter untuk membatasi area presensi sah.
+- **Haversine Formula:** Formula perhitungan jarak terpendek antara dua titik pada permukaan bola bumi berdasarkan koordinat GPS.
+- **Biometric Vector 128D:** Ekstraksi matematis 128 angka float yang merepresentasikan ciri unik wajah manusia tanpa menyimpan foto asli.
+- **Cut-Off Penggajian:** Tanggal penutupan siklus perhitungan absensi dan lembur bulanan (standar: tanggal 21 s/d 20).
+- **Lembur Depnaker PP 35/2021:** Standar resmi rumus upah lembur nasional dengan pembagi 1/173 dari gaji pokok bulanan.
+- **PPh 21 TER PP 58/2023:** Tarif Efektif Rata-Rata pemotongan pajak penghasilan bulanan berdasarkan tabel penghasilan bruto.
+- **Baileys Multi-Device:** Library protokol komunikasi langsung ke socket WhatsApp Web tanpa perantara pihak ketiga.
+- **Audit Trail Kriptografis:** Buku besar catatan jejak aktivitas sistem yang bersifat append-only dan tidak dapat direkayasa.
 
 ---
 
