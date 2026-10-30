@@ -431,6 +431,17 @@ export function App() {
     liveToastTimerRef.current = setTimeout(() => setLiveToast(null), 4500);
   };
 
+  // Keep references to currentUser and authUser for async RTC event handlers (avoid stale closures)
+  const currentUserRef = useRef<Employee>(currentUser);
+  useEffect(() => {
+    currentUserRef.current = currentUser;
+  }, [currentUser]);
+
+  const authUserRef = useRef<AuthUser | null>(authUser);
+  useEffect(() => {
+    authUserRef.current = authUser;
+  }, [authUser]);
+
   // Real-Time Communication (WebSocket & SSE Engine) multi-device live sync
   useEffect(() => {
     const unsub = rtcService.subscribe('*', (packet) => {
@@ -444,10 +455,21 @@ export function App() {
           const rest = prev.filter(a => a.id !== merged.id && !(a.employeeId === merged.employeeId && a.date === merged.date));
           return [merged, ...rest];
         });
-        const isCheckout = newAtt.attendanceType === 'CHECK_OUT' || (newAtt.checkOutTime && !newAtt.checkInTime);
-        const actionLabel = isCheckout ? 'Absen Pulang' : 'Absen Masuk';
-        const displayTime = isCheckout ? (newAtt.checkOutTime || newAtt.checkInTime) : newAtt.checkInTime;
-        showLiveToast(`${actionLabel}: ${newAtt.employeeName} (${displayTime || ''} - ${newAtt.mode || 'WFO'})`, 'success');
+
+        // Pastikan toast notifikasi absen di pojok kiri bawah hanya muncul untuk user terkait saja
+        const activeUser = currentUserRef.current;
+        const activeAuth = authUserRef.current;
+        const isSelfAttendance = Boolean(
+          (activeUser && (newAtt.employeeId === activeUser.id || (activeUser.nik && newAtt.employeeNik === activeUser.nik))) ||
+          (activeAuth && (newAtt.employeeId === activeAuth.employeeId || (activeAuth.employee?.nik && newAtt.employeeNik === activeAuth.employee.nik)))
+        );
+
+        if (isSelfAttendance) {
+          const isCheckout = newAtt.attendanceType === 'CHECK_OUT' || (newAtt.checkOutTime && !newAtt.checkInTime);
+          const actionLabel = isCheckout ? 'Absen Pulang' : 'Absen Masuk';
+          const displayTime = isCheckout ? (newAtt.checkOutTime || newAtt.checkInTime) : newAtt.checkInTime;
+          showLiveToast(`${actionLabel}: ${newAtt.employeeName} (${displayTime || ''} - ${newAtt.mode || 'WFO'})`, 'success');
+        }
       } else if (packet.type === 'APPROVAL_UPDATED') {
         const { id, status, reviewNote, reviewedBy, item } = packet.payload;
         setApprovals(prev => prev.map(a => a.id === id ? { ...a, status, reviewNote, reviewedBy, ...(item || {}) } : a));
