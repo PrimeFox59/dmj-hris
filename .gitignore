@@ -46,6 +46,7 @@ download_*
 # Media and generated documents
 *.bak
 *.docx
+!docs/*.docx
 *.pdf
 *.jpg
 *.jpeg
