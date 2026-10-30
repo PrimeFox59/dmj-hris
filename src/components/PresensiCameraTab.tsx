@@ -425,66 +425,18 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
     });
   }, [projects, currentUser]);
 
-  // Jarak dan Validasi Geofence terhadap Proyek Terkait
+  // Target Lokasi Penugasan Resmi Karyawan (Tanpa Auto-Detect, Terkunci ke Penugasan Karyawan)
   const assignedProject = useMemo(() => {
     const projId = currentUser.assignedProjectId || (currentUser as any).employee?.assignedProjectId;
-    return userAuthorizedProjects.find(p => p.id === projId) || userAuthorizedProjects[0] || null;
-  }, [userAuthorizedProjects, currentUser]);
-
-  // State Proyek Terpilih (Default ke assignedProject / OFFICE, namun bisa di-override manual oleh staf)
-  const currentAssignedId = assignedProject?.id || currentUser.assignedProjectId || (currentUser as any).employee?.assignedProjectId || 'OFFICE';
-  const [selectedProjectId, setSelectedProjectId] = useState<string>(currentAssignedId);
-  const [isManualProjectOverride, setIsManualProjectOverride] = useState<boolean>(false);
-
-  // Selalu sinkronkan selectedProjectId jika penugasan proyek karyawan berubah
-  useEffect(() => {
-    if (assignedProject?.id && !isManualProjectOverride) {
-      setSelectedProjectId(assignedProject.id);
+    if (projId && projId !== 'OFFICE') {
+      return userAuthorizedProjects.find(p => p.id === projId) || projects.find(p => p.id === projId) || null;
     }
-  }, [assignedProject?.id, isManualProjectOverride]);
+    return userAuthorizedProjects[0] || null;
+  }, [userAuthorizedProjects, projects, currentUser]);
 
-  // Kalkulasi jarak HANYA ke proyek-proyek resmi milik karyawan
-  const projectDistanceList = useMemo<{
-    project: Project;
-    distance: number;
-    inGeofence: boolean;
-    geo: { lat: number; lng: number; radius: number } | null;
-  }[]>(() => {
-    if (!coords.lat || !coords.lng) return [];
-    return userAuthorizedProjects.map(p => {
-      const pGeo = getProjectCoordinates(p);
-      if (!pGeo) return { project: p, distance: 99999999, inGeofence: false, geo: null };
-      const dist = calculateDistanceMeters(coords.lat, coords.lng, pGeo.lat, pGeo.lng);
-      return {
-        project: p,
-        distance: dist,
-        inGeofence: dist <= pGeo.radius,
-        geo: pGeo
-      };
-    }).sort((a, b) => a.distance - b.distance);
-  }, [userAuthorizedProjects, coords.lat, coords.lng]);
+  const activeProject = assignedProject;
 
-  // Evaluasi Geofence Kantor Utama
-  const isInOfficeGeofence = isGpsLocked && realGeofenceDistance <= (salaryRules?.officeGeofence?.radiusMeters || 350);
-
-  // Proyek karyawan yang terdeteksi otomatis berada di dalam radius GPS perangkat saat ini
-  const autoDetectedMatch = useMemo(() => {
-    if (!isGpsLocked || isInOfficeGeofence) return null;
-    return projectDistanceList.find(item => item.inGeofence && !item.project.name.toUpperCase().includes('KANTOR PUSAT')) || null;
-  }, [projectDistanceList, isInOfficeGeofence, isGpsLocked]);
-
-  // Proyek aktif yang sedang dituju untuk presensi saat ini (hanya dari userAuthorizedProjects)
-  const activeProject = useMemo(() => {
-    if (autoDetectedMatch && autoDetectedMatch.inGeofence) {
-      return autoDetectedMatch.project;
-    }
-    if (selectedProjectId && selectedProjectId !== 'OFFICE') {
-      const found = userAuthorizedProjects.find(p => p.id === selectedProjectId);
-      if (found) return found;
-    }
-    return assignedProject || null;
-  }, [autoDetectedMatch, selectedProjectId, userAuthorizedProjects, assignedProject]);
-
+  // Jarak fisik nyata dari GPS ke lokasi kerja resmi
   const activeProjectDist = useMemo(() => {
     if (!activeProject || !coords.lat || !coords.lng) return null;
     const pGeo = getProjectCoordinates(activeProject);
@@ -498,32 +450,30 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
     return pGeo?.radius || 350;
   }, [activeProject, salaryRules?.officeGeofence?.radiusMeters]);
 
-  // Evaluasi Geofence Kantor & Proyek Terpilih (WAJIB valid secara jarak meter, BUKAN boolean asal auto-detect)
+  // Evaluasi Geofence: Jarak riil meter GPS perangkat ke titik kerja resmi
+  const isInOfficeGeofence = isGpsLocked && realGeofenceDistance <= (salaryRules?.officeGeofence?.radiusMeters || 350);
   const isInSelectedProjectGeofence = isGpsLocked && activeProjectDist !== null && activeProjectDist <= activeProjectRadius;
   const isInProjectGeofence = isInSelectedProjectGeofence;
-  const isPhysicallyInGeofence = isGpsLocked && (isInOfficeGeofence || isInSelectedProjectGeofence);
+  
+  // Jika karyawan ditugaskan di proyek site -> validasi terhadap geofence proyek tersebut.
+  // Jika kantor pusat -> validasi terhadap geofence kantor pusat.
+  const isPhysicallyInGeofence = isGpsLocked && (activeProject ? isInSelectedProjectGeofence : isInOfficeGeofence);
 
-  // Status Geofence Menyeluruh: Jika mode WFH atau DINAS_LUAR, batasan geofence TIDAK MENGUNCI (otomatis valid)
+  // Status Geofence Menyeluruh
   const isWithinAnyAuthorizedGeofence = isGpsLocked ? (mode === 'WFH' || mode === 'DINAS_LUAR' ? true : isPhysicallyInGeofence) : false;
   const assignedProjectDist = activeProjectDist;
   const effectiveTargetDistance = activeProjectDist !== null ? activeProjectDist : realGeofenceDistance;
 
-  // Resolusi nama lokasi akurat untuk UI & record presensi
+  // Nama lokasi resmi penugasan karyawan
   const activeLocationTitle = useMemo(() => {
-    if (isInOfficeGeofence) {
-      return salaryRules?.officeGeofence?.name || 'Kantor Pusat & Operasional';
-    }
     if (activeProject) {
       return `Site ${activeProject.name}`;
     }
-    if (assignedProject) {
-      return `Site ${assignedProject.name}`;
+    if (isInOfficeGeofence) {
+      return salaryRules?.officeGeofence?.name || 'Kantor Pusat & Operasional';
     }
-    if (coords.address && !coords.address.startsWith('Koordinat HP:')) {
-      return coords.address.replace(' (GPS HP Asli)', '').replace(' (Lokasi Jaringan PC)', '');
-    }
-    return 'Luar Area Kerja';
-  }, [isInOfficeGeofence, activeProject, salaryRules?.officeGeofence?.name, assignedProject, coords.address]);
+    return salaryRules?.officeGeofence?.name || 'Kantor Pusat & Operasional';
+  }, [activeProject, isInOfficeGeofence, salaryRules?.officeGeofence?.name]);
 
   const handleSaveGeofence = async () => {
     const numLat = typeof tempOfficeLat === 'string' ? parseFloat(tempOfficeLat) : tempOfficeLat;
@@ -852,8 +802,8 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
     return `Koordinat HP: Lat ${lat.toFixed(6)}, Lng ${lng.toFixed(6)} (GPS HP Terverifikasi)`;
   };
 
-  // Deteksi Lokasi Cerdas (Dual-Engine: Hardware GPS Smartphone & Instant Network/IP Geolocation PC)
-  const fetchDeviceGps = async (showToast = true) => {
+  // Deteksi GPS Wajib: Mengambil titik koordinat langsung dari sensor GPS perangkat
+  const fetchDeviceGps = (showToast = true) => {
     setIsGpsLoading(true);
     setGpsError(null);
 
@@ -861,91 +811,57 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
     const officeLat = salaryRules?.officeGeofence?.lat ?? -7.395625;
     const officeLng = salaryRules?.officeGeofence?.lng ?? 112.717574;
 
-    const applyResolvedPosition = async (lat: number, lng: number, accuracy: number, source: 'DEVICE_HARDWARE' | 'NETWORK_IP') => {
-      const dist = calculateDistanceMeters(lat, lng, officeLat, officeLng);
-      setRealGeofenceDistance(dist);
-      setGpsSource(source);
-
-      let resolvedAddress = '';
-      if (source === 'DEVICE_HARDWARE') {
-        resolvedAddress = await fetchAddressFromCoords(lat, lng);
-      } else {
-        resolvedAddress = activeCity ? `${activeCity} (Lokasi Jaringan PC)` : await fetchAddressFromCoords(lat, lng);
-      }
-
-      setCoords({
-        lat,
-        lng,
-        accuracy,
-        address: resolvedAddress
-      });
-      setIsGpsLocked(true);
-      setIsGpsLoading(false);
-
-      if (showToast) {
-        setSuccessToast(`📍 Lokasi Terkunci! Akurasi: ±${accuracy}m (${dist}m ke Kantor)`);
-        setTimeout(() => setSuccessToast(null), 4000);
-      }
-    };
-
-    // Fallback instan via IP Geolocation untuk PC Desktop / Laptop tanpa sensor GNSS
-    const fallbackToIpGeo = async () => {
-      try {
-        const res = await fetch('https://ipwho.is/');
-        const data = await res.json();
-        if (data && data.success && data.latitude && data.longitude) {
-          const lat = Number(Number(data.latitude).toFixed(6));
-          const lng = Number(Number(data.longitude).toFixed(6));
-          const cityName = `${data.city || 'Surabaya'}, ${data.region || 'Jawa Timur'}`;
-          setActiveCity(cityName);
-          if (data.ip) setActiveIp(data.ip);
-          await applyResolvedPosition(lat, lng, 350, 'NETWORK_IP');
-          return true;
-        }
-      } catch (e) {
-        console.warn('Fallback IP Geolocation gagal:', e);
-      }
-      return false;
-    };
-
     if (!navigator.geolocation) {
-      const ok = await fallbackToIpGeo();
-      if (!ok) {
-        setIsGpsLoading(false);
-        setGpsError('Browser Anda tidak mendukung akses Geolocation dan gagal mendeteksi IP.');
-      }
+      setIsGpsLoading(false);
+      setIsGpsLocked(false);
+      setGpsError('Browser atau perangkat Anda tidak mendukung akses GPS Geolocation.');
       return;
     }
-
-    // Strategi Cepat: Mobile menggunakan GPS Akurasi Tinggi (timeout 7s); PC menggunakan Network Location (timeout 3.5s)
-    const geoOptions: PositionOptions = isMobile
-      ? { enableHighAccuracy: true, timeout: 7000, maximumAge: 0 }
-      : { enableHighAccuracy: false, timeout: 3500, maximumAge: 30000 };
 
     navigator.geolocation.getCurrentPosition(
       async pos => {
         const lat = Number(pos.coords.latitude.toFixed(6));
         const lng = Number(pos.coords.longitude.toFixed(6));
-        const accuracy = Math.round(pos.coords.accuracy) || (isMobile ? 5 : 50);
-        await applyResolvedPosition(lat, lng, accuracy, 'DEVICE_HARDWARE');
-      },
-      async err => {
-        console.warn('Geolocation browser gagal atau timeout, otomatis fallback ke IP Jaringan...', err);
-        const ok = await fallbackToIpGeo();
-        if (!ok) {
-          setIsGpsLoading(false);
-          let msg = 'Gagal membaca sensor lokasi.';
-          if (err.code === 1) {
-            msg = 'Izin lokasi ditolak browser. Harap izinkan akses Lokasi pada icon gembok address bar.';
-          } else if (err.code === 2) {
-            msg = 'Sinyal sensor lokasi tidak tersedia pada perangkat.';
-          } else if (err.code === 3) {
-            msg = 'Waktu pencarian lokasi habis (Timeout).';
-          }
-          setGpsError(msg);
+        const accuracy = Math.round(pos.coords.accuracy) || 5;
+
+        const dist = calculateDistanceMeters(lat, lng, officeLat, officeLng);
+        setRealGeofenceDistance(dist);
+        setGpsSource('DEVICE_HARDWARE');
+
+        const resolvedAddress = await fetchAddressFromCoords(lat, lng);
+
+        setCoords({
+          lat,
+          lng,
+          accuracy,
+          address: resolvedAddress
+        });
+        setIsGpsLocked(true);
+        setIsGpsLoading(false);
+
+        if (showToast) {
+          setSuccessToast(`📍 GPS Aktif & Terkunci! Akurasi: ±${accuracy}m`);
+          setTimeout(() => setSuccessToast(null), 3500);
         }
       },
-      geoOptions
+      err => {
+        setIsGpsLoading(false);
+        setIsGpsLocked(false);
+        let msg = 'GPS perangkat belum aktif atau izin lokasi ditolak.';
+        if (err.code === 1) {
+          msg = 'Izin lokasi GPS ditolak oleh browser. Wajib mengizinkan akses Lokasi (Allow Location) agar dapat presensi.';
+        } else if (err.code === 2) {
+          msg = 'Sinyal GPS tidak aktif. Pastikan fitur Lokasi (GPS) pada smartphone/perangkat Anda sudah diaktifkan (ON).';
+        } else if (err.code === 3) {
+          msg = 'Waktu pencarian GPS habis (Timeout). Pastikan GPS aktif dan berada di area terbuka.';
+        }
+        setGpsError(msg);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: isMobile ? 8000 : 5000,
+        maximumAge: 0
+      }
     );
   };
 
@@ -1239,6 +1155,12 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    // 0. WAJIB GPS AKTIF: Sistem menolak presensi jika GPS mati atau belum terkunci
+    if (!isGpsLocked || !coords.lat || !coords.lng) {
+      alert('Presensi Ditolak: Fitur GPS / Lokasi pada perangkat Anda belum aktif. Wajib mengaktifkan GPS pada smartphone dan mengizinkan akses lokasi browser untuk melakukan presensi!');
+      return;
+    }
 
     // Validasi Wajib Isi Catatan jika di luar radius area kerja
     let effectiveOutOfRangeReason = outOfRangeReason.trim();
@@ -1848,15 +1770,38 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
             <div className="space-y-2 pt-1">
 
 
+              {/* Peringatan GPS Tidak Aktif */}
+              {!isGpsLocked && (
+                <div className="p-3 rounded-2xl bg-rose-50 border border-rose-300 text-rose-800 text-xs flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                    <span className="text-[11px] leading-relaxed font-semibold">
+                      {gpsError || 'GPS perangkat belum aktif / terkunci. Wajib mengaktifkan GPS untuk presensi.'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => fetchDeviceGps(true)}
+                    className="px-2.5 py-1 rounded-lg bg-rose-200 hover:bg-rose-300 text-rose-900 font-bold text-[10px] shrink-0 transition-colors"
+                  >
+                    Aktifkan GPS
+                  </button>
+                </div>
+              )}
+
               <button
                 type="submit"
-                disabled={isGpsLoading && !isGpsLocked}
-                className="w-full py-3.5 rounded-2xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer bg-gradient-to-r from-[#FF6B00] via-[#FF8533] to-[#FF6B00] text-white hover:shadow-lg hover:shadow-orange-500/25 active:scale-98 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!isGpsLocked}
+                className={`w-full py-3.5 rounded-2xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-md ${
+                  !isGpsLocked
+                    ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
+                    : 'bg-gradient-to-r from-[#FF6B00] via-[#FF8533] to-[#FF6B00] text-white hover:shadow-lg hover:shadow-orange-500/25 active:scale-98 cursor-pointer'
+                }`}
               >
                 <Send className="w-4 h-4" />
                 <span>
-                  {isGpsLoading && !isGpsLocked
-                    ? 'Mendeteksi Lokasi...'
+                  {!isGpsLocked
+                    ? (isGpsLoading ? 'Mencari Sinyal GPS...' : 'GPS Wajib Aktif untuk Presensi')
                     : capturedPhoto 
                     ? (attendanceAction === 'CHECK_IN' ? 'Kirim Absen Masuk Sekarang' : 'Kirim Absen Pulang Sekarang')
                     : (attendanceAction === 'CHECK_IN' ? 'Ambil Foto & Absen Masuk' : 'Ambil Foto & Absen Pulang')}
