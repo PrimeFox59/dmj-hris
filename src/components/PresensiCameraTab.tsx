@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   MapPin,
   Clock,
+  Calendar,
   Briefcase,
   Building,
   FileText,
@@ -2295,8 +2296,10 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-slate-200/80 text-slate-500 uppercase tracking-wider text-[10px] font-mono-code">
+                <th className="py-2.5 px-3">Date</th>
                 <th className="py-2.5 px-3">Karyawan</th>
-                <th className="py-2.5 px-3">Waktu & Tanggal</th>
+                <th className="py-2.5 px-3">Masuk</th>
+                <th className="py-2.5 px-3">Pulang</th>
                 <th className="py-2.5 px-3">Mode</th>
                 <th className="py-2.5 px-3">Lokasi & Geofence</th>
                 <th className="py-2.5 px-3">Catatan / Keterangan</th>
@@ -2307,7 +2310,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
             <tbody className="divide-y divide-slate-100">
               {visibleAttendanceHistory.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-10 text-center text-slate-400 text-xs">
+                  <td colSpan={9} className="py-10 text-center text-slate-400 text-xs">
                     {isDbLoading ? (
                       <div className="flex flex-col items-center justify-center gap-2 animate-pulse py-4">
                         <div className="w-5 h-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
@@ -2324,25 +2327,38 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
               ) : (
                 visibleAttendanceHistory.map(item => (
                   <tr key={item.id} className="hover:bg-slate-50/70 transition-colors">
+                    <td className="py-3 px-3 whitespace-nowrap">
+                      <div className="flex items-center gap-1.5 font-mono-code">
+                        <Calendar className="w-3.5 h-3.5 text-[#FF6B00] shrink-0" />
+                        <span className="font-semibold text-slate-800 text-[11px]">{item.date}</span>
+                      </div>
+                    </td>
                     <td className="py-3 px-3">
                       <div className="font-bold text-slate-900">{item.employeeName}</div>
                       <div className="text-[10px] text-slate-500 font-mono-code">{item.employeeNik} • {item.department}</div>
                     </td>
-                    <td className="py-3 px-3">
-                      <div className="flex flex-col gap-0.5 font-mono-code">
-                        <div className="font-bold text-slate-800 text-[11px]">
-                          Masuk: {item.checkInTime} WIB
-                        </div>
+                    <td className="py-3 px-3 whitespace-nowrap">
+                      <div className="flex items-center gap-1.5 font-mono-code">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                        <span className="font-bold text-slate-800 text-[11px]">
+                          {item.checkInTime ? `${item.checkInTime} WIB` : '-'}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="py-3 px-3 whitespace-nowrap">
+                      <div className="flex items-center gap-1.5 font-mono-code">
                         {item.checkOutTime ? (
-                          <div className="font-bold text-emerald-600 text-[11px]">
-                            Pulang: {item.checkOutTime} WIB
-                          </div>
+                          <>
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
+                            <span className="font-bold text-emerald-600 text-[11px]">
+                              {item.checkOutTime} WIB
+                            </span>
+                          </>
                         ) : (
-                          <div className="text-[10px] text-slate-400 italic">
+                          <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-400 text-[10px] italic font-medium">
                             Belum Pulang
-                          </div>
+                          </span>
                         )}
-                        <div className="text-[10px] text-slate-400">{item.date}</div>
                       </div>
                     </td>
                     <td className="py-3 px-3">
