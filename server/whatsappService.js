@@ -9,7 +9,8 @@ import {
   isWaOptedIn,
   recordWaOptIn,
   getWaOptIns,
-  getEmployeeProjectSchedule
+  getEmployeeProjectSchedule,
+  getEmployeeByIdentifier
 } from './db.js';
 
 // Configuration: Dedicated PRIME HRIS WhatsApp Gateway (Port 9008)

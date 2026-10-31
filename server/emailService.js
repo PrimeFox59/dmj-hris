@@ -4,7 +4,8 @@ import {
   getEmailNotificationLogs,
   hasSentTodayEmailReminder,
   getDatabase,
-  getEmployeeProjectSchedule
+  getEmployeeProjectSchedule,
+  getEmployeeByIdentifier
 } from './db.js';
 
 /**
