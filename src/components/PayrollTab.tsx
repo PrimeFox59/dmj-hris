@@ -135,27 +135,6 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
   // =========================================================================
   const [selectedSlip, setSelectedSlip] = useState<PayrollRecord | null>(null);
   const [editingSalaryEmp, setEditingSalaryEmp] = useState<Employee | null>(null);
-  const [actionDropdown, setActionDropdown] = useState<{
-    emp?: Employee;
-    item: any;
-    top?: number;
-    bottom?: number;
-    right: number;
-  } | null>(null);
-
-  useEffect(() => {
-    const handleClose = () => setActionDropdown(null);
-    if (actionDropdown) {
-      window.addEventListener('click', handleClose);
-      window.addEventListener('scroll', handleClose, true);
-      window.addEventListener('resize', handleClose);
-    }
-    return () => {
-      window.removeEventListener('click', handleClose);
-      window.removeEventListener('scroll', handleClose, true);
-      window.removeEventListener('resize', handleClose);
-    };
-  }, [actionDropdown]);
   const [auditingEmployee, setAuditingEmployee] = useState<{ employee: Employee; record: PayrollRecord } | null>(null);
   const [viewingTimesheetEmp, setViewingTimesheetEmp] = useState<Employee | null>(null);
 
@@ -1296,40 +1275,55 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                           )}
                         </td>
 
-                        {/* 5. Aksi Button (1 Button Icon dengan Popover Pilihan) */}
+                        {/* 5. Aksi Buttons (Tidy Icon Buttons, Slip Tanpa Teks) */}
                         <td className="px-2 py-2.5 text-center whitespace-nowrap">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (actionDropdown?.item?.id === item.id) {
-                                setActionDropdown(null);
-                                return;
-                              }
-                              const rect = e.currentTarget.getBoundingClientRect();
-                              const menuHeight = 180;
-                              const spaceBelow = window.innerHeight - rect.bottom;
-                              if (spaceBelow < menuHeight) {
-                                setActionDropdown({
-                                  emp,
-                                  item,
-                                  bottom: window.innerHeight - rect.top + 4,
-                                  right: window.innerWidth - rect.right
-                                });
-                              } else {
-                                setActionDropdown({
-                                  emp,
-                                  item,
-                                  top: rect.bottom + 4,
-                                  right: window.innerWidth - rect.right
-                                });
-                              }
-                            }}
-                            className="w-7 h-7 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-900 flex items-center justify-center cursor-pointer shadow-2xs mx-auto active:scale-95 transition-all"
-                            title="Pilihan Aksi"
-                          >
-                            <MoreVertical className="w-4 h-4" />
-                          </button>
+                          <div className="inline-flex items-center justify-center gap-1">
+                            {/* Kalender & Foto Presensi */}
+                            {emp && (
+                              <button
+                                type="button"
+                                onClick={() => setViewingTimesheetEmp(emp)}
+                                className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white transition-all cursor-pointer shadow-2xs active:scale-95 flex items-center justify-center"
+                                title="Buka Kalender Presensi & Verifikasi Foto Biometrik (Excel Timesheet)"
+                              >
+                                <Calendar className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+
+                            {/* HR Audit Presensi & Cuti */}
+                            {canManagePayroll && emp && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenAuditModal(emp, item)}
+                                className="p-1.5 rounded-lg bg-slate-100 hover:bg-amber-100 text-slate-600 hover:text-amber-800 transition-all cursor-pointer shadow-2xs active:scale-95 flex items-center justify-center"
+                                title="Audit Presensi & Cuti (HR Manager)"
+                              >
+                                <UserCheck className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+
+                            {/* Atur Gaji Karyawan */}
+                            {canManagePayroll && emp && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenSalaryModal(emp)}
+                                className="p-1.5 rounded-lg bg-slate-100 hover:bg-blue-100 text-slate-600 hover:text-blue-800 transition-all cursor-pointer shadow-2xs active:scale-95 flex items-center justify-center"
+                                title="Atur Gaji Karyawan"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+
+                            {/* Cetak Slip Gaji Resmi (Icon Only, Tanpa Teks) */}
+                            <button
+                              type="button"
+                              onClick={() => setSelectedSlip(item)}
+                              className="p-1.5 rounded-lg bg-[#FF6B00] hover:bg-[#e56000] text-white transition-all cursor-pointer shadow-2xs active:scale-95 flex items-center justify-center shrink-0"
+                              title="Cetak Slip Gaji Resmi"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
