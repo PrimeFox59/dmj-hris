@@ -86,22 +86,23 @@ export const Navbar: React.FC<NavbarProps> = ({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2 sm:gap-4">
         
         {/* Brand Logo & System Badge */}
-        <div id="tour-brand-logo" className="flex items-center gap-3 select-none cursor-pointer motion-slide-right" onClick={() => onNavigateToTab('dashboard')}>
-          <div className="flex items-center gap-2">
-            {/* Prime ProjectX Vector Brand Logo */}
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-slate-950 via-slate-900 to-slate-800 border border-slate-700/80 shadow-md flex items-center justify-center relative overflow-hidden group-hover:border-[#FF6B00] transition-colors shrink-0">
-                <div className="absolute -inset-1 bg-gradient-to-tr from-[#FF6B00] to-[#00E2B0] opacity-25 blur-xs"></div>
-                <span className="relative font-mono-code font-black text-white text-base tracking-tighter">
-                  P<span className="text-[#FF6B00]">X</span>
-                </span>
+        <div id="tour-brand-logo" className="flex items-center gap-3 select-none cursor-pointer motion-slide-right group" onClick={() => onNavigateToTab('dashboard')}>
+          <div className="flex items-center gap-2.5">
+            {/* Official PT Dwi Martha Jaya Logo */}
+            <div className="flex items-center gap-2.5">
+              <div className="h-9 sm:h-10 px-1.5 py-0.5 rounded-xl bg-[#233360] border border-[#2e427b] shadow-xs flex items-center justify-center overflow-hidden shrink-0 transition-transform group-hover:scale-105">
+                <img
+                  src="/dmj-logo.png"
+                  alt="PT Dwi Martha Jaya"
+                  className="h-full w-auto object-contain"
+                />
               </div>
               <div className="flex flex-col text-left">
-                <span className="text-xs sm:text-sm font-black tracking-wider text-slate-900 font-mono-code leading-none">
-                  PRIME<span className="text-[#FF6B00]">PROJECTX</span>
+                <span className="text-xs sm:text-sm font-black tracking-wider text-slate-900 font-mono-code leading-none flex items-center gap-1">
+                  DMJ<span className="text-[#FF6B00]">HRIS</span>
                 </span>
-                <span className="text-[8.5px] sm:text-[9px] font-bold tracking-widest text-slate-400 uppercase font-mono-code">
-                  PT Prime Infinity Systems
+                <span className="text-[8.5px] sm:text-[9px] font-bold tracking-wide text-slate-500 uppercase font-mono-code mt-0.5">
+                  PT Dwi Martha Jaya
                 </span>
               </div>
             </div>
@@ -111,7 +112,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-orange-50 border border-orange-200/70 shadow-xs shrink-0">
               <Clock className="w-3.5 h-3.5 text-[#FF6B00] animate-pulse" />
               <span className="text-[10px] sm:text-[11px] font-black tracking-wider text-[#FF6B00] font-mono-code">
-                DMJ HRIS
+                ENTERPRISE
               </span>
             </div>
           </div>

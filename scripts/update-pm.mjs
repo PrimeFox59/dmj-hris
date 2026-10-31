@@ -29,3 +29,4 @@ console.log('Current DB State for Wahyuning:', checkEmp);
 const checkPrj = db.prepare('SELECT code, name, data_json FROM projects WHERE code = ?').get('PRJ-001');
 const pData = JSON.parse(checkPrj.data_json);
 console.log('Current DB State for PRJ-001 PM:', { pmId: pData.projectManagerId, pmName: pData.projectManagerName });
+

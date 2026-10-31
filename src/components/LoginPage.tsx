@@ -409,12 +409,16 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onOpenKios
       {/* ========================================================================= */}
       <header className="w-full px-4 sm:px-8 py-3.5 flex items-center justify-between z-20 bg-white/80 backdrop-blur-md border-b border-slate-200/80 shadow-2xs">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-[#0066FF] text-white flex items-center justify-center font-black text-xl shadow-md shadow-blue-500/20">
-            P
+          <div className="h-10 px-2 py-0.5 rounded-xl bg-[#233360] border border-[#2e427b] shadow-xs flex items-center justify-center overflow-hidden shrink-0">
+            <img
+              src="/dmj-logo.png"
+              alt="PT Dwi Martha Jaya"
+              className="h-full w-auto object-contain"
+            />
           </div>
           <div className="flex items-baseline gap-2">
             <span className="font-black text-xl tracking-tight text-slate-900">
-              PRIME <span className="text-[#0066FF]">HRIS</span>
+              DMJ <span className="text-[#0066FF]">HRIS</span>
             </span>
             <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md bg-blue-50 text-[#0066FF] border border-blue-200">
               Enterprise v2.4

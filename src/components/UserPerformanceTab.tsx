@@ -1325,16 +1325,20 @@ export const UserPerformanceTab: React.FC<UserPerformanceTabProps> = ({
             <div className="border-b-2 border-slate-900 pb-4 mb-4">
               <div className="flex items-start justify-between">
                 <div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#FF6B00] to-[#FF8533] text-white flex items-center justify-center font-mono-code font-black text-sm tracking-tighter shadow-sm shadow-orange-500/30">
-                      PRIME
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 sm:h-11 px-2 py-0.5 rounded-xl bg-[#233360] border border-[#2e427b] shadow-xs flex items-center justify-center overflow-hidden shrink-0">
+                      <img
+                        src="/dmj-logo.png"
+                        alt="PT Dwi Martha Jaya"
+                        className="h-full w-auto object-contain"
+                      />
                     </div>
                     <div>
                       <h2 className="text-base sm:text-lg font-black tracking-tight text-slate-900 font-mono-code leading-none">
-                        DMJ HRIS ENTERPRISE
+                        PT DWI MARTHA JAYA
                       </h2>
                       <p className="text-[10px] text-slate-500 font-semibold tracking-wider uppercase mt-0.5">
-                        PT Prime Infinity Systems  Advanced HR & Payroll Engineering Platform
+                        Contractor & Supplier • Sistem Penggajian DMJ HRIS
                       </p>
                     </div>
                   </div>
