@@ -209,8 +209,20 @@ export async function sendEmailNotification(options) {
     bypassEnabledCheck = false
   } = options;
 
-  if (!to || !to.includes('@')) {
-    const err = `Alamat email tidak valid: ${to}`;
+  // Selalu ikuti data email resmi dari ID karyawan jika recipientId tersedia
+  let toEmail = to;
+  let toRecipientName = toName;
+  let targetEmp = null;
+  if (recipientId) {
+    targetEmp = getEmployeeByIdentifier(recipientId);
+    if (targetEmp) {
+      if (targetEmp.email) toEmail = targetEmp.email;
+      if (targetEmp.name) toRecipientName = targetEmp.name;
+    }
+  }
+
+  if (!toEmail || !toEmail.includes('@')) {
+    const err = `Alamat email tidak valid: ${toEmail}`;
     console.warn(`[SMTP Service] ${err}`);
     return { success: false, error: err };
   }
@@ -229,8 +241,8 @@ export async function sendEmailNotification(options) {
 
   const logEntry = {
     recipientId,
-    recipientName: toName || to,
-    recipientEmail: to,
+    recipientName: toRecipientName || toEmail,
+    recipientEmail: toEmail,
     eventType,
     subject: subject || 'Notifikasi PRIME HRIS',
     htmlBody: html,
@@ -243,7 +255,7 @@ export async function sendEmailNotification(options) {
     const transporter = createTransporter(config);
     const fromAddress = config.fromEmail || config.user;
     const fromHeader = `"${config.fromName}" <${fromAddress}>`;
-    const toHeader = toName ? `"${toName}" <${to}>` : to;
+    const toHeader = toRecipientName ? `"${toRecipientName}" <${toEmail}>` : toEmail;
 
     const fullHtml = wrapHtmlEmailTemplate(html, subject);
 

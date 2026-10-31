@@ -1147,6 +1147,67 @@ export function saveApproval(item) {
   return { success: true, item };
 }
 
+/**
+ * Universal Employee Resolver by Any Identifier
+ * Resolves an employee whether passed:
+ * - Internal ID: 'EMP-001'
+ * - Account Login ID: 'admin', 'd005', 'd072'
+ * - Official NIK: 'DMJ-2024-001', '3325122909920001'
+ * - Email: 'primetroyxs@gmail.com'
+ * - Phone: '6289524257778'
+ */
+export function getEmployeeByIdentifier(identifier) {
+  if (!identifier) return null;
+  const db = getDatabase();
+  const clean = String(identifier).trim();
+  const lower = clean.toLowerCase();
+
+  // 1. Direct query on employees table by id or nik
+  let row = db.prepare('SELECT data_json FROM employees WHERE id = ? OR LOWER(nik) = ? LIMIT 1;').get(clean, lower);
+  if (row) {
+    try {
+      const parsed = JSON.parse(row.data_json);
+      if (parsed) return parsed;
+    } catch (e) {}
+  }
+
+  // 2. Query user_accounts by username (loginId) or email
+  const uRow = db.prepare('SELECT employee_id FROM user_accounts WHERE LOWER(username) = ? OR LOWER(email) = ? LIMIT 1;').get(lower, lower);
+  if (uRow && uRow.employee_id) {
+    row = db.prepare('SELECT data_json FROM employees WHERE id = ? LIMIT 1;').get(uRow.employee_id);
+    if (row) {
+      try {
+        const parsed = JSON.parse(row.data_json);
+        if (parsed) return parsed;
+      } catch (e) {}
+    }
+  }
+
+  // 3. Scan all employees data_json for loginId, email, or normalized phone
+  const cleanDigits = clean.replace(/\D+/g, '');
+  let normPhone = cleanDigits;
+  if (normPhone.startsWith('0')) normPhone = '62' + normPhone.slice(1);
+  else if (normPhone.startsWith('8')) normPhone = '62' + normPhone;
+
+  const allRows = db.prepare('SELECT data_json FROM employees;').all();
+  for (const r of allRows) {
+    try {
+      const emp = JSON.parse(r.data_json);
+      if (!emp) continue;
+      if (emp.loginId && emp.loginId.toLowerCase() === lower) return emp;
+      if (emp.email && emp.email.toLowerCase() === lower) return emp;
+      if (normPhone && emp.phone) {
+        let eDigits = String(emp.phone).replace(/\D+/g, '');
+        if (eDigits.startsWith('0')) eDigits = '62' + eDigits.slice(1);
+        else if (eDigits.startsWith('8')) eDigits = '62' + eDigits;
+        if (eDigits === normPhone) return emp;
+      }
+    } catch (e) {}
+  }
+
+  return null;
+}
+
 export function saveEmployee(emp) {
   const db = getDatabase();
   db.prepare(`
@@ -1172,9 +1233,26 @@ export function saveEmployee(emp) {
   try {
     const res = db.prepare(`
       UPDATE user_accounts 
-      SET system_role = ?, role = ?, status = ?, updated_at = CURRENT_TIMESTAMP 
+      SET email = COALESCE(?, email), system_role = ?, role = ?, status = ?, updated_at = CURRENT_TIMESTAMP 
       WHERE employee_id = ?;
-    `).run(targetSysRole, targetRole, userAccountStatus, emp.id);
+    `).run(emp.email || null, targetSysRole, targetRole, userAccountStatus, emp.id);
+
+    // Auto-sync employee phone into wa_opt_ins (enterprise ID contacts are pre-verified)
+    if (emp.phone) {
+      let eDigits = String(emp.phone).replace(/\D+/g, '');
+      if (eDigits.startsWith('0')) eDigits = '62' + eDigits.slice(1);
+      else if (eDigits.startsWith('8')) eDigits = '62' + eDigits;
+      else if (eDigits.startsWith('620')) eDigits = '62' + eDigits.slice(3);
+      if (eDigits.startsWith('62') && eDigits.length >= 10) {
+        try {
+          db.prepare(`
+            INSERT INTO wa_opt_ins (phone, employee_id, employee_name, first_message, first_message_at, last_message, last_message_at, message_count)
+            VALUES (?, ?, ?, 'Terverifikasi dari ID Master Data', CURRENT_TIMESTAMP, 'Sinkronisasi Profil ID', CURRENT_TIMESTAMP, 1)
+            ON CONFLICT(phone) DO UPDATE SET employee_id = excluded.employee_id, employee_name = excluded.employee_name, last_message_at = CURRENT_TIMESTAMP;
+          `).run(eDigits, emp.id, emp.name);
+        } catch (errOpt) {}
+      }
+    }
 
     // If no user account existed yet for this employee, create it
     if (res.changes === 0 && emp.id !== 'EMP-001') {
@@ -3053,8 +3131,30 @@ export function isWaOptedIn(phone) {
 
   const db = getDatabase();
   try {
+    // 1. Cek langsung di tabel wa_opt_ins
     const row = db.prepare('SELECT phone FROM wa_opt_ins WHERE phone = ?;').get(norm);
-    return Boolean(row);
+    if (row) return true;
+
+    // 2. Cek apakah nomor ini terdaftar di master data ID karyawan aktif
+    const empRows = db.prepare('SELECT id, name, phone, data_json FROM employees;').all();
+    for (const emp of empRows) {
+      if (!emp.phone) continue;
+      let eDigits = String(emp.phone).replace(/\D+/g, '');
+      if (eDigits.startsWith('0')) eDigits = `62${eDigits.slice(1)}`;
+      else if (eDigits.startsWith('8')) eDigits = `62${eDigits}`;
+      else if (eDigits.startsWith('620')) eDigits = `62${eDigits.slice(3)}`;
+      if (eDigits === norm) {
+        try {
+          db.prepare(`
+            INSERT INTO wa_opt_ins (phone, employee_id, employee_name, first_message, first_message_at, last_message, last_message_at, message_count)
+            VALUES (?, ?, ?, 'Terverifikasi Otomatis dari ID Master Data', CURRENT_TIMESTAMP, 'Sinkronisasi Otomatis ID', CURRENT_TIMESTAMP, 1)
+            ON CONFLICT(phone) DO UPDATE SET employee_id = excluded.employee_id, employee_name = excluded.employee_name;
+          `).run(norm, emp.id, emp.name);
+        } catch (e) {}
+        return true;
+      }
+    }
+    return false;
   } catch (e) {
     return false;
   }
@@ -3128,6 +3228,24 @@ export function recordWaOptIn(phone, messageText = '', pushName = '') {
 export function getWaOptIns() {
   const db = getDatabase();
   try {
+    // Pastikan seluruh karyawan yang memiliki nomor telepon terdaftar ke wa_opt_ins
+    const employees = db.prepare('SELECT id, name, phone, data_json FROM employees;').all();
+    for (const emp of employees) {
+      if (!emp.phone) continue;
+      let eDigits = String(emp.phone).replace(/\D+/g, '');
+      if (eDigits.startsWith('0')) eDigits = `62${eDigits.slice(1)}`;
+      else if (eDigits.startsWith('8')) eDigits = `62${eDigits}`;
+      else if (eDigits.startsWith('620')) eDigits = `62${eDigits.slice(3)}`;
+      if (eDigits.startsWith('62') && eDigits.length >= 10) {
+        try {
+          db.prepare(`
+            INSERT INTO wa_opt_ins (phone, employee_id, employee_name, first_message, first_message_at, last_message, last_message_at, message_count)
+            VALUES (?, ?, ?, 'Terverifikasi dari ID Master Data', CURRENT_TIMESTAMP, 'Terkoneksi ke Master Data HRIS', CURRENT_TIMESTAMP, 1)
+            ON CONFLICT(phone) DO UPDATE SET employee_id = excluded.employee_id, employee_name = excluded.employee_name;
+          `).run(eDigits, emp.id, emp.name);
+        } catch (e) {}
+      }
+    }
     return db.prepare('SELECT * FROM wa_opt_ins ORDER BY last_message_at DESC;').all();
   } catch (e) {
     return [];

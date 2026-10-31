@@ -47,6 +47,7 @@ import { api } from '../services/api';
 
 interface SalaryRulesTabProps {
   currentUser?: Employee;
+  employees?: Employee[];
   salaryRules: SalaryRuleConfig;
   onUpdateSalaryRules: (rules: SalaryRuleConfig) => void;
   initialFocusSection?: 'whatsapp' | 'email' | 'rules';
@@ -54,6 +55,7 @@ interface SalaryRulesTabProps {
 
 export const SalaryRulesTab: React.FC<SalaryRulesTabProps> = ({
   currentUser,
+  employees = [],
   salaryRules,
   onUpdateSalaryRules,
   initialFocusSection = 'whatsapp'
@@ -154,6 +156,7 @@ export const SalaryRulesTab: React.FC<SalaryRulesTabProps> = ({
 
   // Test Message Modal State
   const [showTestModal, setShowTestModal] = useState(false);
+  const [testSelectedEmpId, setTestSelectedEmpId] = useState<string>(currentUser?.id || 'EMP-001');
   const [testPhone, setTestPhone] = useState(currentUser?.phone || '6289524257778');
   const [testMessage, setTestMessage] = useState('Halo! Ini adalah pesan uji coba integrasi WhatsApp Baileys dari sistem PRIME HRIS.');
   const [sendingTest, setSendingTest] = useState(false);
@@ -229,6 +232,7 @@ export const SalaryRulesTab: React.FC<SalaryRulesTabProps> = ({
 
   // Test Email Modal
   const [showEmailTestModal, setShowEmailTestModal] = useState(false);
+  const [testEmailSelectedEmpId, setTestEmailSelectedEmpId] = useState<string>(currentUser?.id || 'EMP-001');
   const [testEmailRecipient, setTestEmailRecipient] = useState(currentUser?.email || 'primetroyxs@gmail.com');
   const [sendingTestEmail, setSendingTestEmail] = useState(false);
   const [testEmailResult, setTestEmailResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -1966,6 +1970,43 @@ export const SalaryRulesTab: React.FC<SalaryRulesTabProps> = ({
             <form onSubmit={handleSendTestWa} className="space-y-3 text-xs">
               <div>
                 <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1">
+                  Pilih Akun / ID Karyawan Penerima (Mengikuti Data Tiap ID)
+                </label>
+                <select
+                  value={testSelectedEmpId}
+                  onChange={e => {
+                    const selId = e.target.value;
+                    setTestSelectedEmpId(selId);
+                    if (selId === 'CUSTOM') return;
+                    const found = employees.find(emp => emp.id === selId || (emp as any).loginId === selId);
+                    if (found) {
+                      if (found.phone) setTestPhone(found.phone);
+                      const displayId = (found as any).loginId || found.id;
+                      setTestMessage(`Halo ${found.name}! Ini pesan uji coba notifikasi WhatsApp resmi PRIME HRIS untuk ID ${displayId}.`);
+                    }
+                  }}
+                  className="w-full glass-input rounded-xl px-3 py-2 text-xs font-bold text-slate-800"
+                >
+                  {employees.map(emp => {
+                    const displayId = (emp as any).loginId || emp.id;
+                    return (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.name} (ID: {displayId}) • {emp.phone || 'Tanpa No WA'}
+                      </option>
+                    );
+                  })}
+                  <option value="CUSTOM">-- Masukkan Nomor WhatsApp Manual --</option>
+                </select>
+                {testSelectedEmpId !== 'CUSTOM' && (
+                  <span className="text-[10px] text-emerald-600 font-semibold mt-1 flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3 shrink-0" />
+                    <span>Mengikuti data nomor WhatsApp resmi dari ID terpilih</span>
+                  </span>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1">
                   Nomor WhatsApp Penerima
                 </label>
                 <input
@@ -2058,6 +2099,41 @@ export const SalaryRulesTab: React.FC<SalaryRulesTabProps> = ({
             </div>
 
             <form onSubmit={(e) => { e.preventDefault(); handleSendTestEmail(); }} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1">
+                  Pilih Akun / ID Karyawan Penerima (Mengikuti Data Tiap ID)
+                </label>
+                <select
+                  value={testEmailSelectedEmpId}
+                  onChange={e => {
+                    const selId = e.target.value;
+                    setTestEmailSelectedEmpId(selId);
+                    if (selId === 'CUSTOM') return;
+                    const found = employees.find(emp => emp.id === selId || (emp as any).loginId === selId);
+                    if (found && found.email) {
+                      setTestEmailRecipient(found.email);
+                    }
+                  }}
+                  className="w-full glass-input rounded-xl px-3 py-2 text-xs font-bold text-slate-800"
+                >
+                  {employees.map(emp => {
+                    const displayId = (emp as any).loginId || emp.id;
+                    return (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.name} (ID: {displayId}) • {emp.email || 'Tanpa Email'}
+                      </option>
+                    );
+                  })}
+                  <option value="CUSTOM">-- Masukkan Alamat Email Manual --</option>
+                </select>
+                {testEmailSelectedEmpId !== 'CUSTOM' && (
+                  <span className="text-[10px] text-indigo-600 font-semibold mt-1 flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3 shrink-0" />
+                    <span>Mengikuti data alamat email resmi dari ID terpilih</span>
+                  </span>
+                )}
+              </div>
+
               <div>
                 <label className="block text-[10px] font-bold uppercase text-slate-600 mb-1">
                   Email Penerima Uji Coba

@@ -1601,6 +1601,7 @@ export function App() {
         {(activeTab === 'system_settings' || activeTab === 'salary_rules' || activeTab === 'wa_gateway' || activeTab === 'email_smtp') && (
           <SalaryRulesTab
             currentUser={currentUser}
+            employees={employees}
             salaryRules={salaryRules}
             onUpdateSalaryRules={handleUpdateSalaryRules}
             initialFocusSection={activeTab === 'email_smtp' ? 'email' : 'whatsapp'}

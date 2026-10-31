@@ -43,7 +43,8 @@ import {
   saveCasualAttendance,
   deleteCasualAttendance,
   deleteAttendance,
-  getAttendancePhoto
+  getAttendancePhoto,
+  getEmployeeByIdentifier
 } from './db.js';
 import {
   getGatewayStatus,
@@ -157,11 +158,10 @@ setInterval(() => {
 // ==========================================
 async function triggerAttendanceWaNotification(attendanceRecord) {
   try {
-    if (!attendanceRecord || !attendanceRecord.employeeId) return;
-    const db = getDatabase();
-    const empRow = db.prepare("SELECT data_json FROM employees WHERE id = ?").get(attendanceRecord.employeeId);
-    if (!empRow) return;
-    const emp = JSON.parse(empRow.data_json);
+    if (!attendanceRecord) return;
+    const empId = attendanceRecord.employeeId || attendanceRecord.employeeNik;
+    if (!empId) return;
+    const emp = getEmployeeByIdentifier(empId);
     if (!emp || !emp.phone) return;
 
     let salaryRules = null;
@@ -186,17 +186,14 @@ async function triggerAttendanceWaNotification(attendanceRecord) {
 
 async function triggerApprovalSubmitWaNotification(approvalItem) {
   try {
-    if (!approvalItem || !approvalItem.employeeId) return;
-    const db = getDatabase();
-    const empRow = db.prepare("SELECT data_json FROM employees WHERE id = ?").get(approvalItem.employeeId);
-    if (!empRow) return;
-    const emp = JSON.parse(empRow.data_json);
+    if (!approvalItem) return;
+    const emp = getEmployeeByIdentifier(approvalItem.employeeId || approvalItem.employeeNik);
+    if (!emp) return;
 
     let targetApprover = null;
     const approverId = approvalItem.targetApproverId || approvalItem.projectManagerId;
     if (approverId) {
-      const appRow = db.prepare("SELECT data_json FROM employees WHERE id = ?").get(approverId);
-      if (appRow) targetApprover = JSON.parse(appRow.data_json);
+      targetApprover = getEmployeeByIdentifier(approverId);
     }
 
     if (!targetApprover && approvalItem.projectId) {
@@ -231,11 +228,10 @@ async function triggerApprovalDecisionWaNotification(approvalId, status, reviewN
     const row = db.prepare("SELECT data_json FROM approvals WHERE id = ?").get(approvalId);
     if (!row) return;
     const item = JSON.parse(row.data_json);
-    if (!item || !item.employeeId) return;
+    if (!item) return;
 
-    const empRow = db.prepare("SELECT data_json FROM employees WHERE id = ?").get(item.employeeId);
-    if (!empRow) return;
-    const emp = JSON.parse(empRow.data_json);
+    const emp = getEmployeeByIdentifier(item.employeeId || item.employeeNik);
+    if (!emp) return;
 
     const mergedItem = {
       ...item,
@@ -255,11 +251,10 @@ async function triggerApprovalDecisionWaNotification(approvalId, status, reviewN
 // ==========================================
 async function triggerAttendanceEmailNotification(attendanceRecord) {
   try {
-    if (!attendanceRecord || !attendanceRecord.employeeId) return;
-    const db = getDatabase();
-    const empRow = db.prepare("SELECT data_json FROM employees WHERE id = ?").get(attendanceRecord.employeeId);
-    if (!empRow) return;
-    const emp = JSON.parse(empRow.data_json);
+    if (!attendanceRecord) return;
+    const empId = attendanceRecord.employeeId || attendanceRecord.employeeNik;
+    if (!empId) return;
+    const emp = getEmployeeByIdentifier(empId);
     if (!emp || !emp.email) return;
 
     let salaryRules = null;
@@ -284,17 +279,14 @@ async function triggerAttendanceEmailNotification(attendanceRecord) {
 
 async function triggerApprovalSubmitEmailNotification(approvalItem) {
   try {
-    if (!approvalItem || !approvalItem.employeeId) return;
-    const db = getDatabase();
-    const empRow = db.prepare("SELECT data_json FROM employees WHERE id = ?").get(approvalItem.employeeId);
-    if (!empRow) return;
-    const emp = JSON.parse(empRow.data_json);
+    if (!approvalItem) return;
+    const emp = getEmployeeByIdentifier(approvalItem.employeeId || approvalItem.employeeNik);
+    if (!emp) return;
 
     let targetApprover = null;
     const approverId = approvalItem.targetApproverId || approvalItem.projectManagerId;
     if (approverId) {
-      const appRow = db.prepare("SELECT data_json FROM employees WHERE id = ?").get(approverId);
-      if (appRow) targetApprover = JSON.parse(appRow.data_json);
+      targetApprover = getEmployeeByIdentifier(approverId);
     }
 
     if (!targetApprover && approvalItem.projectId) {
@@ -338,11 +330,10 @@ async function triggerApprovalDecisionEmailNotification(approvalId, status, revi
     const row = db.prepare("SELECT data_json FROM approvals WHERE id = ?").get(approvalId);
     if (!row) return;
     const item = JSON.parse(row.data_json);
-    if (!item || !item.employeeId) return;
+    if (!item) return;
 
-    const empRow = db.prepare("SELECT data_json FROM employees WHERE id = ?").get(item.employeeId);
-    if (!empRow) return;
-    const emp = JSON.parse(empRow.data_json);
+    const emp = getEmployeeByIdentifier(item.employeeId || item.employeeNik);
+    if (!emp) return;
     if (!emp || !emp.email) return;
 
     let salaryRules = null;

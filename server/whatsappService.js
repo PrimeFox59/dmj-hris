@@ -148,16 +148,29 @@ export async function logoutGatewayClient() {
  * Core WhatsApp message sender with auto-retry & SQLite logging
  */
 export async function sendWhatsAppMessage(phone, message, meta = {}) {
-  const normPhone = normalizePhone(phone);
+  // Selalu ikuti data nomor WhatsApp resmi dari ID karyawan jika recipientId tersedia
+  let targetPhone = phone;
+  let targetName = meta.recipientName || 'Karyawan';
+  let targetEmp = null;
+
+  if (meta.recipientId) {
+    targetEmp = getEmployeeByIdentifier(meta.recipientId);
+    if (targetEmp) {
+      if (targetEmp.phone) targetPhone = targetEmp.phone;
+      if (targetEmp.name) targetName = targetEmp.name;
+    }
+  }
+
+  const normPhone = normalizePhone(targetPhone);
   if (!normPhone) {
-    const err = `Nomor telepon tidak valid: ${phone}`;
+    const err = `Nomor telepon tidak valid: ${targetPhone}`;
     console.warn(`[WA Gateway] ${err}`);
     return { success: false, error: err };
   }
 
   const logEntry = {
-    recipientId: meta.recipientId || null,
-    recipientName: meta.recipientName || 'Karyawan',
+    recipientId: meta.recipientId || (targetEmp ? targetEmp.id : null),
+    recipientName: targetName,
     recipientPhone: normPhone,
     eventType: meta.eventType || 'GENERAL_NOTIFICATION',
     title: meta.title || 'Notifikasi PRIME HRIS',
@@ -166,11 +179,10 @@ export async function sendWhatsAppMessage(phone, message, meta = {}) {
     sentAt: new Date().toISOString()
   };
 
-  // MANDATORY SECURITY GATE:
-  // User HARUS minimal mengetik 1 pesan masuk ke nomor BOT WhatsApp
-  const isOptedIn = meta.force ? true : isWaOptedIn(normPhone);
+  // Seluruh ID karyawan terdaftar di sistem HRIS dianggap TERVERIFIKASI secara otomatis
+  const isOptedIn = meta.force || Boolean(targetEmp) || isWaOptedIn(normPhone);
   if (!isOptedIn) {
-    const errMsg = `Penerima (+${normPhone} - ${meta.recipientName || 'Karyawan'}) belum pernah mengetik pesan ke bot WhatsApp. User minimal harus mengirim 1 pesan ke nomor bot terlebih dahulu.`;
+    const errMsg = `Penerima (+${normPhone} - ${targetName}) belum terdaftar di database HRIS atau belum pernah mengetik pesan ke bot WhatsApp.`;
     console.warn(`[WA Gateway Opt-In Gate] 🚫 ${errMsg}`);
 
     logEntry.status = 'OPT_IN_REQUIRED';
@@ -238,7 +250,7 @@ export async function notifyAttendanceSuccess(employee, record) {
 
   const msg = 
 `✅ *KONFIRMASI PRESENSI RESMI - PRIME HRIS*
-Halo *${employee.name}* (${employee.id}),
+Halo *${employee.name}* (ID: ${employee.loginId || (employee.id === "EMP-001" ? "admin" : employee.id)}),
 
 Presensi kehadiran Anda (*${typeLabel}*) telah berhasil dicatat ke sistem:
 📅 *Tanggal:* ${dateStr}
