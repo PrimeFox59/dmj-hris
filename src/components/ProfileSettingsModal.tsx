@@ -48,48 +48,7 @@ interface ProfileSettingsModalProps {
   onLogout?: () => void;
 }
 
-const PRESET_AVATARS = [
-  {
-    id: 'avatar-1',
-    label: 'Direktur / Eksekutif',
-    url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&fit=crop&crop=faces'
-  },
-  {
-    id: 'avatar-2',
-    label: 'Project Manager',
-    url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&fit=crop&crop=faces'
-  },
-  {
-    id: 'avatar-3',
-    label: 'HR & People Lead',
-    url: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=300&fit=crop&crop=faces'
-  },
-  {
-    id: 'avatar-4',
-    label: 'Document Controller',
-    url: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=300&fit=crop&crop=faces'
-  },
-  {
-    id: 'avatar-5',
-    label: 'Mechanical Specialist',
-    url: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=300&fit=crop&crop=faces'
-  },
-  {
-    id: 'avatar-6',
-    label: 'Field Engineer',
-    url: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=300&fit=crop&crop=faces'
-  },
-  {
-    id: 'avatar-7',
-    label: 'Finance Specialist',
-    url: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=300&fit=crop&crop=faces'
-  },
-  {
-    id: 'avatar-8',
-    label: 'Quality Inspector',
-    url: 'https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?w=300&fit=crop&crop=faces'
-  }
-];
+
 
 function resizeImageToDataUrl(file: File, maxDim = 320, quality = 0.85): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -684,57 +643,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                 </div>
               </div>
 
-              {/* Preset Enterprise Avatars Gallery */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-800 font-mono-code flex items-center gap-2">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                    Atau Pilih dari Galeri Avatar Resmi Enterprise
-                  </h4>
-                  <span className="text-[11px] text-slate-400 font-mono-code">
-                    8 Pilihan Presets
-                  </span>
-                </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {PRESET_AVATARS.map((preset) => {
-                    const isSelected = selectedAvatar === preset.url;
-                    return (
-                      <button
-                        key={preset.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedAvatar(preset.url);
-                          setAvatarSuccessMsg(`Avatar "${preset.label}" dipilih. Klik "Simpan Foto Profil" untuk menerapkan.`);
-                        }}
-                        className={`group relative p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center gap-2 ${
-                          isSelected
-                            ? 'bg-orange-50/80 border-[#FF6B00] shadow-md shadow-orange-500/10 scale-102'
-                            : 'bg-white border-slate-200/80 hover:bg-slate-50 hover:border-slate-300'
-                        }`}
-                      >
-                        <div className="relative">
-                          <img
-                            src={preset.url}
-                            alt={preset.label}
-                            className="w-14 h-14 rounded-full object-cover border-2 border-white shadow-sm"
-                          />
-                          {isSelected && (
-                            <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-[#FF6B00] text-white flex items-center justify-center shadow-xs">
-                              <Check className="w-3 h-3 stroke-[3]" />
-                            </div>
-                          )}
-                        </div>
-                        <span className={`text-[11px] font-bold leading-tight line-clamp-1 ${
-                          isSelected ? 'text-[#FF6B00]' : 'text-slate-700'
-                        }`}>
-                          {preset.label}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
 
               {/* Biometric 4-Pose Enrollment Vault Section */}
               <div className="p-5 rounded-3xl bg-slate-900 text-white space-y-4 shadow-xl">
