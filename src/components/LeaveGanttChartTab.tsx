@@ -527,75 +527,249 @@ export const LeaveGanttChartTab: React.FC<LeaveGanttChartTabProps> = ({
     }
   }, [daysList, dayColWidth, todayStr]);
 
-  // Export Gantt Chart to Excel (.xlsx)
+  // Export Gantt Chart to Excel (.xlsx) with Multi-Sheet Visual Gantt Chart & Rich Detail
   const handleExportToExcel = () => {
     try {
+      const wb = XLSX.utils.book_new();
+
+      // =========================================================================
+      // SHEET 1: VISUAL GANTT CHART TIMELINE (Plan vs Aktual Calendar Matrix)
+      // =========================================================================
+      const ganttAoa: any[][] = [];
+
+      // Row 1: Document Header Title
+      ganttAoa.push(['PRIME ENTERPRISE HRIS — VISUAL GANTT CHART JADWAL CUTI & ROSTER (PLAN VS AKTUAL)']);
+      // Row 2: Sub-info
+      ganttAoa.push([
+        `Rentang Timeline: ${startDateRange} s/d ${endDateRange} • Diexport pada: ${todayStr} • Oleh: ${currentUser?.name || 'Administrator'} • Total Karyawan: ${filteredEmployees.length}`
+      ]);
+      // Row 3: Legend & Keterangan
+      ganttAoa.push([
+        'KETERANGAN: [PLAN] = Rencana Jadwal Cuti / Roster Site | [AKTUAL] = Realisasi Presensi / Cuti Disetujui | LIBUR = Akhir Pekan (Sabtu/Minggu)'
+      ]);
+      // Row 4: Spacer
+      ganttAoa.push([]);
+
+      // Row 5: Column Headers (Static Fields + Timeline Days)
+      const headerRow1: any[] = [
+        'No',
+        'NIK',
+        'Nama Karyawan',
+        'Tipe Personil',
+        'Jabatan',
+        'Departemen',
+        'Penempatan / Proyek',
+        'Sisa Cuti',
+        'Track / Kategori'
+      ];
+
+      // Add day dates to header
+      daysList.forEach(day => {
+        const monthShort = MONTH_NAMES_ID[day.monthIndex]?.slice(0, 3) || '';
+        headerRow1.push(`${day.dayNum} ${monthShort} (${day.dayName})`);
+      });
+      ganttAoa.push(headerRow1);
+
+      // Populate Gantt Data Rows (2 Rows per Employee: Row 1 = PLAN, Row 2 = AKTUAL)
+      let empNum = 1;
+      filteredEmployees.forEach(emp => {
+        const empSpans = employeeSpansMap.get(emp.id) || [];
+        const planSpans = empSpans.filter(s => s.category === 'PLAN');
+        const actualSpans = empSpans.filter(s => s.category === 'ACTUAL');
+        const empRemaining = Math.max(0, (emp.leaveQuota || 12) - (emp.usedLeave || 0));
+        const locationLabel = emp.workLocationType === 'NON_LOKAL' ? 'Non-Lokal (Site)' : 'Lokal';
+        const projectLabel = emp.assignedProjectId || 'Kantor Pusat DMJ';
+
+        // 1. PLAN ROW
+        const planRow: any[] = [
+          empNum,
+          emp.nik,
+          emp.name,
+          locationLabel,
+          emp.position || '-',
+          emp.department || '-',
+          projectLabel,
+          `${empRemaining} Hari`,
+          'PLAN (Rencana)'
+        ];
+
+        daysList.forEach(day => {
+          const matchPlan = planSpans.find(s => s.startDate <= day.dateStr && day.dateStr <= s.endDate);
+          if (matchPlan) {
+            planRow.push(`[PLAN] ${matchPlan.leaveType.replace('CUTI_', '')}`);
+          } else if (day.isWeekend) {
+            planRow.push('LIBUR');
+          } else {
+            planRow.push('');
+          }
+        });
+        ganttAoa.push(planRow);
+
+        // 2. AKTUAL ROW
+        const actualRow: any[] = [
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+          '',
+          'AKTUAL (Realisasi)'
+        ];
+
+        daysList.forEach(day => {
+          const matchActual = actualSpans.find(s => s.startDate <= day.dateStr && day.dateStr <= s.endDate);
+          if (matchActual) {
+            actualRow.push(`[AKTUAL] ${matchActual.leaveType.replace('CUTI_', '')}`);
+          } else if (day.isWeekend) {
+            actualRow.push('LIBUR');
+          } else {
+            actualRow.push('');
+          }
+        });
+        ganttAoa.push(actualRow);
+
+        // Spacer row between employees for visual clarity
+        ganttAoa.push([]);
+        empNum++;
+      });
+
+      const wsGantt = XLSX.utils.aoa_to_sheet(ganttAoa);
+
+      // Set column widths for Gantt Chart sheet
+      wsGantt['!cols'] = [
+        { wch: 5 },  // No
+        { wch: 15 }, // NIK
+        { wch: 26 }, // Nama Karyawan
+        { wch: 16 }, // Tipe Personil
+        { wch: 22 }, // Jabatan
+        { wch: 20 }, // Departemen
+        { wch: 26 }, // Proyek
+        { wch: 12 }, // Sisa Cuti
+        { wch: 18 }, // Track
+        ...daysList.map(() => ({ wch: 14 })) // Timeline days
+      ];
+
+      // =========================================================================
+      // SHEET 2: DETAIL TRANSAKSI JADWAL CUTI (Plan vs Aktual Tabular)
+      // =========================================================================
       const allSpansToExport: any[] = [];
       let rowIdx = 1;
 
       filteredEmployees.forEach(emp => {
         const empSpans = employeeSpansMap.get(emp.id) || [];
         empSpans.forEach(span => {
+          const isPlan = span.category === 'PLAN';
           allSpansToExport.push({
             'No': rowIdx++,
             'NIK': span.employeeNik,
             'Nama Karyawan': span.employeeName,
             'Tipe Personil': span.locationType === 'NON_LOKAL' ? 'Non-Lokal (Site)' : 'Lokal',
-            'Jabatan': span.position,
-            'Departemen': span.department,
-            'Proyek / Site': span.projectName,
-            'Tipe Jadwal': span.category === 'PLAN' ? 'PLAN (Rencana)' : 'AKTUAL (Realisasi)',
+            'Jabatan': span.position || '-',
+            'Departemen': span.department || '-',
+            'Proyek / Site': span.projectName || '-',
+            'Kategori': isPlan ? 'PLAN (Rencana)' : 'AKTUAL (Realisasi)',
             'Tanggal Mulai': span.startDate,
             'Tanggal Selesai': span.endDate,
             'Durasi (Hari)': span.daysCount,
             'Jenis Cuti': span.leaveType,
-            'Status Otorisasi': span.approvalStatus,
-            'Jadwal Bersamaan Tim': span.isConflict ? 'Ya' : 'Tidak',
-            'Detail Bersamaan': span.conflictDetails?.join('; ') || '-',
+            'Status Otorisasi': span.approvalStatus || 'APPROVED',
+            'Jadwal Bersamaan Tim': span.isConflict ? 'Ya (Bersamaan)' : 'Aman (Mandiri)',
+            'Rekan Satu Tim Bersamaan': span.conflictDetails?.join('; ') || '-',
             'Keterangan / Keperluan': span.notes || '-'
           });
         });
       });
 
-      // Sheet 1: Detail Jadwal Cuti
       const wsDetail = XLSX.utils.json_to_sheet(allSpansToExport);
       wsDetail['!cols'] = [
         { wch: 6 },  // No
-        { wch: 14 }, // NIK
+        { wch: 15 }, // NIK
         { wch: 25 }, // Nama
         { wch: 18 }, // Tipe Personil
-        { wch: 20 }, // Jabatan
-        { wch: 18 }, // Departemen
+        { wch: 22 }, // Jabatan
+        { wch: 20 }, // Departemen
         { wch: 25 }, // Proyek
-        { wch: 18 }, // Tipe Jadwal
+        { wch: 18 }, // Kategori
         { wch: 14 }, // Tgl Mulai
         { wch: 14 }, // Tgl Selesai
         { wch: 12 }, // Durasi
-        { wch: 25 }, // Jenis Cuti
+        { wch: 24 }, // Jenis Cuti
         { wch: 16 }, // Status
-        { wch: 20 }, // Bersamaan
-        { wch: 35 }, // Detail
+        { wch: 22 }, // Bersamaan
+        { wch: 38 }, // Detail Rekan
         { wch: 35 }  // Keterangan
       ];
 
-      // Sheet 2: Ringkasan Eksekutif
+      // =========================================================================
+      // SHEET 3: REKAPITULASI KARYAWAN & SISA KUOTA CUTI
+      // =========================================================================
+      const rekapKaryawan = filteredEmployees.map((emp, idx) => {
+        const empSpans = employeeSpansMap.get(emp.id) || [];
+        const planSpans = empSpans.filter(s => s.category === 'PLAN');
+        const actualSpans = empSpans.filter(s => s.category === 'ACTUAL');
+        const totalPlanDays = planSpans.reduce((sum, s) => sum + (s.daysCount || 0), 0);
+        const totalActualDays = actualSpans.reduce((sum, s) => sum + (s.daysCount || 0), 0);
+        const remaining = Math.max(0, (emp.leaveQuota || 12) - (emp.usedLeave || 0));
+        const isCurrentlyActive = actualSpans.some(s => s.startDate <= todayStr && todayStr <= s.endDate);
+
+        return {
+          'No': idx + 1,
+          'NIK': emp.nik,
+          'Nama Karyawan': emp.name,
+          'Tipe Personil': emp.workLocationType === 'NON_LOKAL' ? 'Non-Lokal (Site)' : 'Lokal',
+          'Departemen': emp.department || '-',
+          'Penempatan': emp.assignedProjectId || 'Kantor Pusat',
+          'Jatah Cuti Tahunan': 12,
+          'Cuti Terpakai (Aktual)': emp.usedLeave || totalActualDays,
+          'Sisa Kuota Cuti (Hari)': remaining,
+          'Total Rencana Cuti (Plan)': totalPlanDays,
+          'Rotasi Roster': emp.workLocationType === 'NON_LOKAL' ? '12 Minggu Kerja : 2 Minggu Cuti (Roster 3 Bln)' : 'Reguler Tahunan',
+          'Status Hari Ini': isCurrentlyActive ? 'Sedang Cuti' : 'Aktif Bekerja'
+        };
+      });
+
+      const wsRekap = XLSX.utils.json_to_sheet(rekapKaryawan);
+      wsRekap['!cols'] = [
+        { wch: 6 },
+        { wch: 15 },
+        { wch: 25 },
+        { wch: 18 },
+        { wch: 22 },
+        { wch: 25 },
+        { wch: 18 },
+        { wch: 18 },
+        { wch: 18 },
+        { wch: 22 },
+        { wch: 36 },
+        { wch: 18 }
+      ];
+
+      // =========================================================================
+      // SHEET 4: RINGKASAN EKSEKUTIF & KPI
+      // =========================================================================
       const summaryData = [
-        { 'Indikator': 'Total Staf Non-Lokal (Site)', 'Nilai': stats.totalNonLokal, 'Keterangan': 'Personil rotasi roster site' },
-        { 'Indikator': 'Total Staf Lokal', 'Nilai': stats.totalLokal, 'Keterangan': 'Personil cuti tahunan reguler' },
-        { 'Indikator': 'Staf Sedang Cuti Hari Ini', 'Nilai': stats.activeTodayCount, 'Keterangan': 'Sedang menjalani cuti per ' + todayStr },
-        { 'Indikator': 'Jadwal Bersamaan dengan Rekan Satu Tim', 'Nilai': stats.overlapCount, 'Keterangan': 'Tanggal cuti bertepatan di proyek/site sama' },
-        { 'Indikator': 'Total Jadwal Terdata', 'Nilai': allSpansToExport.length, 'Keterangan': 'Total record Plan & Realisasi' },
-        { 'Indikator': 'Tanggal Export Laporan', 'Nilai': todayStr, 'Keterangan': 'Diexport oleh ' + (currentUser?.name || 'Administrator') }
+        { 'Indikator Metrik': 'Total Staf Terfilter', 'Nilai': filteredEmployees.length, 'Keterangan': 'Personil yang terdata pada tampilan ini' },
+        { 'Indikator Metrik': 'Total Staf Non-Lokal (Site)', 'Nilai': stats.totalNonLokal, 'Keterangan': 'Personil rotasi roster site luar kota' },
+        { 'Indikator Metrik': 'Total Staf Lokal', 'Nilai': stats.totalLokal, 'Keterangan': 'Personil jatah cuti tahunan reguler' },
+        { 'Indikator Metrik': 'Staf Sedang Cuti Hari Ini', 'Nilai': stats.activeTodayCount, 'Keterangan': `Sedang menjalani cuti per tanggal ${todayStr}` },
+        { 'Indikator Metrik': 'Jadwal Bersamaan Tim (Potensi Defisit Personil)', 'Nilai': stats.overlapCount, 'Keterangan': 'Tanggal cuti bertepatan di proyek/site sama' },
+        { 'Indikator Metrik': 'Total Rekaman Jadwal Terdata', 'Nilai': allSpansToExport.length, 'Keterangan': 'Akumulasi seluruh record Plan & Aktual' },
+        { 'Indikator Metrik': 'Rentang Waktu Laporan', 'Nilai': `${startDateRange} s/d ${endDateRange}`, 'Keterangan': `Mode Zoom: ${zoomMode}` },
+        { 'Indikator Metrik': 'Tanggal & Waktu Export', 'Nilai': `${todayStr} (WIB)`, 'Keterangan': `Diexport oleh ${currentUser?.name || 'Administrator'}` }
       ];
       const wsSummary = XLSX.utils.json_to_sheet(summaryData);
       wsSummary['!cols'] = [
-        { wch: 35 },
-        { wch: 12 },
+        { wch: 38 },
+        { wch: 20 },
         { wch: 45 }
       ];
 
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, wsDetail, 'Jadwal Cuti Plan & Aktual');
+      // Append sheets in order: Gantt Chart first, followed by detail, rekap, summary
+      XLSX.utils.book_append_sheet(wb, wsGantt, 'Gantt Chart (Visual Timeline)');
+      XLSX.utils.book_append_sheet(wb, wsDetail, 'Detail Plan vs Aktual');
+      XLSX.utils.book_append_sheet(wb, wsRekap, 'Rekapitulasi Kuota Cuti');
       XLSX.utils.book_append_sheet(wb, wsSummary, 'Ringkasan Eksekutif');
 
       XLSX.writeFile(wb, `Jadwal_Cuti_Gantt_Chart_PRIME_HRIS_${todayStr}.xlsx`);
