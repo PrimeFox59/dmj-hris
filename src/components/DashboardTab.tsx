@@ -533,7 +533,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                         </div>
                         <p className="text-[10px] text-slate-500 truncate flex items-center gap-1 mt-0.5">
                           <MapPin className="w-3 h-3 text-[#FF6B00]" />
-                          {typeof item.location.distanceMeters === 'number' && !isNaN(item.location.distanceMeters) ? `${item.location.distanceMeters}m Geofence` : 'Geofence Valid'}
+                          {typeof item.location.distanceMeters === 'number' && !isNaN(item.location.distanceMeters) ? `${(item.location.distanceMeters / 1000).toFixed(1)} km Geofence` : 'Geofence Valid'}
                         </p>
                       </div>
                     </div>

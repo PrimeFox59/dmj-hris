@@ -100,6 +100,11 @@ export function calculateDistanceMeters(lat1: number, lon1: number, lat2: number
   return Math.round(R * c);
 }
 
+export function formatDistanceKm(meters?: number | null): string {
+  if (meters === undefined || meters === null || isNaN(meters)) return '0.0 km';
+  return `${(meters / 1000).toFixed(1)} km`;
+}
+
 interface PresensiCameraTabProps {
   currentUser: Employee;
   salaryRules: SalaryRuleConfig;
@@ -1946,7 +1951,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                     <td className="py-3 px-3">
                       <div className="font-semibold text-slate-800 text-[11px] truncate max-w-[200px] flex items-center gap-1">
                         <MapPin className="w-3 h-3 text-[#FF6B00] shrink-0" />
-                        <span>{item.location.distanceMeters !== undefined ? `${item.location.distanceMeters}m dari Geofence` : 'Geofence Valid'}</span>
+                        <span>{item.location.distanceMeters !== undefined ? `${formatDistanceKm(item.location.distanceMeters)} dari Geofence` : 'Geofence Valid'}</span>
                       </div>
                       <div className="text-[10px] text-slate-500 truncate max-w-[200px]">
                         {item.location.address || 'Satelit GPS Terverifikasi'}
@@ -2087,7 +2092,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                       <p><span className="font-bold text-slate-700">Waktu & Tipe:</span> <span className="font-mono-code font-bold text-slate-900">{isMasuk ? `Absen Masuk (${selectedHistoryItem.checkInTime} WIB)` : `Absen Pulang (${selectedHistoryItem.checkOutTime || '-'} WIB)`}</span></p>
                       <p><span className="font-bold text-slate-700">Karyawan:</span> {selectedHistoryItem.employeeName} ({selectedHistoryItem.employeeNik})</p>
                       <p><span className="font-bold text-slate-700">Catatan:</span> {selectedHistoryItem.note}</p>
-                      <p><span className="font-bold text-slate-700">Geofence:</span> <span className="font-mono-code font-semibold">{selectedHistoryItem.location.distanceMeters}m</span> • {selectedHistoryItem.location.inGeofence ? 'Dalam Area Geofence Resmi' : 'Luar Radius'}</p>
+                      <p><span className="font-bold text-slate-700">Geofence:</span> <span className="font-mono-code font-semibold">{formatDistanceKm(selectedHistoryItem.location.distanceMeters)}</span> • {selectedHistoryItem.location.inGeofence ? 'Dalam Area Geofence Resmi' : 'Luar Radius'}</p>
                       <p><span className="font-bold text-slate-700">Lokasi:</span> {selectedHistoryItem.location.address}</p>
                     </div>
                   </>
@@ -2185,7 +2190,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
               <div className="flex justify-between items-center py-0.5">
                 <span className="text-slate-500">Radius & Geofence:</span>
                 <span className="text-slate-700 font-mono-code text-[11px] truncate max-w-[240px]">
-                  {submittedRecord.location.distanceMeters}m ({submittedRecord.location.inGeofence ? 'Dalam Area Resmi' : 'Toleransi Geotag'})
+                  {formatDistanceKm(submittedRecord.location.distanceMeters)} ({submittedRecord.location.inGeofence ? 'Dalam Area Resmi' : 'Toleransi Geotag'})
                 </span>
               </div>
             </div>

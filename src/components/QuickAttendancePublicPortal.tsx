@@ -1135,7 +1135,7 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
                       ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                       : 'bg-amber-50 text-amber-700 border-amber-200'
                   }`}>
-                    {currentDistanceMeters}m • {isInsideRadius ? 'Masuk Radius (Valid)' : 'Luar Area'}
+                    {(currentDistanceMeters / 1000).toFixed(1)} km • {isInsideRadius ? 'Masuk Radius (Valid)' : 'Luar Area'}
                   </span>
                 </div>
               </div>
@@ -1152,14 +1152,14 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 font-black text-xs">
                     <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                    <span>Presensi di Luar Radius Area Kerja ({currentDistanceMeters}m)</span>
+                    <span>Presensi di Luar Radius Area Kerja ({(currentDistanceMeters / 1000).toFixed(1)} km)</span>
                   </div>
                   <span className="px-2 py-0.5 rounded text-[9px] font-bold font-mono-code bg-amber-200 text-amber-900">
                     WAJIB ISI CATATAN
                   </span>
                 </div>
                 <p className="text-[11px] text-amber-800 leading-relaxed">
-                  GPS perangkat Anda terdeteksi berjarak <strong>{currentDistanceMeters}m</strong> dari area kerja resmi ({targetGeofence.name}). Harap tuliskan alasan kehadiran di luar radius.
+                  GPS perangkat Anda terdeteksi berjarak <strong>{(currentDistanceMeters / 1000).toFixed(1)} km</strong> dari area kerja resmi ({targetGeofence.name}). Harap tuliskan alasan kehadiran di luar radius.
                 </p>
               </div>
 

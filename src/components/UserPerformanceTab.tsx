@@ -531,7 +531,7 @@ export const UserPerformanceTab: React.FC<UserPerformanceTabProps> = ({
                       Lokasi: <span className="font-semibold text-slate-800">{todayAttendance.location.address || 'Site Proyek'}</span>
                     </p>
                     <p className="text-slate-500 truncate flex items-center gap-1">
-                      <span className="font-mono-code text-[11px] text-slate-400">Jarak: {typeof todayAttendance.location.distanceMeters === 'number' && !isNaN(todayAttendance.location.distanceMeters) ? `${todayAttendance.location.distanceMeters}m` : '0m'} ({todayAttendance.mode})</span>
+                      <span className="font-mono-code text-[11px] text-slate-400">Jarak: {typeof todayAttendance.location.distanceMeters === 'number' && !isNaN(todayAttendance.location.distanceMeters) ? `${(todayAttendance.location.distanceMeters / 1000).toFixed(1)} km` : '0.0 km'} ({todayAttendance.mode})</span>
                     </p>
                   </div>
                 </div>
@@ -1120,7 +1120,7 @@ export const UserPerformanceTab: React.FC<UserPerformanceTabProps> = ({
                     <td className="px-4 py-3">
                       <span className="font-mono-code flex items-center gap-1 text-slate-700">
                         <MapPin className="w-3 h-3 text-[#FF6B00]" />
-                        {typeof att.location.distanceMeters === 'number' && !isNaN(att.location.distanceMeters) ? `${att.location.distanceMeters}m` : '0m'} ({att.mode})
+                        {typeof att.location.distanceMeters === 'number' && !isNaN(att.location.distanceMeters) ? `${(att.location.distanceMeters / 1000).toFixed(1)} km` : '0.0 km'} ({att.mode})
                       </span>
                     </td>
                     <td className="px-4 py-3">

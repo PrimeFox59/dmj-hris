@@ -838,7 +838,7 @@ export const EmployeeTimesheetDetailModal: React.FC<EmployeeTimesheetDetailModal
                               </div>
                               {item.inGeofence && (
                                 <span className="text-[9px] text-emerald-600 font-mono-code block">
-                                  ✓ Dalam Geofence ({item.distanceMeters}m)
+                                  ✓ Dalam Geofence ({(item.distanceMeters / 1000).toFixed(1)} km)
                                 </span>
                               )}
                             </td>
@@ -1023,7 +1023,7 @@ export const EmployeeTimesheetDetailModal: React.FC<EmployeeTimesheetDetailModal
                     <p>Waktu: {zoomedPhoto.date} {zoomedPhoto.time} WIB</p>
                     <p className="truncate">Lokasi: {zoomedPhoto.location}</p>
                     <p className="text-emerald-300">
-                      Geofence: {zoomedPhoto.inGeofence ? `Valid (Jarak ${zoomedPhoto.distanceMeters}m)` : 'Luar Radius'}
+                      Geofence: {zoomedPhoto.inGeofence ? `Valid (Jarak ${(zoomedPhoto.distanceMeters / 1000).toFixed(1)} km)` : 'Luar Radius'}
                     </p>
                   </div>
                 </div>

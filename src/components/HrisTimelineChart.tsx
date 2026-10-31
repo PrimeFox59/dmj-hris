@@ -711,7 +711,7 @@ export const HrisTimelineChart: React.FC<HrisTimelineChartProps> = ({
                           <p className="text-slate-300">Proyek: <span className="font-bold text-white">{item.schedule.projectName}</span></p>
                           <p>Masuk: <span className="font-bold">{attendance?.checkInTime} WIB</span> ({status === 'ON_TIME' ? 'Tepat Waktu' : status === 'LATE' ? `Terlambat (Batas: ${item.schedule.cutoffTime})` : status})</p>
                           <p className="text-slate-400">Jadwal Shift: {item.schedule.checkInTime} - {item.schedule.checkOutTime} WIB</p>
-                          {typeof attendance?.location?.distanceMeters === 'number' && !isNaN(attendance.location.distanceMeters) && <p className="text-slate-400">Geofence: {attendance.location.distanceMeters}m</p>}
+                          {typeof attendance?.location?.distanceMeters === 'number' && !isNaN(attendance.location.distanceMeters) && <p className="text-slate-400">Geofence: {(attendance.location.distanceMeters / 1000).toFixed(1)} km</p>}
                         </div>
                       </div>
                     )}
@@ -850,7 +850,7 @@ export const HrisTimelineChart: React.FC<HrisTimelineChartProps> = ({
                 <span className="text-slate-500">Radius & Geofence:</span>
                 <span className="font-mono-code font-semibold text-slate-800 flex items-center gap-1">
                   <MapPin className="w-3.5 h-3.5 text-[#FF6B00]" />
-                  {typeof selectedRecord.location.distanceMeters === 'number' && !isNaN(selectedRecord.location.distanceMeters) ? `${selectedRecord.location.distanceMeters}m` : '0m'} ({selectedRecord.location.inGeofence ? 'Area Resmi Valid' : 'Di Luar Geofence'})
+                  {typeof selectedRecord.location.distanceMeters === 'number' && !isNaN(selectedRecord.location.distanceMeters) ? `${(selectedRecord.location.distanceMeters / 1000).toFixed(1)} km` : '0.0 km'} ({selectedRecord.location.inGeofence ? 'Area Resmi Valid' : 'Di Luar Geofence'})
                 </span>
               </div>
 
