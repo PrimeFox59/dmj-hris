@@ -140,7 +140,7 @@ export function App() {
   const [dbInfo, setDbInfo] = useState<any>(null);
   const [workCalendar, setWorkCalendar] = useState<AnnualWorkCalendarConfig | null>(() => bootCache?.workCalendar || null);
 
-  // Active Tab - Default to URL query (?tab=...) or hash (#...) or 'dashboard'
+  // Active Tab - Default to Presensi Kamera ('attendance') upon app open or login
   const [activeTab, setActiveTab] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       const searchParams = new URLSearchParams(window.location.search);
@@ -149,7 +149,7 @@ export function App() {
       const hash = window.location.hash.replace('#', '');
       if (hash) return hash;
     }
-    return 'dashboard';
+    return 'attendance';
   });
   
   // Project Filter state for Payroll
@@ -361,11 +361,14 @@ export function App() {
     if (user.employee) {
       setCurrentUser(user.employee);
     }
-    const effectiveRole = getEffectiveSystemRole(user.employee || currentUser);
-    if (effectiveRole === 'staff') {
-      setActiveTab('attendance');
-    } else {
-      setActiveTab('dashboard');
+    // Sesuai instruksi Mr Prime: Saat aplikasi dibuka atau setelah login, langsung arahkan ke menu Presensi Kamera ('attendance')
+    setActiveTab('attendance');
+    if (typeof window !== 'undefined') {
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.set('tab', 'attendance');
+        window.history.replaceState({}, '', url.toString());
+      } catch (e) {}
     }
     const displayName = user.employee?.name || user.username;
     const displayNik = user.employee?.nik || 'NIK-SYSTEM';
@@ -410,7 +413,7 @@ export function App() {
     setImpersonatorUser(null);
     await api.logout();
     setAuthUser(null);
-    setActiveTab('dashboard');
+    setActiveTab('attendance');
   };
 
   // Load initial dataset directly from SQLite Database (only after authenticated or in kiosk mode)
