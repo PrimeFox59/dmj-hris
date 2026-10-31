@@ -20,9 +20,11 @@ export function formatSalaryDisplay(amount: number, isVisible: boolean = false):
 
 export interface EmployeeAuditOverride {
   customLatePenaltyAmount?: number;
+  customDailyRate?: number;
   presentDays?: number;
   leaveDays?: number;
   unpaidLeaveDays?: number;
+  alphaDays?: number;
   lateDays?: number;
   lateMinutes?: number;
   overtimeHours?: number;
@@ -68,9 +70,20 @@ export function calculateEmployeePayroll(
     ? auditOverride.unpaidLeaveDays 
     : (employee.unpaidLeaveDaysTotal || 0);
 
-  // Unpaid leave deduction: pro-rated deduction from base salary for unpaid leave / alpha
-  const dailyBaseSalary = Math.round(employee.baseSalary / Math.max(1, workingDays));
-  const unpaidLeaveDeduction = unpaidLeaveDays * dailyBaseSalary;
+  // Gaji Pokok Harian (Ditentukan Finance atau Otomatis Gaji Pokok / Hari Kerja)
+  const defaultDailyBase = Math.round(employee.baseSalary / Math.max(1, workingDays));
+  const dailyBaseSalary = (auditOverride?.customDailyRate !== undefined && auditOverride.customDailyRate > 0)
+    ? auditOverride.customDailyRate
+    : defaultDailyBase;
+
+  // Alpha / Mangkir (Hari Kerja - Hadir - Cuti)
+  const calculatedAlphaDays = Math.max(0, workingDays - presentDays - leaveDays - unpaidLeaveDays);
+  const alphaDays = auditOverride?.alphaDays !== undefined
+    ? auditOverride.alphaDays
+    : (initialPresentDays > 0 ? calculatedAlphaDays : 0);
+
+  const alphaDeduction = alphaDays * dailyBaseSalary;
+  const unpaidLeaveDeduction = (unpaidLeaveDays * dailyBaseSalary) + alphaDeduction;
 
   // Calculate unapproved late deductions
   const unapprovedLates = empAttendances.filter(a => a.isLate && a.approvalStatus !== 'APPROVED');
@@ -172,6 +185,9 @@ export function calculateEmployeePayroll(
     leaveDays,
     unpaidLeaveDays,
     unpaidLeaveDeduction,
+    alphaDays,
+    alphaDeduction,
+    dailyRate: dailyBaseSalary,
     hrValidationStatus: auditOverride?.validated ? 'VALIDATED_BY_HR' : 'PENDING_VALIDATION',
     validationNotes: auditOverride?.notes,
     baseSalary: employee.baseSalary,

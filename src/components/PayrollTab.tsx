@@ -27,7 +27,11 @@ import {
   Calculator,
   Check,
   Send,
-  Search
+  Search,
+  MoreVertical,
+  Lock,
+  Unlock,
+  FileText
 } from 'lucide-react';
 import { Employee, PayrollRecord, Project, SalaryRuleConfig, AttendanceRecord, SystemRole, getEffectiveSystemRole, AnnualWorkCalendarConfig, WorkPeriodItem } from '../types';
 import { api } from '../services/api';
@@ -180,8 +184,18 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
   const [auditFormWaiveLate, setAuditFormWaiveLate] = useState<boolean>(false);
   const [auditFormLateMode, setAuditFormLateMode] = useState<'AUTO' | 'MANUAL_RP' | 'WAIVED'>('AUTO');
   const [auditFormCustomLatePenalty, setAuditFormCustomLatePenalty] = useState<number>(0);
+  const [auditFormCustomDailyRate, setAuditFormCustomDailyRate] = useState<number>(0);
+  const [auditFormAlphaDays, setAuditFormAlphaDays] = useState<number>(0);
   const [auditFormOvertimeHours, setAuditFormOvertimeHours] = useState<number>(16);
   const [auditFormNotes, setAuditFormNotes] = useState<string>('');
+  const [activeActionMenu, setActiveActionMenu] = useState<string | null>(null);
+
+  // Close floating action menu on outside click
+  useEffect(() => {
+    const handleOutsideClick = () => setActiveActionMenu(null);
+    window.addEventListener('click', handleOutsideClick);
+    return () => window.removeEventListener('click', handleOutsideClick);
+  }, []);
 
   // Sync external project selection if prop changes
   useEffect(() => {
@@ -454,6 +468,10 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
     setAuditFormLateMinutes(existingOverride?.lateMinutes !== undefined ? existingOverride.lateMinutes : 0);
     setAuditFormWaiveLate(existingOverride?.isLatePenaltyWaived || false);
     setAuditFormOvertimeHours(existingOverride?.overtimeHours !== undefined ? existingOverride.overtimeHours : rec.overtimeHours);
+    const defaultDaily = Math.round(emp.baseSalary / customWorkingDays);
+    setAuditFormCustomDailyRate(existingOverride?.customDailyRate !== undefined ? existingOverride.customDailyRate : defaultDaily);
+    setAuditFormAlphaDays(existingOverride?.alphaDays !== undefined ? existingOverride.alphaDays : (rec.alphaDays || 0));
+    setAuditFormCustomLatePenalty(existingOverride?.customLatePenaltyAmount !== undefined ? existingOverride.customLatePenaltyAmount : (rec.unapprovedLateDeduction || 0));
     setAuditFormNotes(existingOverride?.notes || rec.validationNotes || '');
   };
 
@@ -465,6 +483,9 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
       presentDays: Number(auditFormPresentDays),
       leaveDays: Number(auditFormLeaveDays),
       unpaidLeaveDays: Number(auditFormUnpaidLeaveDays),
+      alphaDays: Number(auditFormAlphaDays),
+      customDailyRate: Number(auditFormCustomDailyRate) > 0 ? Number(auditFormCustomDailyRate) : undefined,
+      customLatePenaltyAmount: auditFormWaiveLate ? 0 : (auditFormLateMode === 'MANUAL_RP' ? Number(auditFormCustomLatePenalty) : undefined),
       lateDays: Number(auditFormLateDays),
       lateMinutes: Number(auditFormLateMinutes),
       isLatePenaltyWaived: auditFormWaiveLate,
@@ -835,86 +856,127 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
           </div>
         )}
 
-        {/* Bottom Row: Cutoff Date Range & Working Days (Compact & Inline) */}
+        {/* Bottom Row: Direct Monthly Work Calendar Selector & Cutoff Range */}
         {canManagePayroll && (
-          <div className="pt-3 border-t border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-3 text-xs">
-            {/* Cutoff Controls */}
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-1.5 text-slate-600 font-bold">
-                <Calendar className="w-3.5 h-3.5 text-[#FF6B00]" />
-                <span className="text-[11px] font-mono-code uppercase">Cutoff Rentang Hari Kerja:</span>
-              </div>
+          <div className="pt-3 border-t border-slate-100 space-y-2.5 text-xs">
+            {/* Pilihan Langsung 12 Bulan / Periode Sesuai Kalender Kerja Resmi */}
+            <div className="flex items-center gap-1 overflow-x-auto pb-1 no-scrollbar">
+              <span className="text-[10px] text-slate-400 font-mono-code uppercase font-bold shrink-0 mr-1 flex items-center gap-1">
+                <Calendar className="w-3 h-3 text-[#FF6B00]" />
+                Periode:
+              </span>
+              {(calendarPeriods.length > 0 ? calendarPeriods : Array.from({ length: 12 }, (_, i) => ({
+                periodId: `PER-2026-${String(i + 1).padStart(2, '0')}`,
+                monthIndex: i,
+                periodName: `Periode ${['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'][i]} 2026`,
+                startDate: i === 0 ? '2025-12-21' : `2026-${String(i).padStart(2, '0')}-21`,
+                endDate: `2026-${String(i + 1).padStart(2, '0')}-20`,
+                paydayDate: `2026-${String(i + 1).padStart(2, '0')}-25`,
+                attendanceOpen: i === 9,
+                payrollStatus: i < 9 ? 'CUTOFF_LOCKED' : (i === 9 ? 'OPEN' : 'DRAFT'),
+                effectiveWorkDays: i === 9 ? 25 : 22,
+                totalCalendarDays: 30,
+                weeklyOffDaysCount: 4,
+                holidaysCount: 1
+              }))).map((p: any) => {
+                const isSelected = p.periodName === selectedPeriod || currentPeriodObj?.periodId === p.periodId || (currentPeriodObj?.monthIndex === p.monthIndex && selectedPeriod.includes(p.periodName.replace('Periode ', '')));
+                const isOpen = p.attendanceOpen;
+                const isLocked = p.payrollStatus === 'CUTOFF_LOCKED' || (!isOpen && p.monthIndex < (currentPeriodObj?.monthIndex ?? 9));
+                const monthShort = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'][p.monthIndex];
 
-              <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1">
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={e => handleStartDateChange(e.target.value)}
-                  className="bg-transparent border-none text-xs font-bold text-slate-800 font-mono-code focus:outline-none cursor-pointer"
-                />
-                <span className="text-slate-400 font-mono-code">s/d</span>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={e => handleEndDateChange(e.target.value)}
-                  className="bg-transparent border-none text-xs font-bold text-slate-800 font-mono-code focus:outline-none cursor-pointer"
-                />
-              </div>
-
-              <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1">
-                <span className="text-[11px] text-slate-500 font-medium">Hari Kerja:</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={31}
-                  value={customWorkingDays}
-                  onChange={e => handleWorkingDaysChange(Number(e.target.value))}
-                  className="w-12 bg-white border border-slate-200 rounded-md px-1 py-0.5 text-xs font-black text-slate-900 font-mono-code text-center focus:outline-none focus:ring-1 focus:ring-[#FF6B00]"
-                />
-                <span className="text-[11px] text-slate-500 font-semibold">Hari</span>
-              </div>
+                return (
+                  <button
+                    key={p.periodId || p.monthIndex}
+                    type="button"
+                    onClick={() => handleSelectPeriod(p)}
+                    className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
+                      isSelected
+                        ? 'bg-slate-900 text-white shadow-sm ring-2 ring-[#FF6B00]'
+                        : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
+                    }`}
+                    title={`${p.periodName}: ${p.startDate} s/d ${p.endDate} (${p.effectiveWorkDays} Hari Kerja) • Status: ${isOpen ? 'DIBUKA (OPEN)' : (isLocked ? 'CUTOFF DITUTUP' : 'DRAF')}`}
+                  >
+                    <span className="font-mono-code font-bold">{monthShort}</span>
+                    <span className={`w-2 h-2 rounded-full ${isOpen ? 'bg-emerald-500 ring-2 ring-emerald-200' : (isLocked ? 'bg-slate-400' : 'bg-amber-400')}`} />
+                    <span className={`text-[10px] font-mono-code ${isSelected ? 'text-orange-300' : 'text-slate-400'}`}>
+                      {p.effectiveWorkDays}HK
+                    </span>
+                    {isLocked && <Lock className="w-2.5 h-2.5 text-slate-400" />}
+                  </button>
+                );
+              })}
             </div>
 
-            {/* Cutoff Quick Presets */}
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-[10px] text-slate-400 font-mono-code uppercase mr-1">Preset:</span>
-              {currentPeriodObj && (
+            {/* Cutoff Controls & Active Status Banner */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 pt-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1.5 text-slate-600 font-bold">
+                  <span className="text-[11px] font-mono-code uppercase">Cutoff Rentang:</span>
+                </div>
+
+                <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1">
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={e => handleStartDateChange(e.target.value)}
+                    className="bg-transparent border-none text-xs font-bold text-slate-800 font-mono-code focus:outline-none cursor-pointer"
+                  />
+                  <span className="text-slate-400 font-mono-code">s/d</span>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={e => handleEndDateChange(e.target.value)}
+                    className="bg-transparent border-none text-xs font-bold text-slate-800 font-mono-code focus:outline-none cursor-pointer"
+                  />
+                </div>
+
+                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1">
+                  <span className="text-[11px] text-slate-500 font-medium">Hari Kerja:</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={31}
+                    value={customWorkingDays}
+                    onChange={e => handleWorkingDaysChange(Number(e.target.value))}
+                    className="w-12 bg-white border border-slate-200 rounded-md px-1 py-0.5 text-xs font-black text-slate-900 font-mono-code text-center focus:outline-none focus:ring-1 focus:ring-[#FF6B00]"
+                  />
+                  <span className="text-[11px] text-slate-500 font-semibold">Hari</span>
+                </div>
+
+                {/* Period Status Indicator */}
+                {currentPeriodObj && (
+                  <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-bold font-mono-code border ${
+                    currentPeriodObj.attendanceOpen
+                      ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                      : 'bg-slate-100 text-slate-700 border-slate-200'
+                  }`}>
+                    <span className={`w-2 h-2 rounded-full ${currentPeriodObj.attendanceOpen ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
+                    {currentPeriodObj.attendanceOpen ? 'OPEN (PRESENSI AKTIF)' : 'CUTOFF DITUTUP'}
+                  </span>
+                )}
+              </div>
+
+              {/* Quick Actions */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {currentPeriodObj && (
+                  <button
+                    type="button"
+                    onClick={handleSyncFromCalendar}
+                    className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 transition-all cursor-pointer flex items-center gap-1"
+                    title="Sinkronkan dengan Kalender Kerja Tahunan"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    Reset Kalender ({currentPeriodObj.effectiveWorkDays} HK)
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={handleSyncFromCalendar}
-                  className={`px-2 py-0.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
-                    startDate === currentPeriodObj.startDate && endDate === currentPeriodObj.endDate && customWorkingDays === currentPeriodObj.effectiveWorkDays
-                      ? 'bg-emerald-600 text-white shadow-2xs'
-                      : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300'
-                  }`}
-                  title="Terapkan rentang tanggal & hari kerja resmi dari Kalender Tahunan"
+                  onClick={() => handleSetPresetCutoff('FULL_MONTH')}
+                  className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all cursor-pointer"
                 >
-                  <RotateCcw className="w-3 h-3" />
-                  Sesuai Kalender ({currentPeriodObj.effectiveWorkDays || customWorkingDays} Hari)
+                  Bulan Penuh (1-30)
                 </button>
-              )}
-              <button
-                type="button"
-                onClick={() => handleSetPresetCutoff('STANDARD')}
-                className={`px-2 py-0.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
-                  startDate === (currentPeriodObj?.startDate || '2026-09-21') && endDate === (currentPeriodObj?.endDate || '2026-10-20')
-                    ? 'bg-slate-900 text-white shadow-2xs'
-                    : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
-                }`}
-              >
-                Cutoff Kalender ({currentPeriodObj ? `${currentPeriodObj.startDate.slice(5)} s/d ${currentPeriodObj.endDate.slice(5)}` : 'Standar'})
-              </button>
-              <button
-                type="button"
-                onClick={() => handleSetPresetCutoff('FULL_MONTH')}
-                className={`px-2 py-0.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
-                  startDate.endsWith('-01')
-                    ? 'bg-slate-900 text-white shadow-2xs'
-                    : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
-                }`}
-              >
-                Bulan Penuh (01 - 30/31)
-              </button>
+              </div>
             </div>
           </div>
         )}
@@ -1621,21 +1683,33 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
               </div>
             </div>
 
-            {/* Quick Status Pill */}
-            <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200/80 mb-4 grid grid-cols-3 gap-2 text-xs">
+            {/* Quick Status Pill with Finance Daily Rate Adjustment */}
+            <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200/80 mb-4 grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
               <div>
-                <span className="text-[10px] text-slate-400 block font-mono-code">Gaji Pokok:</span>
-                <span className="font-bold text-slate-800 font-mono-code">{formatSalaryDisplay(auditingEmployee.employee.baseSalary, showPayrollNominal)}</span>
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-400 block font-mono-code">Rate Harian:</span>
-                <span className="font-bold text-slate-800 font-mono-code">
-                  {formatSalaryDisplay(Math.round(auditingEmployee.employee.baseSalary / customWorkingDays), showPayrollNominal)}/hari
+                <span className="text-[10px] text-slate-400 block font-mono-code">Gaji Pokok Karyawan:</span>
+                <span className="font-bold text-slate-800 font-mono-code text-sm">
+                  {formatSalaryDisplay(auditingEmployee.employee.baseSalary, showPayrollNominal)}
                 </span>
               </div>
               <div>
+                <label className="text-[10px] text-slate-500 block font-mono-code font-bold">
+                  Gaji Per Hari (Daily Rate Finance):
+                </label>
+                <div className="flex items-center gap-1 mt-0.5">
+                  <span className="font-mono-code text-slate-400 text-xs">Rp</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={auditFormCustomDailyRate}
+                    onChange={e => setAuditFormCustomDailyRate(Number(e.target.value))}
+                    className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 font-bold font-mono-code text-slate-900 text-xs focus:outline-none focus:ring-1 focus:ring-[#FF6B00]"
+                    title="Finance dapat menentukan tarif upah harian karyawan secara khusus atau menggunakan default (Gaji Pokok / Hari Kerja)"
+                  />
+                </div>
+              </div>
+              <div>
                 <span className="text-[10px] text-slate-400 block font-mono-code">Hari Kerja Periode:</span>
-                <span className="font-bold text-slate-800 font-mono-code">{customWorkingDays} Hari</span>
+                <span className="font-bold text-slate-800 font-mono-code text-sm">{customWorkingDays} Hari</span>
               </div>
             </div>
 
@@ -1674,7 +1748,7 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
 
                 <div>
                   <label className="block text-slate-700 font-bold mb-1">
-                    Cuti Unpaid / Mangkir:
+                    Cuti Unpaid (Izin):
                   </label>
                   <input
                     type="number"
@@ -1684,7 +1758,40 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                     onChange={e => setAuditFormUnpaidLeaveDays(Number(e.target.value))}
                     className="w-full bg-rose-50 border border-rose-300 rounded-xl px-3 py-1.5 font-bold font-mono-code text-rose-900 text-sm focus:outline-none focus:ring-2 focus:ring-rose-400"
                   />
-                  <span className="text-[9px] text-rose-600 mt-0.5 block">Memotong gaji pokok</span>
+                  <span className="text-[9px] text-rose-600 mt-0.5 block">Potong gaji harian</span>
+                </div>
+              </div>
+
+              {/* Input Alpha (Mangkir) & Potongan Rekap */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div className="p-2.5 rounded-xl bg-red-50/80 border border-red-200">
+                  <label className="block text-red-900 font-bold mb-1">
+                    Hari Alpha (Mangkir Tanpa Keterangan):
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={customWorkingDays}
+                    value={auditFormAlphaDays}
+                    onChange={e => setAuditFormAlphaDays(Number(e.target.value))}
+                    className="w-full bg-white border border-red-300 rounded-xl px-3 py-1.5 font-bold font-mono-code text-red-950 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
+                  />
+                  <span className="text-[9px] text-red-700 mt-0.5 block">
+                    Memotong gaji: -{formatSalaryDisplay(auditFormAlphaDays * (auditFormCustomDailyRate || Math.round(auditingEmployee.employee.baseSalary / customWorkingDays)), showPayrollNominal)}
+                  </span>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-center text-xs space-y-1">
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Total Hari Kerja:</span>
+                    <span className="font-mono-code font-bold">{customWorkingDays} Hari</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Total Potongan Kehadiran:</span>
+                    <span className="font-mono-code font-bold text-rose-600">
+                      -{formatSalaryDisplay((auditFormUnpaidLeaveDays + auditFormAlphaDays) * (auditFormCustomDailyRate || Math.round(auditingEmployee.employee.baseSalary / customWorkingDays)), showPayrollNominal)}
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -1715,7 +1822,7 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                   </label>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 pt-1">
+                <div className="grid grid-cols-3 gap-2 pt-1">
                   <div>
                     <label className="block text-[10px] text-slate-500 mb-0.5">Frekuensi Terlambat (Kali):</label>
                     <input
@@ -1734,6 +1841,20 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                       value={auditFormLateMinutes}
                       onChange={e => setAuditFormLateMinutes(Number(e.target.value))}
                       className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 font-bold font-mono-code text-slate-800"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-500 mb-0.5">Nominal Denda (Finance):</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={auditFormCustomLatePenalty}
+                      onChange={e => {
+                        setAuditFormCustomLatePenalty(Number(e.target.value));
+                        setAuditFormLateMode('MANUAL_RP');
+                      }}
+                      className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 font-bold font-mono-code text-rose-600"
+                      placeholder="Rp..."
                     />
                   </div>
                 </div>

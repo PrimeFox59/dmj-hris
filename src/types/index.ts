@@ -374,6 +374,10 @@ export interface PayrollRecord {
   leaveDays: number;
   unpaidLeaveDays: number;
   unpaidLeaveDeduction: number;
+  alphaDays?: number;
+  alphaDeduction?: number;
+  dailyRate?: number;
+  customLatePenaltyAmount?: number;
   hrValidationStatus: 'PENDING_VALIDATION' | 'VALIDATED_BY_HR' | 'SUBMITTED_TO_FINANCE' | 'PROCESSED_BY_FINANCE';
   validatedBy?: string;
   validatedAt?: string;
