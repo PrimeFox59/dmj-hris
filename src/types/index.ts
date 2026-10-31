@@ -70,28 +70,66 @@ export function getEffectiveSystemRole(emp?: { role?: UserRole | string; systemR
   return 'staff';
 }
 
-export function isProjectManager(emp?: { role?: UserRole | string; systemRole?: SystemRole | string; position?: string; department?: string } | null): boolean {
+export function isProjectManager(
+  emp?: { role?: UserRole | string; systemRole?: SystemRole | string; position?: string; department?: string; id?: string; name?: string } | null,
+  projects?: Array<{ projectManagerId?: string; projectManagerName?: string }>
+): boolean {
   if (!emp) return false;
   const pos = (emp.position || '').toUpperCase();
   const roleStr = String(emp.role || '').toUpperCase();
-  return (
+  const sysRoleStr = String(emp.systemRole || '').toLowerCase();
+
+  // 1. Direct role check
+  if (
+    roleStr === 'PROJECT_MANAGER' || 
+    roleStr.includes('PM') || 
+    roleStr.includes('PROJECT MANAGER') ||
+    roleStr === 'MANAGER' ||
+    sysRoleStr === 'pm'
+  ) {
+    return true;
+  }
+
+  // 2. Position heuristics (PM, Project Manager, Site Manager, Manager, Management, Kepala Proyek, Site Engineer)
+  if (
     pos.includes('PROJECT MANAGER') || 
     pos.includes('SITE MANAGER') || 
+    pos.includes('KEPALA PROYEK') ||
+    pos.includes('KA. PROYEK') ||
     pos === 'PM' || 
     pos.startsWith('PM ') || 
     pos.includes(' PM') ||
-    roleStr === 'PROJECT_MANAGER'
-  );
+    pos.includes('SITE ENG') ||
+    pos.includes('MANAGER') ||
+    pos.includes('MANAGEMENT')
+  ) {
+    return true;
+  }
+
+  // 3. Project assignment check (emp is assigned as Leader/PM on any project)
+  if (projects && Array.isArray(projects)) {
+    const isAssigned = projects.some(p => 
+      (emp.id && p.projectManagerId === emp.id) ||
+      (emp.name && p.projectManagerName && p.projectManagerName.toLowerCase().trim() === emp.name.toLowerCase().trim())
+    );
+    if (isAssigned) return true;
+  }
+
+  return false;
 }
 
-export function canAccessProjectModule(emp?: { role?: UserRole | string; systemRole?: SystemRole | string; position?: string; department?: string; id?: string } | null): boolean {
+export function canAccessProjectModule(
+  emp?: { role?: UserRole | string; systemRole?: SystemRole | string; position?: string; department?: string; id?: string; name?: string } | null,
+  projects?: Array<{ projectManagerId?: string; projectManagerName?: string }>
+): boolean {
   if (!emp) return false;
   const sysRole = getEffectiveSystemRole(emp);
   const isHR = sysRole === 'hr' || sysRole === 'admin' || emp.role === 'HR_Manager';
   const isFinance = sysRole === 'finance' || emp.role === 'Finance';
   const isSuper = sysRole === 'superuser' || emp.role === 'Director';
-  // Modul proyek HANYA untuk Finance, HR, dan Superuser (Direksi)
-  return isFinance || isHR || isSuper;
+  const isPM = isProjectManager(emp, projects);
+  // Akses modul proyek terbuka untuk Finance, HR, Superuser, dan Project Manager (PM)
+  return isFinance || isHR || isSuper || isPM;
 }
 
 export type AttendanceMode = 'WFO' | 'DINAS_LUAR' | 'WFH';
@@ -344,6 +382,7 @@ export interface Project {
   hourlyRateMultiplier: number;
   description?: string;
   projectManagerId?: string;
+  projectManagerName?: string;
   assignedEmployeeIds?: string[];
   customRules?: ProjectCustomRules;
 }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, Clock, Sparkles, Users, ChevronDown, CheckCircle2, Award, ArrowRight, Database, Crown, UserCheck, Lock, Bell, AlertTriangle, X, MapPin, ShieldCheck, Zap, LogOut, Camera, KeyRound, User, Banknote, Search, MessageSquare } from 'lucide-react';
-import { Employee, UserRole, SystemRole, getEffectiveSystemRole, AuthUser } from '../types';
+import { Shield, Clock, Sparkles, Users, ChevronDown, CheckCircle2, Award, ArrowRight, Database, Crown, UserCheck, Lock, Bell, AlertTriangle, X, MapPin, ShieldCheck, Zap, LogOut, Camera, KeyRound, User, Banknote, Search, MessageSquare, Briefcase } from 'lucide-react';
+import { Employee, UserRole, SystemRole, getEffectiveSystemRole, AuthUser, Project, isProjectManager } from '../types';
 import { rtcService } from '../services/rtcService';
 import { ProfileSettingsModal, ProfileTabId } from './ProfileSettingsModal';
 
@@ -25,6 +25,7 @@ interface NavbarProps {
   isOfficeNetwork?: boolean;
   impersonatorUser?: Employee | null;
   onExitImpersonation?: () => void;
+  projects?: Project[];
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -47,8 +48,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   realDetectedCity = 'Sidoarjo',
   isOfficeNetwork = true,
   impersonatorUser,
-  onExitImpersonation
+  onExitImpersonation,
+  projects = []
 }) => {
+  const isUserPm = isProjectManager(currentUser, projects);
   const [impersonateSearch, setImpersonateSearch] = useState('');
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
@@ -177,6 +180,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <span className="text-[10px] text-blue-600 font-bold flex items-center gap-1 font-mono-code">
                     <Shield className="w-2.5 h-2.5 text-blue-600" />
                     HR
+                  </span>
+                ) : isUserPm ? (
+                  <span className="text-[10px] text-amber-600 font-bold flex items-center gap-1 font-mono-code">
+                    <Briefcase className="w-2.5 h-2.5 text-amber-600" />
+                    PROJECT MANAGER
                   </span>
                 ) : (
                   <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1 font-mono-code">

@@ -1246,7 +1246,8 @@ export function App() {
 
   const userSystemRole = getEffectiveSystemRole(currentUser);
   const isStaffUser = userSystemRole === 'staff';
-  const canAccessProjects = canAccessProjectModule(currentUser);
+  const isUserPm = isProjectManager(currentUser, projects);
+  const canAccessProjects = canAccessProjectModule(currentUser, projects);
   const effectiveNotificationCount = isStaffUser
     ? approvals.filter(a => a.employeeId === currentUser.id && (a.status === 'PENDING' || a.status === 'REVISION_REQUESTED' || a.status === 'REJECTED')).length
     : pendingApprovalsCount;
@@ -1350,6 +1351,7 @@ export function App() {
         profileModalInitialTabControlled={profileModalInitialTab}
         impersonatorUser={impersonatorUser}
         onExitImpersonation={handleExitImpersonation}
+        projects={projects}
       />
 
       {/* Floating Pill Sidebar Dock (Desktop) */}
@@ -1360,6 +1362,7 @@ export function App() {
         systemRole={userSystemRole}
         currentUser={currentUser}
         pendingApprovalsCount={effectiveNotificationCount}
+        projects={projects}
       />
 
       {/* Mobile Bottom Navigation Dock (Screens < 768px) */}
@@ -1374,15 +1377,20 @@ export function App() {
         onLogout={handleLogout}
         realDetectedIp={realDetectedIp}
         isOfficeNetwork={isOfficeNetwork}
+        projects={projects}
       />
 
       {/* Mobile Navigation Tabs (Screens < 768px) */}
       <div className="md:hidden sticky top-16 z-30 bg-white/90 backdrop-blur-md border-b border-slate-200 px-3 py-2 flex items-center gap-2 overflow-x-auto no-print">
         {(userSystemRole === 'staff'
           ? [
-              { id: 'dashboard', label: 'Kinerja Saya' },
+              { id: 'dashboard', label: isUserPm ? 'Kinerja & Proyek' : 'Kinerja Saya' },
               { id: 'attendance', label: 'Presensi Kamera' },
-              { id: 'approvals', label: 'Pengajuan' },
+              ...(isUserPm ? [
+                { id: 'projects', label: 'Proyek & Site' },
+                { id: 'casual_attendance', label: 'Presensi Tukang' }
+              ] : []),
+              { id: 'approvals', label: isUserPm ? 'Approval Proyek' : 'Pengajuan' },
               { id: 'payroll', label: 'Slip Gaji' },
               { id: 'users', label: 'Profil Saya' }
             ]

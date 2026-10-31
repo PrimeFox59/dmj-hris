@@ -24,7 +24,7 @@ import {
   KeyRound,
   HardHat
 } from 'lucide-react';
-import { Employee, getEffectiveSystemRole, SystemRole, canAccessProjectModule, isProjectManager } from '../types';
+import { Employee, getEffectiveSystemRole, SystemRole, canAccessProjectModule, isProjectManager, Project } from '../types';
 import { ProfileTabId } from './ProfileSettingsModal';
 
 interface MobileBottomNavProps {
@@ -38,6 +38,7 @@ interface MobileBottomNavProps {
   onLogout?: () => void;
   realDetectedIp?: string;
   isOfficeNetwork?: boolean;
+  projects?: Project[];
 }
 
 export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
@@ -50,13 +51,15 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   onStartTour,
   onLogout,
   realDetectedIp = '103.31.205.218',
-  isOfficeNetwork = true
+  isOfficeNetwork = true,
+  projects = []
 }) => {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const currentRole: SystemRole = getEffectiveSystemRole(currentUser);
   const isStaff = currentRole === 'staff';
   const isFinanceOrSuper = currentRole === 'finance' || currentRole === 'superuser';
-  const canViewProjects = canAccessProjectModule(currentUser);
+  const isUserPm = isProjectManager(currentUser, projects);
+  const canViewProjects = canAccessProjectModule(currentUser, projects);
 
   const isDashboardActive = ['dashboard', 'dashboard_hris', 'dashboard_finance', 'user_performance'].includes(activeTab);
   const isAttendanceActive = activeTab === 'attendance';

@@ -112,7 +112,7 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
     if (initialProjectId) {
       const targetProj = projects.find(p => p.id === initialProjectId);
       if (targetProj) {
-        const isPm = targetProj.projectManagerId === currentUser.id;
+        const isPm = targetProj.projectManagerId === currentUser.id || Boolean(targetProj.projectManagerName && currentUser.name && targetProj.projectManagerName.toLowerCase().trim() === currentUser.name.toLowerCase().trim());
         if (canManage || isPm) {
           handleOpenEdit(targetProj, 'schedule');
         }
@@ -257,13 +257,25 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
       return;
     }
 
+    const pmPerson = editingProject.projectManagerId ? employees.find(e => e.id === editingProject.projectManagerId) : null;
     const updatedProject: Project = {
       ...editingProject,
+      projectManagerName: pmPerson ? pmPerson.name : editingProject.projectManagerName,
       assignedEmployeeIds: stagedAssignedEmployeeIds
     };
 
     // Prepare list of employees whose assignedProjectId changed
     const updatedEmployeesList: Employee[] = [];
+
+    // Ensure the assigned Project Manager is updated to have role = 'Project_Manager'
+    if (updatedProject.projectManagerId) {
+      const pmEmp = employees.find(e => e.id === updatedProject.projectManagerId);
+      if (pmEmp && pmEmp.role !== 'Project_Manager') {
+        const updatedPm: Employee = { ...pmEmp, role: 'Project_Manager', assignedProjectId: updatedProject.id };
+        updatedEmployeesList.push(updatedPm);
+        if (onUpdateEmployee) onUpdateEmployee(updatedPm);
+      }
+    }
 
     // 1. Employees added to this project
     stagedAssignedEmployeeIds.forEach(empId => {
@@ -579,7 +591,7 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
             const hasGeofence = proj.customRules?.geofence?.enabled;
 
             // Project Manager (PM) Resolution for This Specific Project
-            const isPmOfThisProject = proj.projectManagerId === currentUser.id;
+            const isPmOfThisProject = proj.projectManagerId === currentUser.id || Boolean(proj.projectManagerName && currentUser.name && proj.projectManagerName.toLowerCase().trim() === currentUser.name.toLowerCase().trim());
             const canViewFinancialsThisProject = canViewFinancials || isPmOfThisProject;
             const canManageThisProject = canManage || isPmOfThisProject;
             const pmEmployee = proj.projectManagerId ? employees.find(e => e.id === proj.projectManagerId) : null;

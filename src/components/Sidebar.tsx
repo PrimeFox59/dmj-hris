@@ -19,7 +19,7 @@ import {
   CalendarDays,
   HardHat
 } from 'lucide-react';
-import { UserRole, SystemRole, Employee, canAccessProjectModule, isProjectManager } from '../types';
+import { UserRole, SystemRole, Employee, canAccessProjectModule, isProjectManager, Project } from '../types';
 
 interface SidebarProps {
   activeTab: string;
@@ -28,6 +28,7 @@ interface SidebarProps {
   systemRole?: SystemRole;
   currentUser?: Employee;
   pendingApprovalsCount: number;
+  projects?: Project[];
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -36,11 +37,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   userRole,
   systemRole = 'staff',
   currentUser,
-  pendingApprovalsCount
+  pendingApprovalsCount,
+  projects = []
 }) => {
   const [hoveredTab, setHoveredTab] = useState<string | null>(null);
 
-  const canViewProjects = canAccessProjectModule(currentUser);
+  const isUserPm = isProjectManager(currentUser, projects);
+  const canViewProjects = canAccessProjectModule(currentUser, projects);
 
   // Build tailored menus based on RBAC role
   const getMenuItems = () => {
@@ -48,8 +51,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
       const staffItems = [
         {
           id: 'dashboard',
-          title: 'PORTAL KINERJA SAYA',
-          desc: 'Ringkasan kehadiran pribadi, sisa cuti tahunan, slip gaji & performa kerja Anda',
+          title: isUserPm ? 'PORTAL KINERJA & PROYEK' : 'PORTAL KINERJA SAYA',
+          desc: isUserPm ? 'Monitoring kehadiran proyek, staf binaan, dan performa kerja Anda' : 'Ringkasan kehadiran pribadi, sisa cuti tahunan, slip gaji & performa kerja Anda',
           icon: LayoutDashboard,
           badge: null
         },
@@ -62,8 +65,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         },
         {
           id: 'approvals',
-          title: 'PENGAJUAN & IZIN SAYA',
-          desc: 'Formulir & riwayat pengajuan cuti, izin sakit & dispensasi kehadiran',
+          title: isUserPm ? 'PUSAT APPROVAL PROYEK' : 'PENGAJUAN & IZIN SAYA',
+          desc: isUserPm ? 'Otorisasi berjenjang pengajuan izin, cuti, koreksi absensi & keterlambatan staf proyek' : 'Formulir & riwayat pengajuan cuti, izin sakit & dispensasi kehadiran',
           icon: CheckSquare,
           badge: pendingApprovalsCount > 0 ? pendingApprovalsCount : null
         },
@@ -84,10 +87,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
         badge: null
       });
 
-
-      // Project Manager / Site Manager: Presensi Tukang Lapangan
-      if (isProjectManager(currentUser)) {
+      // Project Manager / Site Manager: Presensi Tukang Lapangan & Manajemen Proyek
+      if (isUserPm) {
         staffItems.splice(2, 0, {
+          id: 'projects',
+          title: 'MANAJEMEN PROYEK & SITE',
+          desc: 'Alokasi personel, jam kerja site, roster kerja & aturan cuti proyek',
+          icon: Briefcase,
+          badge: null
+        });
+        staffItems.splice(3, 0, {
           id: 'casual_attendance',
           title: 'PRESENSI TUKANG LAPANGAN',
           desc: 'Presensi cepat harian & foto tukang/pekerja harian lepas di lokasi proyek',
