@@ -1636,17 +1636,9 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                 )}
               </div>
 
-              {/* Shutter / Retake Controls */}
-              <div className="flex items-center justify-between gap-2 px-1">
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleFileUpload}
-                  accept="image/*"
-                  className="hidden"
-                />
-
-                {capturedPhoto ? (
+              {/* Retake Control (Hanya tampil jika foto telah terambil) */}
+              {capturedPhoto && (
+                <div className="px-1">
                   <button
                     type="button"
                     onClick={retakePhoto}
@@ -1655,29 +1647,8 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                     <RefreshCw className="w-3.5 h-3.5 text-[#FF6B00]" />
                     <span>Ambil Foto Ulang</span>
                   </button>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
-                      title="Upload foto dari galeri"
-                    >
-                      <Upload className="w-3.5 h-3.5" />
-                      <span className="text-[11px]">Upload</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={capturePhoto}
-                      className="flex-1 py-2 px-4 rounded-xl bg-[#FF6B00] hover:bg-[#e56000] text-white text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-sm cursor-pointer active:scale-98"
-                    >
-                      <Camera className="w-4 h-4" />
-                      <span>Jepret Foto Sekarang</span>
-                    </button>
-                  </>
-                )}
-              </div>
+                </div>
+              )}
             </div>
 
             {/* Live GPS Coordinates Status Banner */}
