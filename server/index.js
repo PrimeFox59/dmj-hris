@@ -441,7 +441,12 @@ const server = http.createServer(async (req, res) => {
       // 0. Auth Routes
       if (cleanUrl === '/api/auth/login' && method === 'POST') {
         const body = await readBody();
-        const result = authenticateUser(body.identifier || body.username || body.email, body.password);
+        const clientIp = req.headers['cf-connecting-ip'] || 
+                         req.headers['x-real-ip'] || 
+                         (req.headers['x-forwarded-for'] ? req.headers['x-forwarded-for'].split(',')[0].trim() : null) || 
+                         req.socket.remoteAddress || 
+                         '127.0.0.1';
+        const result = authenticateUser(body.identifier || body.username || body.email, body.password, clientIp);
         if (!result.success) {
           return sendJson(401, result);
         }
@@ -672,6 +677,27 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (cleanUrl === '/api/auth/logout' && method === 'POST') {
+        const token = getAuthToken();
+        const user = getCurrentUserFromToken(token);
+        const clientIp = req.headers['cf-connecting-ip'] || 
+                         req.headers['x-real-ip'] || 
+                         (req.headers['x-forwarded-for'] ? req.headers['x-forwarded-for'].split(',')[0].trim() : null) || 
+                         req.socket.remoteAddress || 
+                         '127.0.0.1';
+        if (user) {
+          addAuditLog({
+            action: 'AUTH_LOGOUT',
+            entity: 'user_accounts',
+            entityId: user.id,
+            userName: user.employee?.name || user.username,
+            userNik: user.employee?.nik,
+            userRole: user.systemRole,
+            module: 'AUTH',
+            ipAddress: clientIp,
+            status: 'SUCCESS',
+            details: `Pengguna ${user.employee?.name || user.username} (${user.role} / ${user.systemRole}) keluar dari sistem PRIME HRIS.`
+          });
+        }
         return sendJson(200, { success: true, message: 'Berhasil logout' });
       }
 
@@ -1222,9 +1248,11 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (cleanUrl.match(/^\/api\/casual-attendances\/([^\/]+)$/) && method === 'DELETE') {
+        const token = getAuthToken();
+        const user = getCurrentUserFromToken(token);
         const match = cleanUrl.match(/^\/api\/casual-attendances\/([^\/]+)$/);
         const id = match ? match[1] : null;
-        deleteCasualAttendance(id);
+        deleteCasualAttendance(id, user);
         broadcastRealtimeEvent('CASUAL_ATTENDANCE_DELETED', { id });
         return sendJson(200, { success: true, message: 'Presensi tukang berhasil dihapus' });
       }
@@ -1306,6 +1334,18 @@ const server = http.createServer(async (req, res) => {
           recipientName: body.recipientName || user.name || 'Tester',
           force: Boolean(body.force)
         });
+
+        addAuditLog({
+          action: 'WA_TEST_SENT',
+          entity: 'notifications_wa',
+          entityId: body.phone,
+          userName: user?.name || user?.username || 'Admin HR',
+          userRole: user?.systemRole || 'admin',
+          module: 'SYSTEM',
+          status: resWa.success ? 'SUCCESS' : 'WARNING',
+          details: `Uji coba pesan WhatsApp ke ${body.phone} (${body.recipientName || 'Penerima'}): ${resWa.success ? 'Berhasil Terkirim' : 'Gagal'}.`
+        });
+
         return sendJson(resWa.success ? 200 : 500, resWa);
       }
 
@@ -1317,6 +1357,18 @@ const server = http.createServer(async (req, res) => {
         }
         const body = await readBody();
         const result = await blastUnrecordedEmployees(body.date);
+
+        addAuditLog({
+          action: 'WA_BLAST_REMINDER',
+          entity: 'notifications_wa',
+          entityId: body.date || 'today',
+          userName: user?.name || user?.username || 'Admin HR',
+          userRole: user?.systemRole || 'admin',
+          module: 'SYSTEM',
+          status: 'SUCCESS',
+          details: `Blast WhatsApp pengingat presensi untuk tanggal ${body.date || 'hari ini'} selesai. Terkirim: ${result.sentCount || 0}, Gagal: ${result.failedCount || 0}.`
+        });
+
         return sendJson(200, { success: true, ...result });
       }
 
@@ -1381,6 +1433,18 @@ const server = http.createServer(async (req, res) => {
           return sendJson(400, { success: false, error: 'Alamat email penerima uji coba wajib diisi' });
         }
         const resTest = await sendTestEmail(targetEmail, body.customConfig || null);
+
+        addAuditLog({
+          action: 'EMAIL_TEST_SENT',
+          entity: 'notifications_email',
+          entityId: targetEmail,
+          userName: user?.name || user?.username || 'Admin HR',
+          userRole: user?.systemRole || 'admin',
+          module: 'SYSTEM',
+          status: resTest.success ? 'SUCCESS' : 'WARNING',
+          details: `Uji coba kirim email SMTP ke ${targetEmail}: ${resTest.success ? 'Berhasil Terkirim' : 'Gagal'}.`
+        });
+
         return sendJson(resTest.success ? 200 : 500, resTest);
       }
 
@@ -1399,12 +1463,36 @@ const server = http.createServer(async (req, res) => {
         }
         const body = await readBody();
         const result = await blastUnrecordedEmployeesEmail(body.date);
+
+        addAuditLog({
+          action: 'EMAIL_BLAST_REMINDER',
+          entity: 'notifications_email',
+          entityId: body.date || 'today',
+          userName: user?.name || user?.username || 'Admin HR',
+          userRole: user?.systemRole || 'admin',
+          module: 'SYSTEM',
+          status: 'SUCCESS',
+          details: `Blast email pengingat presensi untuk tanggal ${body.date || 'hari ini'} selesai. Terkirim: ${result.sentCount || 0}, Gagal: ${result.failedCount || 0}.`
+        });
+
         return sendJson(200, { success: true, ...result });
       }
 
       // 12. Reset Database with Broadcast
       if (cleanUrl === '/api/reset' && method === 'POST') {
+        const token = getAuthToken();
+        const user = getCurrentUserFromToken(token);
         const result = resetDatabase();
+        addAuditLog({
+          action: 'DATABASE_RESET',
+          entity: 'SYSTEM',
+          entityId: 'all_tables',
+          userName: user?.name || user?.username || 'Superuser',
+          userRole: user?.systemRole || 'superuser',
+          module: 'SYSTEM',
+          status: 'WARNING',
+          details: 'Seluruh basis data sistem PRIME HRIS di-reset ke konfigurasi awal pabrik oleh Superuser.'
+        });
         broadcastRealtimeEvent('DATABASE_RESET', {});
         return sendJson(200, { success: true, ...result });
       }

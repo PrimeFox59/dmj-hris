@@ -523,6 +523,20 @@ export interface AuditLogItem {
   metadata?: string;
 }
 
+export interface AuditLogStats {
+  total: number;
+  auth: number;
+  attendance: number;
+  approvals: number;
+  employees: number;
+  projects: number;
+  payroll: number;
+  rules: number;
+  success: number;
+  warning: number;
+  danger: number;
+}
+
 export interface PaginatedAuditLogs {
   logs: AuditLogItem[];
   pagination: {
@@ -532,6 +546,7 @@ export interface PaginatedAuditLogs {
     totalPages: number;
     hasMore: boolean;
   };
+  stats?: AuditLogStats;
 }
 
 export interface WorkPeriodItem {

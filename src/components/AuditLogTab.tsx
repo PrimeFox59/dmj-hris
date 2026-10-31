@@ -23,7 +23,7 @@ import {
   Eye,
   X
 } from 'lucide-react';
-import { AuditLogItem, AuditModule, AuditStatus, Employee } from '../types';
+import { AuditLogItem, AuditModule, AuditStatus, Employee, AuditLogStats } from '../types';
 import { api } from '../services/api';
 import { rtcService } from '../services/rtcService';
 
@@ -81,6 +81,9 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
   // Selected Log for Deep Inspection Modal
   const [selectedLog, setSelectedLog] = useState<AuditLogItem | null>(null);
 
+  // Global aggregate stats across all database records
+  const [auditStats, setAuditStats] = useState<AuditLogStats | null>(null);
+
   // Sentinel ref for infinite scroll
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -104,6 +107,9 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
       setTotalRows(res.pagination?.totalRows || 0);
       setTotalPages(res.pagination?.totalPages || 1);
       setHasMore(res.pagination?.hasMore ?? false);
+      if (res.stats) {
+        setAuditStats(res.stats);
+      }
       setLastRefreshed(new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' WIB');
     } catch (err) {
       console.error('Failed to fetch initial audit logs', err);
@@ -135,6 +141,9 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
         setTotalRows(res.pagination?.totalRows || 0);
         setTotalPages(res.pagination?.totalPages || 1);
         setHasMore(res.pagination?.hasMore ?? false);
+        if (res.stats) {
+          setAuditStats(res.stats);
+        }
       } else {
         setHasMore(false);
       }
@@ -257,16 +266,25 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
   const getModuleBadge = (mod: string) => {
     switch (mod) {
       case 'AUTH':
+      case 'AUTH_BIOMETRIC':
+      case 'AUTH_SECURITY':
         return <span className="px-2 py-0.5 rounded-md text-[9.5px] font-black uppercase font-mono-code bg-purple-100 text-purple-700 border border-purple-200">Auth & Keamanan</span>;
       case 'ATTENDANCE':
-        return <span className="px-2 py-0.5 rounded-md text-[9.5px] font-black uppercase font-mono-code bg-blue-100 text-blue-700 border border-blue-200">Presensi Cerdas</span>;
+      case 'ATTENDANCE_KIOSK':
+      case 'CASUAL_ATTENDANCE':
+        return <span className="px-2 py-0.5 rounded-md text-[9.5px] font-black uppercase font-mono-code bg-blue-100 text-blue-700 border border-blue-200">Presensi & Lokasi</span>;
+      case 'APPROVAL':
       case 'APPROVALS':
         return <span className="px-2 py-0.5 rounded-md text-[9.5px] font-black uppercase font-mono-code bg-teal-100 text-teal-700 border border-teal-200">Pusat Approval</span>;
       case 'EMPLOYEES':
+      case 'BIOMETRIC':
         return <span className="px-2 py-0.5 rounded-md text-[9.5px] font-black uppercase font-mono-code bg-cyan-100 text-cyan-700 border border-cyan-200">Master SDM</span>;
+      case 'PROJECTS':
+        return <span className="px-2 py-0.5 rounded-md text-[9.5px] font-black uppercase font-mono-code bg-indigo-100 text-indigo-700 border border-indigo-200">Proyek & Geofence</span>;
       case 'PAYROLL':
         return <span className="px-2 py-0.5 rounded-md text-[9.5px] font-black uppercase font-mono-code bg-emerald-100 text-emerald-700 border border-emerald-200">Payroll & Biaya</span>;
       case 'HR_RULES':
+      case 'HRIS_CALENDAR':
         return <span className="px-2 py-0.5 rounded-md text-[9.5px] font-black uppercase font-mono-code bg-orange-100 text-[#FF6B00] border border-orange-200">Kebijakan HR</span>;
       case 'SYSTEM':
       default:
@@ -335,7 +353,7 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
               Total Log Tercatat
             </span>
             <div className="text-xl sm:text-2xl font-black text-slate-900 font-mono-code mt-0.5">
-              {totalRows}
+              {auditStats ? auditStats.total : totalRows}
             </div>
             <span className="text-[10px] text-slate-500 font-mono-code">
               Dimuat: {logs.length} data
@@ -347,7 +365,7 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
               Sesi Auth & Login
             </span>
             <div className="text-xl sm:text-2xl font-black text-purple-950 font-mono-code mt-0.5">
-              {totalAuthCount}
+              {auditStats ? auditStats.auth : totalAuthCount}
             </div>
             <span className="text-[10px] text-purple-600 font-mono-code">
               Zero-Trust Gate
@@ -359,7 +377,7 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
               Presensi & Geofence
             </span>
             <div className="text-xl sm:text-2xl font-black text-blue-950 font-mono-code mt-0.5">
-              {totalAttCount}
+              {auditStats ? auditStats.attendance : totalAttCount}
             </div>
             <span className="text-[10px] text-blue-600 font-mono-code">
               Audit Watermark
@@ -371,7 +389,7 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
               Disposisi Approval
             </span>
             <div className="text-xl sm:text-2xl font-black text-emerald-950 font-mono-code mt-0.5">
-              {totalApprCount}
+              {auditStats ? auditStats.approvals : totalApprCount}
             </div>
             <span className="text-[10px] text-emerald-700 font-mono-code">
               Cuti & Lembur
@@ -417,6 +435,7 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
               <option value="ATTENDANCE">📸 Presensi & Biometrik</option>
               <option value="APPROVALS">🛡️ Pusat Approval</option>
               <option value="EMPLOYEES">👥 Master Data SDM</option>
+              <option value="PROJECTS">🏗️ Manajemen Proyek</option>
               <option value="PAYROLL">💰 Payroll & Penggajian</option>
               <option value="HR_RULES">⚙️ Kebijakan & Geofence</option>
               <option value="SYSTEM">🖥️ Sistem & Basis Data</option>

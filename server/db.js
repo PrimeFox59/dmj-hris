@@ -777,8 +777,13 @@ export function saveAttendance(record) {
     }
   }
 
+  const isCheckOut = attType === 'CHECK_OUT' || Boolean(record.checkOutTime && !record.checkInTime);
+  const attAction = isCheckOut
+    ? (record.mode === 'DINAS_LUAR' ? 'CHECKOUT_DINAS_LUAR' : 'CHECKOUT_PULANG')
+    : (record.mode === 'DINAS_LUAR' ? 'CHECKIN_DINAS_LUAR' : 'CHECKIN_WFO');
+
   addAuditLog({
-    action: record.mode === 'DINAS_LUAR' ? 'CHECKIN_DINAS_LUAR' : 'CHECKIN_WFO',
+    action: attAction,
     entity: 'attendances',
     entityId: record.id,
     userName: record.employeeName,
@@ -786,11 +791,14 @@ export function saveAttendance(record) {
     userRole: 'staff',
     module: 'ATTENDANCE',
     ipAddress: record.ipAddress || '103.31.205.218',
-    status: record.isLate ? 'WARNING' : 'SUCCESS',
-    details: `Presensi ${record.mode} ${record.employeeName} (${record.employeeNik}) berhasil dicatat. Status: ${record.status}, Terlambat: ${record.lateMinutes} menit.`,
+    status: record.isLate && !isCheckOut ? 'WARNING' : 'SUCCESS',
+    details: isCheckOut
+      ? `Presensi Pulang (Check-Out) ${record.mode} ${record.employeeName} (${record.employeeNik}) berhasil dicatat pada ${finalCheckOut}.`
+      : `Presensi Masuk (Check-In) ${record.mode} ${record.employeeName} (${record.employeeNik}) berhasil dicatat. Status: ${record.status}, Terlambat: ${record.lateMinutes} menit.`,
     metadata: {
       location: record.location,
       checkInTime: record.checkInTime,
+      checkOutTime: record.checkOutTime,
       networkAudit: record.networkAudit,
       hasPhoto: Boolean(record.photoUrl)
     }
@@ -998,8 +1006,16 @@ export function updateApproval(id, status, reviewNote, reviewedBy = 'Direksi / H
     }
   }
 
-  db.prepare('INSERT INTO audit_logs (action, entity, entityId, details) VALUES (?, ?, ?, ?);')
-    .run('UPDATE_APPROVAL', 'approvals', id, `Approval ${id} diubah ke ${status} oleh ${reviewedBy}`);
+  addAuditLog({
+    action: status === 'APPROVED' ? 'APPROVAL_APPROVED' : status === 'REJECTED' ? 'APPROVAL_REJECTED' : 'UPDATE_APPROVAL',
+    entity: 'approvals',
+    entityId: id,
+    userName: reviewedBy || 'Direksi / HR Lead',
+    userRole: 'admin',
+    module: 'APPROVALS',
+    status: status === 'REJECTED' ? 'WARNING' : 'SUCCESS',
+    details: `Pengajuan [${item.type}] untuk ${item.employeeName} (${item.employeeNik}) diputuskan "${status}" oleh ${reviewedBy}.${reviewNote ? ` Catatan: "${reviewNote}"` : ''}`
+  });
 
   return { success: true, item, updatedAttendance, updatedEmployee };
 }
@@ -1118,7 +1134,7 @@ export function saveApproval(item) {
     userName: item.employeeName,
     userNik: item.employeeNik,
     userRole: 'staff',
-    module: 'APPROVAL',
+    module: 'APPROVALS',
     status: 'SUCCESS',
     details: `Pengajuan ${item.type} (${item.title}) diajukan oleh ${item.employeeName} (${item.employeeNik}).`
   });
@@ -1462,7 +1478,7 @@ export function seedDefaultUsers(db) {
   console.log('[SQLite] Akun Galih Primananda (Superuser Admin) berhasil di-seed.');
 }
 
-export function authenticateUser(identifier, password) {
+export function authenticateUser(identifier, password, ipAddress = '127.0.0.1') {
   const db = getDatabase();
   const trimmed = (identifier || '').trim().toLowerCase();
   const candidates = db.prepare(`
@@ -1472,6 +1488,17 @@ export function authenticateUser(identifier, password) {
   `).all(trimmed, trimmed, trimmed);
 
   if (!candidates || candidates.length === 0) {
+    addAuditLog({
+      action: 'AUTH_LOGIN_FAILED',
+      entity: 'user_accounts',
+      entityId: null,
+      userName: identifier || 'Unknown',
+      userRole: 'guest',
+      module: 'AUTH',
+      ipAddress,
+      status: 'FAILED',
+      details: `Percobaan login gagal: Kredensial "${identifier}" tidak terdaftar dalam sistem.`
+    });
     return { success: false, error: 'Email atau Username / NIK tidak terdaftar' };
   }
 
@@ -1491,8 +1518,30 @@ export function authenticateUser(identifier, password) {
 
   if (!user) {
     if (hasInactive) {
+      addAuditLog({
+        action: 'AUTH_LOGIN_BLOCKED',
+        entity: 'user_accounts',
+        entityId: candidates[0]?.id || null,
+        userName: candidates[0]?.username || identifier,
+        userRole: candidates[0]?.system_role || 'staff',
+        module: 'AUTH',
+        ipAddress,
+        status: 'WARNING',
+        details: `Percobaan login ditolak: Akun "${identifier}" sedang berstatus non-aktif.`
+      });
       return { success: false, error: 'Akun Anda sedang dinonaktifkan. Hubungi Administrator.' };
     }
+    addAuditLog({
+      action: 'AUTH_LOGIN_FAILED',
+      entity: 'user_accounts',
+      entityId: candidates[0]?.id || null,
+      userName: candidates[0]?.username || identifier,
+      userRole: candidates[0]?.system_role || 'staff',
+      module: 'AUTH',
+      ipAddress,
+      status: 'FAILED',
+      details: `Percobaan login gagal untuk user "${identifier}": Password yang dimasukkan salah.`
+    });
     return { success: false, error: 'Password yang Anda masukkan salah' };
   }
 
@@ -2411,8 +2460,24 @@ export function getAuditLogsPaginated({
   }
 
   if (module && module !== 'ALL') {
-    whereClauses.push(`module = ?`);
-    params.push(module);
+    if (module === 'AUTH') {
+      whereClauses.push(`(module IN ('AUTH', 'AUTH_BIOMETRIC', 'AUTH_SECURITY') OR action LIKE 'AUTH_%' OR action LIKE 'LOGIN_%')`);
+    } else if (module === 'ATTENDANCE') {
+      whereClauses.push(`(module IN ('ATTENDANCE', 'ATTENDANCE_KIOSK', 'CASUAL_ATTENDANCE') OR action LIKE 'CHECKIN_%' OR action LIKE 'CHECKOUT_%' OR action LIKE '%ATTENDANCE%')`);
+    } else if (module === 'APPROVALS' || module === 'APPROVAL') {
+      whereClauses.push(`(module IN ('APPROVAL', 'APPROVALS') OR action LIKE '%APPROVAL%')`);
+    } else if (module === 'EMPLOYEES') {
+      whereClauses.push(`(module IN ('EMPLOYEES', 'BIOMETRIC') OR action LIKE '%EMPLOYEE%' OR action LIKE '%BIOMETRIC%' OR action LIKE '%CASUAL_WORKER%')`);
+    } else if (module === 'PROJECTS') {
+      whereClauses.push(`(module = 'PROJECTS' OR action LIKE '%PROJECT%')`);
+    } else if (module === 'PAYROLL') {
+      whereClauses.push(`(module = 'PAYROLL' OR action LIKE '%PAYROLL%')`);
+    } else if (module === 'HR_RULES') {
+      whereClauses.push(`(module IN ('HR_RULES', 'HRIS_CALENDAR') OR action LIKE '%RULES%' OR action LIKE '%CALENDAR%')`);
+    } else {
+      whereClauses.push(`module = ?`);
+      params.push(module);
+    }
   }
 
   if (role && role !== 'ALL') {
@@ -2441,6 +2506,57 @@ export function getAuditLogsPaginated({
   const totalRows = countRow?.total || 0;
   const totalPages = Math.ceil(totalRows / safeLimit) || 1;
 
+  // Global aggregate metrics across all audit logs
+  let stats = {
+    total: 0,
+    auth: 0,
+    attendance: 0,
+    approvals: 0,
+    employees: 0,
+    projects: 0,
+    payroll: 0,
+    rules: 0,
+    success: 0,
+    warning: 0,
+    danger: 0
+  };
+
+  try {
+    const statRow = db.prepare(`
+      SELECT 
+        COUNT(*) as total,
+        SUM(CASE WHEN module IN ('AUTH', 'AUTH_BIOMETRIC', 'AUTH_SECURITY') OR action LIKE 'AUTH_%' OR action LIKE 'LOGIN_%' THEN 1 ELSE 0 END) as authCount,
+        SUM(CASE WHEN module IN ('ATTENDANCE', 'ATTENDANCE_KIOSK', 'CASUAL_ATTENDANCE') OR action LIKE 'CHECKIN_%' OR action LIKE 'CHECKOUT_%' OR action LIKE '%ATTENDANCE%' THEN 1 ELSE 0 END) as attendanceCount,
+        SUM(CASE WHEN module IN ('APPROVAL', 'APPROVALS') OR action LIKE '%APPROVAL%' THEN 1 ELSE 0 END) as approvalCount,
+        SUM(CASE WHEN module IN ('EMPLOYEES', 'BIOMETRIC') OR action LIKE '%EMPLOYEE%' OR action LIKE '%BIOMETRIC%' OR action LIKE '%CASUAL_WORKER%' THEN 1 ELSE 0 END) as employeeCount,
+        SUM(CASE WHEN module = 'PROJECTS' OR action LIKE '%PROJECT%' THEN 1 ELSE 0 END) as projectCount,
+        SUM(CASE WHEN module = 'PAYROLL' OR action LIKE '%PAYROLL%' THEN 1 ELSE 0 END) as payrollCount,
+        SUM(CASE WHEN module IN ('HR_RULES', 'HRIS_CALENDAR') OR action LIKE '%RULES%' OR action LIKE '%CALENDAR%' THEN 1 ELSE 0 END) as rulesCount,
+        SUM(CASE WHEN status = 'SUCCESS' THEN 1 ELSE 0 END) as successCount,
+        SUM(CASE WHEN status = 'WARNING' THEN 1 ELSE 0 END) as warningCount,
+        SUM(CASE WHEN status IN ('FAILED', 'DANGER', 'ERROR') THEN 1 ELSE 0 END) as dangerCount
+      FROM audit_logs;
+    `).get();
+
+    if (statRow) {
+      stats = {
+        total: statRow.total || 0,
+        auth: statRow.authCount || 0,
+        attendance: statRow.attendanceCount || 0,
+        approvals: statRow.approvalCount || 0,
+        employees: statRow.employeeCount || 0,
+        projects: statRow.projectCount || 0,
+        payroll: statRow.payrollCount || 0,
+        rules: statRow.rulesCount || 0,
+        success: statRow.successCount || 0,
+        warning: statRow.warningCount || 0,
+        danger: statRow.dangerCount || 0
+      };
+    }
+  } catch (err) {
+    console.warn('[SQLite] Error computing audit log stats:', err.message);
+  }
+
   const rows = db.prepare(`
     SELECT * FROM audit_logs
     ${whereSql}
@@ -2456,7 +2572,8 @@ export function getAuditLogsPaginated({
       totalRows,
       totalPages,
       hasMore: safePage < totalPages
-    }
+    },
+    stats
   };
 }
 
@@ -2763,6 +2880,18 @@ export function saveCasualWorker(worker) {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?);
     `).run(id, worker.projectId, worker.name.trim(), worker.status || 'active', worker.createdBy || null, worker.createdByName || null, now, now);
   }
+
+  addAuditLog({
+    action: existing ? 'UPDATE_CASUAL_WORKER' : 'CREATE_CASUAL_WORKER',
+    entity: 'casual_workers',
+    entityId: id,
+    userName: worker.createdByName || 'Project Manager',
+    userRole: 'admin',
+    module: 'EMPLOYEES',
+    status: 'SUCCESS',
+    details: `Data pekerja lapangan "${worker.name.trim()}" (Proyek: ${worker.projectId}) berhasil ${existing ? 'diperbarui' : 'didaftarkan'}.`
+  });
+
   return db.prepare('SELECT * FROM casual_workers WHERE id = ?;').get(id);
 }
 
@@ -2858,9 +2987,23 @@ export function saveCasualAttendance(record) {
   }
 }
 
-export function deleteCasualAttendance(id) {
+export function deleteCasualAttendance(id, operatorUser = null) {
   const db = getDatabase();
-  return db.prepare('DELETE FROM casual_worker_attendances WHERE id = ?;').run(id);
+  const existing = db.prepare('SELECT workerName, date, projectId FROM casual_worker_attendances WHERE id = ?;').get(id);
+  const result = db.prepare('DELETE FROM casual_worker_attendances WHERE id = ?;').run(id);
+  if (existing) {
+    addAuditLog({
+      action: 'DELETE_CASUAL_ATTENDANCE',
+      entity: 'casual_worker_attendances',
+      entityId: id,
+      userName: operatorUser?.name || operatorUser?.username || 'Project Lead',
+      userRole: operatorUser?.systemRole || 'admin',
+      module: 'ATTENDANCE',
+      status: 'WARNING',
+      details: `Presensi pekerja lapangan "${existing.workerName}" tanggal ${existing.date} di proyek ${existing.projectId} berhasil dihapus.`
+    });
+  }
+  return result;
 }
 
 export function isWaOptedIn(phone) {
