@@ -733,4 +733,83 @@ export async function notifyApprovalDecisionEmail(approvalItem, employee) {
   });
 }
 
+/**
+ * 5. Test Email Dispatch
+ */
+export async function sendTestEmail(targetEmail, customConfig = null) {
+  const subject = '[PRIME HRIS Test] Uji Coba Konfigurasi Email Gateway SMTP';
+  const html = 
+    '<div style="margin-bottom: 20px;">' +
+      '<span style="display: inline-block; background-color: #ecfdf5; color: #047857; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 9999px; border: 1px solid #a7f3d0;">' +
+        'UJI COBA GATEWAY' +
+      '</span>' +
+      '<h2 style="font-size: 18px; font-weight: 700; color: #0f172a; margin: 12px 0 6px 0;">' +
+        'Tes Pengiriman Email Berhasil' +
+      '</h2>' +
+      '<p style="margin: 0; color: #475569; font-size: 14px;">' +
+        'Halo! Email ini dikirimkan secara otomatis oleh <strong>PRIME HRIS Email Service</strong> untuk memvalidasi bahwa koneksi kredensial SMTP Gmail perusahaan Anda telah aktif, terhubung, dan siap mengirimkan notifikasi presensi, approval tiket, serta pengingat jam kerja.' +
+      '</p>' +
+    '</div>' +
+    '<div style="background-color: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; padding: 12px 16px; font-size: 12px; color: #64748b; font-family: monospace;">' +
+      'Status: SMTP_ONLINE • Gateway: Google Workspace SMTP • Waktu: ' + new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }) + ' WIB' +
+    '</div>';
+
+  return sendEmailNotification({
+    to: targetEmail,
+    toName: 'HR / System Tester',
+    subject,
+    html,
+    eventType: 'TEST_EMAIL',
+    recipientId: 'TEST',
+    customConfig,
+    bypassEnabledCheck: true
+  });
+}
+
+/**
+ * 6. Blast Overdue Email Reminder to Unrecorded Employees
+ */
+export async function blastUnrecordedEmployeesEmail(targetDate = null) {
+  const now = new Date();
+  const todayStr = targetDate || now.toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+
+  const db = getDatabase();
+  const employees = db.prepare("SELECT id, name, nik, data_json FROM employees;").all().map(r => {
+    try { return JSON.parse(r.data_json); } catch (e) { return r; }
+  });
+
+  const todayAttendances = db.prepare("SELECT employeeId FROM attendances WHERE date = ?;").all(todayStr).map(a => a.employeeId);
+  const attendedSet = new Set(todayAttendances);
+
+  const targets = employees.filter(e => e.status !== 'INACTIVE' && !attendedSet.has(e.id) && Boolean(e.email));
+
+  let sentCount = 0;
+  let failedCount = 0;
+  const details = [];
+
+  for (const emp of targets) {
+    try {
+      const res = await notifyOverdueCheckInEmail(emp, null, todayStr);
+      if (res?.success) {
+        sentCount++;
+        details.push({ id: emp.id, name: emp.name, email: emp.email, status: 'SUCCESS' });
+      } else {
+        failedCount++;
+        details.push({ id: emp.id, name: emp.name, email: emp.email, status: 'FAILED', error: res?.error });
+      }
+    } catch (err) {
+      failedCount++;
+      details.push({ id: emp.id, name: emp.name, email: emp.email, status: 'FAILED', error: err.message });
+    }
+  }
+
+  return {
+    targetDate: todayStr,
+    totalTargeted: targets.length,
+    sentCount,
+    failedCount,
+    details
+  };
+}
+
 
