@@ -17,6 +17,7 @@ import {
   TrendingUp,
   Clock,
   MapPin,
+  ChevronLeft,
   ChevronRight,
   ChevronDown,
   ChevronUp,
@@ -224,18 +225,32 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
 
   
   // Master Work Calendar State (Synchronized with prop and SQLite backend)
+  const [selectedPayrollYear, setSelectedPayrollYear] = useState<number>(() => {
+    return workCalendar?.year || new Date().getFullYear() || 2026;
+  });
+
   const [activeWorkCalendar, setActiveWorkCalendar] = useState<AnnualWorkCalendarConfig | null>(workCalendar || null);
 
-  useEffect(() => {
-    if (workCalendar) {
-      setActiveWorkCalendar(workCalendar);
-    } else {
-      api.getWorkCalendar(2026).then(res => {
-        const cal = res?.calendar || res?.config;
-        if (cal) setActiveWorkCalendar(cal);
-      }).catch(err => console.warn('[PayrollTab] Could not load work calendar fallback', err));
+  const payrollAvailableYears = useMemo(() => {
+    const minYear = Math.min(2024, selectedPayrollYear - 2);
+    const maxYear = Math.max(2045, selectedPayrollYear + 10);
+    const list: number[] = [];
+    for (let y = minYear; y <= maxYear; y++) {
+      list.push(y);
     }
-  }, [workCalendar]);
+    if (!list.includes(selectedPayrollYear)) {
+      list.push(selectedPayrollYear);
+      list.sort((a, b) => a - b);
+    }
+    return list;
+  }, [selectedPayrollYear]);
+
+  useEffect(() => {
+    api.getWorkCalendar(selectedPayrollYear).then(res => {
+      const cal = res?.calendar || res?.config;
+      if (cal) setActiveWorkCalendar(cal);
+    }).catch(err => console.warn('[PayrollTab] Could not load work calendar', err));
+  }, [selectedPayrollYear, workCalendar]);
 
   useEffect(() => {
     const unsub = rtcService.subscribe('WORK_CALENDAR_UPDATED', (packet) => {
@@ -874,13 +889,44 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                 <Calendar className="w-3 h-3 text-[#FF6B00]" />
                 Periode:
               </span>
+
+              {/* Year Selector Stepper */}
+              <div className="flex items-center gap-0.5 bg-slate-100 border border-slate-200 rounded-lg p-0.5 shrink-0 mr-1.5 shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => setSelectedPayrollYear((prev) => Math.max(2020, prev - 1))}
+                  className="w-5 h-5 rounded flex items-center justify-center hover:bg-slate-200 text-slate-600 transition cursor-pointer"
+                  title="Tahun Sebelumnya"
+                >
+                  <ChevronLeft className="w-3 h-3" />
+                </button>
+                <select
+                  value={selectedPayrollYear}
+                  onChange={(e) => setSelectedPayrollYear(Number(e.target.value))}
+                  className="bg-transparent text-[11px] font-bold text-slate-800 focus:outline-none cursor-pointer px-1 py-0.5 font-mono-code"
+                >
+                  {payrollAvailableYears.map((yr) => (
+                    <option key={yr} value={yr}>
+                      {yr}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => setSelectedPayrollYear((prev) => prev + 1)}
+                  className="w-5 h-5 rounded flex items-center justify-center hover:bg-slate-200 text-slate-600 transition cursor-pointer"
+                  title="Tahun Berikutnya"
+                >
+                  <ChevronRight className="w-3 h-3" />
+                </button>
+              </div>
               {(calendarPeriods.length > 0 ? calendarPeriods : Array.from({ length: 12 }, (_, i) => ({
-                periodId: `PER-2026-${String(i + 1).padStart(2, '0')}`,
+                periodId: `PER-${selectedPayrollYear}-${String(i + 1).padStart(2, '0')}`,
                 monthIndex: i,
-                periodName: `Periode ${['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'][i]} 2026`,
-                startDate: i === 0 ? '2025-12-21' : `2026-${String(i).padStart(2, '0')}-21`,
-                endDate: `2026-${String(i + 1).padStart(2, '0')}-20`,
-                paydayDate: `2026-${String(i + 1).padStart(2, '0')}-25`,
+                periodName: `Periode ${['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'][i]} ${selectedPayrollYear}`,
+                startDate: i === 0 ? `${selectedPayrollYear - 1}-12-21` : `${selectedPayrollYear}-${String(i).padStart(2, '0')}-21`,
+                endDate: `${selectedPayrollYear}-${String(i + 1).padStart(2, '0')}-20`,
+                paydayDate: `${selectedPayrollYear}-${String(i + 1).padStart(2, '0')}-25`,
                 attendanceOpen: i === 9,
                 payrollStatus: i < 9 ? 'CUTOFF_LOCKED' : (i === 9 ? 'OPEN' : 'DRAFT'),
                 effectiveWorkDays: i === 9 ? 25 : 22,

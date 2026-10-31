@@ -30,23 +30,24 @@ interface AnnualWorkCalendarTabProps {
   onUpdateCalendar?: (cal: AnnualWorkCalendarConfig) => void;
 }
 
-const INDONESIA_HOLIDAYS_2026: Record<string, string> = {
-  '2026-01-01': 'Tahun Baru Masehi',
-  '2026-01-29': 'Tahun Baru Imlek 2577 Kongzili',
-  '2026-03-20': 'Hari Raya Nyepi Saka 1948',
-  '2026-03-21': 'Hari Raya Idul Fitri (Hari 1)',
-  '2026-03-22': 'Hari Raya Idul Fitri (Hari 2)',
-  '2026-04-03': 'Wafat Yesus Kristus',
-  '2026-05-01': 'Hari Buruh Internasional',
-  '2026-05-14': 'Kenaikan Yesus Kristus',
-  '2026-05-31': 'Hari Raya Waisak 2570 BE',
-  '2026-06-01': 'Hari Lahir Pancasila',
-  '2026-06-27': 'Hari Raya Idul Adha 1447 H',
-  '2026-07-16': 'Tahun Baru Islam 1448 H',
-  '2026-08-17': 'Hari Kemerdekaan RI',
-  '2026-09-25': 'Maulid Nabi Muhammad SAW',
-  '2026-12-25': 'Hari Raya Natal'
-};
+const getNationalHolidays = (year: number): Record<string, string> => ({
+  [`${year}-01-01`]: 'Tahun Baru Masehi',
+  [`${year}-01-29`]: 'Tahun Baru Imlek',
+  [`${year}-03-20`]: 'Hari Raya Nyepi',
+  [`${year}-03-21`]: 'Hari Raya Idul Fitri (Hari 1)',
+  [`${year}-03-22`]: 'Hari Raya Idul Fitri (Hari 2)',
+  [`${year}-04-03`]: 'Wafat Yesus Kristus',
+  [`${year}-05-01`]: 'Hari Buruh Internasional',
+  [`${year}-05-14`]: 'Kenaikan Yesus Kristus',
+  [`${year}-05-31`]: 'Hari Raya Waisak',
+  [`${year}-06-01`]: 'Hari Lahir Pancasila',
+  [`${year}-06-27`]: 'Hari Raya Idul Adha',
+  [`${year}-07-16`]: 'Tahun Baru Islam',
+  [`${year}-08-17`]: 'Hari Kemerdekaan RI',
+  [`${year}-09-25`]: 'Maulid Nabi Muhammad SAW',
+  [`${year}-12-25`]: 'Hari Raya Natal'
+});
+
 
 const DAY_NAMES = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 const MONTH_NAMES = [
@@ -58,7 +59,29 @@ export const AnnualWorkCalendarTab: React.FC<AnnualWorkCalendarTabProps> = ({ cu
   const currentRole: SystemRole = getEffectiveSystemRole(currentUser);
   const isHrOrAdmin = ['admin', 'superuser', 'hr'].includes(currentRole);
 
-  const [selectedYear, setSelectedYear] = useState<number>(2026);
+  const [selectedYear, setSelectedYear] = useState<number>(() => {
+    return new Date().getFullYear() || 2026;
+  });
+
+  const nationalHolidays = useMemo(() => getNationalHolidays(selectedYear), [selectedYear]);
+
+  // Dynamic flexible year options up to decades into the future
+  const availableYears = useMemo(() => {
+    const minYear = Math.min(2024, selectedYear - 2);
+    const maxYear = Math.max(2045, selectedYear + 10);
+    const list: number[] = [];
+    for (let y = minYear; y <= maxYear; y++) {
+      list.push(y);
+    }
+    if (!list.includes(selectedYear)) {
+      list.push(selectedYear);
+      list.sort((a, b) => a - b);
+    }
+    return list;
+  }, [selectedYear]);
+
+  const [isManualYearInput, setIsManualYearInput] = useState<boolean>(false);
+  const [manualYearInputVal, setManualYearInputVal] = useState<string>(String(selectedYear));
   const [calendarConfig, setCalendarConfig] = useState<AnnualWorkCalendarConfig | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -185,7 +208,7 @@ export const AnnualWorkCalendarTab: React.FC<AnnualWorkCalendarTabProps> = ({ cu
         const curStr = `${y}-${mo}-${d}`;
 
         const isWeeklyOff = weeklyOffDays.includes(dayOfWeek);
-        const isNationalHoliday = Boolean(INDONESIA_HOLIDAYS_2026[curStr]);
+        const isNationalHoliday = Boolean(nationalHolidays[curStr]);
 
         if (isWeeklyOff) {
           weeklyOffDaysCount++;
@@ -325,7 +348,7 @@ export const AnnualWorkCalendarTab: React.FC<AnnualWorkCalendarTabProps> = ({ cu
       const dayOfWeek = new Date(year, month, d).getDay();
 
       const isWeeklyOff = weeklyOffDays.includes(dayOfWeek);
-      const holidayName = INDONESIA_HOLIDAYS_2026[dateStr];
+      const holidayName = nationalHolidays[dateStr];
       const isNationalHoliday = Boolean(holidayName);
 
       // Check cut-off markers based on activePeriod
@@ -446,16 +469,94 @@ export const AnnualWorkCalendarTab: React.FC<AnnualWorkCalendarTabProps> = ({ cu
             </div>
             <div className="flex items-center gap-2">
               <span className="text-xs text-slate-400 font-medium">Tahun:</span>
-              <select
-                value={selectedYear}
-                onChange={(e) => setSelectedYear(Number(e.target.value))}
-                className="bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1 text-sm text-white font-medium focus:outline-none focus:border-indigo-500 cursor-pointer"
-              >
-                <option value={2025}>2025</option>
-                <option value={2026}>2026</option>
-                <option value={2027}>2027</option>
-                <option value={2028}>2028</option>
-              </select>
+
+              {isManualYearInput ? (
+                <div className="flex items-center gap-1.5 bg-slate-800 border border-indigo-500 rounded-lg p-1 shadow-inner">
+                  <input
+                    type="number"
+                    min="2000"
+                    max="2100"
+                    value={manualYearInputVal}
+                    onChange={(e) => setManualYearInputVal(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        const yr = parseInt(manualYearInputVal, 10);
+                        if (!isNaN(yr) && yr >= 2000 && yr <= 2100) {
+                          setSelectedYear(yr);
+                          setIsManualYearInput(false);
+                        }
+                      } else if (e.key === 'Escape') {
+                        setIsManualYearInput(false);
+                      }
+                    }}
+                    placeholder="20xx"
+                    className="w-16 bg-transparent text-white font-bold text-sm text-center focus:outline-none"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const yr = parseInt(manualYearInputVal, 10);
+                      if (!isNaN(yr) && yr >= 2000 && yr <= 2100) {
+                        setSelectedYear(yr);
+                      }
+                      setIsManualYearInput(false);
+                    }}
+                    className="px-2 py-0.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-bold transition cursor-pointer"
+                  >
+                    OK
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsManualYearInput(false)}
+                    className="px-1.5 py-0.5 text-slate-400 hover:text-white text-xs transition cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1 bg-slate-800 border border-slate-700 rounded-lg p-0.5 shadow-xs">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedYear((prev) => Math.max(2000, prev - 1))}
+                    className="w-6 h-6 rounded flex items-center justify-center hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer active:scale-95"
+                    title="Tahun Sebelumnya"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                  </button>
+
+                  <select
+                    value={selectedYear}
+                    onChange={(e) => {
+                      if (e.target.value === 'custom') {
+                        setManualYearInputVal(String(selectedYear));
+                        setIsManualYearInput(true);
+                      } else {
+                        setSelectedYear(Number(e.target.value));
+                      }
+                    }}
+                    className="bg-transparent text-white font-bold text-xs px-1.5 py-1 focus:outline-none cursor-pointer"
+                  >
+                    {availableYears.map((yr) => (
+                      <option key={yr} value={yr} className="bg-slate-800 text-white font-medium">
+                        {yr}
+                      </option>
+                    ))}
+                    <option value="custom" className="bg-indigo-900 text-indigo-200 font-bold">
+                      ✏️ Ketik Tahun Lain...
+                    </option>
+                  </select>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedYear((prev) => prev + 1)}
+                    className="w-6 h-6 rounded flex items-center justify-center hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer active:scale-95"
+                    title="Tahun Berikutnya"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -688,7 +789,14 @@ export const AnnualWorkCalendarTab: React.FC<AnnualWorkCalendarTabProps> = ({ cu
           {/* Month Switcher */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
             <button
-              onClick={() => setActiveMonthIndex((prev) => (prev > 0 ? prev - 1 : 11))}
+              onClick={() => {
+                if (activeMonthIndex > 0) {
+                  setActiveMonthIndex(activeMonthIndex - 1);
+                } else {
+                  setActiveMonthIndex(11);
+                  setSelectedYear((prev) => prev - 1);
+                }
+              }}
               className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
               title="Bulan sebelumnya"
             >
@@ -710,7 +818,14 @@ export const AnnualWorkCalendarTab: React.FC<AnnualWorkCalendarTabProps> = ({ cu
               ))}
             </div>
             <button
-              onClick={() => setActiveMonthIndex((prev) => (prev < 11 ? prev + 1 : 0))}
+              onClick={() => {
+                if (activeMonthIndex < 11) {
+                  setActiveMonthIndex(activeMonthIndex + 1);
+                } else {
+                  setActiveMonthIndex(0);
+                  setSelectedYear((prev) => prev + 1);
+                }
+              }}
               className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
               title="Bulan berikutnya"
             >
