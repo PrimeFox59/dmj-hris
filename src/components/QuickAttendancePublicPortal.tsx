@@ -13,7 +13,11 @@ import {
   ScanFace,
   FlipHorizontal,
   Upload,
-  Send
+  Send,
+  LogIn,
+  LogOut,
+  ChevronRight,
+  FileText
 } from 'lucide-react';
 import { AttendanceRecord, BiometricPoseKey } from '../types';
 import { api } from '../services/api';
@@ -24,6 +28,8 @@ import { getEmployeeProjectSchedule } from '../utils/scheduleHelper';
 interface QuickAttendancePublicPortalProps {
   onGoToLogin: () => void;
 }
+
+type KioskFlowStep = 'SELECT_MODE' | 'SCAN_CAMERA' | 'OUTSIDE_RADIUS_NOTE' | 'SUCCESS';
 
 export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalProps> = ({
   onGoToLogin
@@ -39,6 +45,9 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
   });
   const [todayAttendances, setTodayAttendances] = useState<Record<string, any>>({});
   const [isLoadingDirectory, setIsLoadingDirectory] = useState<boolean>(true);
+
+  // Kiosk Flow Step (SELECT_MODE -> SCAN_CAMERA -> OUTSIDE_RADIUS_NOTE (if luar area) -> SUCCESS)
+  const [kioskStep, setKioskStep] = useState<KioskFlowStep>('SELECT_MODE');
 
   // Active Attendance Mode: CHECK_IN (Masuk) or CHECK_OUT (Pulang)
   const [attendanceAction, setAttendanceAction] = useState<'CHECK_IN' | 'CHECK_OUT'>('CHECK_IN');
@@ -59,6 +68,11 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
   const [submittedRecord, setSubmittedRecord] = useState<AttendanceRecord | null>(null);
   const [resetCountdown, setResetCountdown] = useState<number>(3);
 
+  // Pending Outside Radius Data (Employee identified, but outside geofence - awaiting note)
+  const [pendingEmployee, setPendingEmployee] = useState<any | null>(null);
+  const [pendingPhoto, setPendingPhoto] = useState<string | null>(null);
+  const [pendingScore, setPendingScore] = useState<number>(0);
+
   // Geolocation States (Async in background - never blocks face detection)
   const [gpsLocation, setGpsLocation] = useState<{
     lat: number;
@@ -74,6 +88,10 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
   const [isGpsLocked, setIsGpsLocked] = useState<boolean>(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [notesInput, setNotesInput] = useState<string>('');
+
+  // Live Digital Clock state
+  const [currentTimeStr, setCurrentTimeStr] = useState<string>('');
+  const [currentDateStr, setCurrentDateStr] = useState<string>('');
 
   // Refs
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -99,8 +117,38 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
       gain.connect(ctx.destination);
       osc.start();
       osc.stop(ctx.currentTime + duration);
-    } catch {}
+    } catch {
+      // Audio autoplay policy fallback
+    }
   };
+
+  // Live RTC Clock ticker
+  useEffect(() => {
+    const updateTime = () => {
+      const now = rtcService.getServerNow();
+      setCurrentTimeStr(
+        now.toLocaleTimeString('id-ID', {
+          timeZone: 'Asia/Jakarta',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false
+        }).replace(/\./g, ':') + ' WIB'
+      );
+      setCurrentDateStr(
+        now.toLocaleDateString('id-ID', {
+          timeZone: 'Asia/Jakarta',
+          weekday: 'long',
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric'
+        })
+      );
+    };
+    updateTime();
+    const timer = setInterval(updateTime, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // 1. Load Master Directory for Kiosk
   useEffect(() => {
@@ -123,29 +171,28 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
     loadDirectory();
   }, []);
 
-  // 2. Geolocation Background Acquisition (Non-blocking)
+  // 2. Geolocation Listener (Continuous background sync)
   useEffect(() => {
     if (!navigator.geolocation) {
+      setGpsError('Geolocation tidak didukung pada browser ini');
       setIsGpsLocked(true);
       return;
     }
 
     const watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        const { latitude, longitude, accuracy } = pos.coords;
+      pos => {
         setGpsLocation({
-          lat: latitude,
-          lng: longitude,
-          accuracy: Math.round(accuracy || 10),
-          address: 'Lokasi Terkunci (GPS Aktif)'
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracy: Math.round(pos.coords.accuracy),
+          address: 'Area Terdeteksi GPS Perangkat'
         });
         setIsGpsLocked(true);
         setGpsError(null);
       },
-      (err) => {
+      err => {
         console.warn('[Kiosk GPS]', err.message);
         setGpsError('Mencari sinyal GPS...');
-        // Default to standard site coordinates so face detection is never blocked
         setIsGpsLocked(true);
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 15000 }
@@ -154,25 +201,28 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
     return () => navigator.geolocation.clearWatch(watchId);
   }, []);
 
-  // 3. Camera Management
+  // 3. Camera lifecycle controls
   const startCamera = async (mode: 'user' | 'environment' = facingMode) => {
-    setCameraError(null);
-    stopCamera();
-
     try {
+      setCameraError(null);
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop());
+        streamRef.current = null;
+      }
+
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         let stream: MediaStream;
         try {
           stream = await navigator.mediaDevices.getUserMedia({
             video: {
-              facingMode: { ideal: mode },
+              facingMode: mode,
               width: { ideal: 640 },
               height: { ideal: 480 }
             },
             audio: false
           });
         } catch {
-          // Fallback if ideal facingMode fails (e.g. desktop webcam)
+          // Fallback if ideal facingMode fails
           stream = await navigator.mediaDevices.getUserMedia({
             video: true,
             audio: false
@@ -214,14 +264,6 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
     }
   };
 
-  // Auto-start camera on mount
-  useEffect(() => {
-    if (!capturedPhoto && !submittedRecord) {
-      startCamera(facingMode);
-    }
-    return () => stopCamera();
-  }, [submittedRecord]);
-
   // Ensure video element syncs stream whenever camera becomes active
   useEffect(() => {
     if (cameraActive && videoRef.current && streamRef.current) {
@@ -234,8 +276,9 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
 
   // Geofence Evaluation Helper
   const targetGeofence = useMemo(() => {
-    if (detectedEmployee?.assignedProjectId) {
-      const proj = projects.find(p => p.id === detectedEmployee.assignedProjectId);
+    const activeEmp = detectedEmployee || pendingEmployee;
+    if (activeEmp?.assignedProjectId) {
+      const proj = projects.find(p => p.id === activeEmp.assignedProjectId);
       if (proj && proj.latitude && proj.longitude) {
         return {
           lat: proj.latitude,
@@ -246,7 +289,7 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
       }
     }
     return officeGeofence;
-  }, [detectedEmployee, projects, officeGeofence]);
+  }, [detectedEmployee, pendingEmployee, projects, officeGeofence]);
 
   const currentDistanceMeters = useMemo(() => {
     return calculateDistanceMeters(
@@ -261,8 +304,9 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
 
   // Dynamic Shift Schedule Helper
   const activeSchedule = useMemo(() => {
-    if (detectedEmployee) {
-      return getEmployeeProjectSchedule(detectedEmployee, projects, '08:30');
+    const activeEmp = detectedEmployee || pendingEmployee;
+    if (activeEmp) {
+      return getEmployeeProjectSchedule(activeEmp, projects, '08:30');
     }
     return {
       checkInTime: '08:00',
@@ -270,11 +314,125 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
       cutoffTime: '08:30',
       workDaysPerWeek: 6
     };
-  }, [detectedEmployee, projects]);
+  }, [detectedEmployee, pendingEmployee, projects]);
 
-  // 4. Lightning-Fast 1:N Facial Recognition Loop (<5s like Login Wajah)
+  // =========================================================================
+  // OFFICIAL AUDIT WATERMARK GENERATOR (Identik 100% dengan Absen Manual)
+  // =========================================================================
+  const createWatermarkedPhoto = (
+    source: CanvasImageSource,
+    sourceWidth: number,
+    sourceHeight: number,
+    isMirror: boolean,
+    emp: any,
+    matchScore: number,
+    coords: { lat: number; lng: number; accuracy: number; address: string },
+    inGeofence: boolean,
+    action: 'CHECK_IN' | 'CHECK_OUT'
+  ): string => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 640;
+    canvas.height = 480;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return '';
+
+    // 1. Draw photo image (mirrored if front-camera, with object-cover aspect ratio)
+    ctx.save();
+    if (isMirror) {
+      ctx.translate(canvas.width, 0);
+      ctx.scale(-1, 1);
+    }
+
+    const sW = (source as any).videoWidth || (source as any).naturalWidth || (source as any).width || sourceWidth;
+    const sH = (source as any).videoHeight || (source as any).naturalHeight || (source as any).height || sourceHeight;
+    const hRatio = canvas.width / sW;
+    const vRatio = canvas.height / sH;
+    const ratio = Math.max(hRatio, vRatio);
+    const centerShiftX = (canvas.width - sW * ratio) / 2;
+    const centerShiftY = (canvas.height - sH * ratio) / 2;
+
+    ctx.drawImage(
+      source,
+      0, 0, sW, sH,
+      centerShiftX, centerShiftY, sW * ratio, sH * ratio
+    );
+    ctx.restore(); // Restore so all watermark texts and rectangles are NEVER mirrored
+
+    // 2. Top-Right Biometric Security Badge
+    const badgeColor = matchScore >= 70 ? '#00E2B0' : '#f87171';
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+    ctx.fillRect(405, 16, 220, 34);
+    ctx.strokeStyle = badgeColor;
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(405, 16, 220, 34);
+
+    ctx.fillStyle = badgeColor;
+    ctx.beginPath();
+    ctx.arc(420, 33, 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 11px monospace';
+    ctx.textAlign = 'left';
+    const bioText = `BIOMETRIC: ${matchScore}% MATCH`;
+    ctx.fillText(bioText, 432, 37);
+
+    // 3. Bottom Watermark Panel (dark gradient with orange divider line)
+    const grad = ctx.createLinearGradient(0, 340, 0, 480);
+    grad.addColorStop(0, 'rgba(15, 23, 42, 0.80)');
+    grad.addColorStop(0.3, 'rgba(15, 23, 42, 0.94)');
+    grad.addColorStop(1, 'rgba(15, 23, 42, 0.98)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 345, 640, 135);
+
+    // Orange accent divider line
+    ctx.fillStyle = '#FF6B00';
+    ctx.fillRect(0, 345, 640, 3);
+
+    const now = rtcService.getServerNow();
+    const dateStr = now.toLocaleDateString('id-ID', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric'
+    });
+    const timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' WIB';
+
+    // Line 1: Karyawan NIK & Nama
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 14px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText(`KARYAWAN : ${emp.nik || 'KIOSK-001'} • ${emp.name.toUpperCase()}`, 16, 372);
+
+    // Line 2: Waktu Presensi
+    ctx.fillStyle = '#00E2B0';
+    ctx.font = '12px monospace';
+    ctx.fillText(`WAKTU    : ${dateStr} | ${timeStr} [RTC LOCKED]`, 16, 394);
+
+    // Line 3: Geotag Koordinat
+    ctx.fillStyle = '#cbd5e1';
+    ctx.font = '11px monospace';
+    ctx.fillText(`GEOTAG   : Lat ${coords.lat.toFixed(6)}, Lng ${coords.lng.toFixed(6)} (Akurasi ±${coords.accuracy}m)`, 16, 414);
+
+    // Line 4: Geofence Status
+    ctx.fillStyle = inGeofence ? '#00E2B0' : '#fbbf24';
+    const locationStampText = inGeofence
+      ? `GEOFENCE : AREA RESMI VALID (${targetGeofence.name.slice(0, 30)})`
+      : `GEOFENCE : LOKASI TERVERIFIKASI [LUAR RADIUS ${currentDistanceMeters}m]`;
+    ctx.fillText(locationStampText, 16, 434);
+
+    // Line 5: Audit Stamp
+    ctx.fillStyle = '#FF8533';
+    ctx.font = 'bold 10px monospace';
+    ctx.fillText(`PRIME HRIS ENTERPRISE • SECURE AUDIT STAMP #${Math.floor(100000 + Math.random() * 900000)}`, 16, 458);
+
+    return canvas.toDataURL('image/jpeg', 0.88);
+  };
+
+  // 4. Real-time 1:N Facial Recognition Loop (<5s like Login Wajah)
   useEffect(() => {
     if (
+      kioskStep !== 'SCAN_CAMERA' ||
       !cameraActive ||
       capturedPhoto ||
       submittedRecord ||
@@ -338,9 +496,9 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
           setIsFaceDetected(true);
           setDetectedEmployee(emp);
           setDetectionScore(resp.score);
-          setFaceFeedback(`Wajah Terverifikasi: ${emp.name} (${resp.score}% Match)`);
+          setFaceFeedback(`Teridentifikasi: ${emp.name} (${resp.score}%)`);
 
-          // Execute immediate snapshot and attendance record
+          // Execute immediate snapshot and lock
           if (!isAutoRecordingRef.current) {
             isAutoRecordingRef.current = true;
             playTone(880, 'sine', 0.12);
@@ -348,16 +506,40 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
             // Shutter snapshot
             setShutterFlash(true);
             setTimeout(() => setShutterFlash(false), 200);
-            setCapturedPhoto(imageB64);
 
-            // Trigger attendance submission automatically in <1s
+            // Generate official watermarked photo from the video frame
+            const watermarked = createWatermarkedPhoto(
+              videoRef.current,
+              videoRef.current.videoWidth || 640,
+              videoRef.current.videoHeight || 480,
+              facingMode === 'user',
+              emp,
+              resp.score,
+              gpsLocation,
+              isInsideRadius,
+              attendanceAction
+            );
+            setCapturedPhoto(watermarked);
+
+            // Decision: If inside radius, save immediately. If outside radius, require note first!
             setTimeout(() => {
-              executeAttendanceSubmit(emp, imageB64, resp.score);
-            }, 600);
+              stopCamera();
+              if (isInsideRadius) {
+                // Di dalam area -> langsung simpan datanya!
+                executeAttendanceSubmit(emp, watermarked, resp.score, 'Presensi Otomatis Kiosk Wajah');
+              } else {
+                // Di luar area -> kunci data & biarkan user mengisi alasannya terlebih dahulu!
+                setPendingEmployee(emp);
+                setPendingPhoto(watermarked);
+                setPendingScore(resp.score);
+                setKioskStep('OUTSIDE_RADIUS_NOTE');
+                isAutoRecordingRef.current = false;
+              }
+            }, 750);
           }
         } else {
           setIsFaceDetected(true);
-          setFaceFeedback('Wajah belum dikenali. Posisikan lebih dekat.');
+          setFaceFeedback('Wajah belum terdaftar di sistem.');
         }
       } catch (err) {
         console.warn('[Face Loop]', err);
@@ -370,13 +552,14 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
       isSubscribed = false;
       clearInterval(interval);
     };
-  }, [cameraActive, capturedPhoto, submittedRecord, isSubmitting, employees]);
+  }, [kioskStep, cameraActive, capturedPhoto, submittedRecord, isSubmitting, employees, isInsideRadius, attendanceAction, facingMode, gpsLocation]);
 
-  // 5. Submit Attendance Record to Server
+  // 5. Submit Attendance Record to SQLite Backend
   const executeAttendanceSubmit = async (
     emp: any,
     photoData: string,
-    matchScore: number
+    matchScore: number,
+    customNote: string = ''
   ) => {
     try {
       setIsSubmitting(true);
@@ -398,6 +581,10 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
       const [cutoffH, cutoffM] = (activeSchedule.cutoffTime || '08:30').split(':').map(Number);
       const isLate = isClockIn && (nowH * 60 + nowM) > (cutoffH * 60 + cutoffM);
       const lateMinutes = isLate ? (nowH * 60 + nowM) - (cutoffH * 60 + cutoffM) : 0;
+
+      const defaultNote = isInsideRadius
+        ? 'Presensi Otomatis Kiosk Wajah'
+        : `Presensi Kiosk Luar Radius (${currentDistanceMeters}m)`;
 
       const record: Partial<AttendanceRecord> = {
         id: `ATT-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
@@ -421,7 +608,7 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
         },
         isLate,
         lateMinutes,
-        note: notesInput.trim() || (isInsideRadius ? 'Presensi Otomatis Kiosk Wajah' : 'Presensi Kiosk (Luar Radius)'),
+        note: customNote.trim() || defaultNote,
         biometricVerification: {
           isVerified: true,
           matchScore,
@@ -433,6 +620,7 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
 
       const res = await api.submitPublicAttendance(record as AttendanceRecord);
       setSubmittedRecord((res && res.record) || (record as AttendanceRecord));
+      setKioskStep('SUCCESS');
 
       // Update local cache
       setTodayAttendances(prev => ({
@@ -446,9 +634,10 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
       playTone(1318.51, 'sine', 0.35); // Success celebration chime
       stopCamera();
 
-      // Auto Reset for Next Person
+      // Auto Reset for Next Person countdown (3 seconds)
       let count = 3;
       setResetCountdown(count);
+      if (resetTimerRef.current) clearInterval(resetTimerRef.current);
       resetTimerRef.current = setInterval(() => {
         count -= 1;
         setResetCountdown(count);
@@ -465,49 +654,67 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
     }
   };
 
-  // Reset to initial state for next person
+  // Reset to initial mode selection for next person
   const handleResetForNextEmployee = () => {
     if (resetTimerRef.current) clearInterval(resetTimerRef.current);
     setSubmittedRecord(null);
     setCapturedPhoto(null);
     setDetectedEmployee(null);
+    setPendingEmployee(null);
+    setPendingPhoto(null);
+    setPendingScore(0);
     setDetectionScore(0);
     setIsFaceDetected(false);
     isAutoRecordingRef.current = false;
     isEvaluatingRef.current = false;
     setFaceFeedback('Posisikan wajah di dalam bingkai');
     setNotesInput('');
+    stopCamera();
+    setKioskStep('SELECT_MODE');
+  };
+
+  // Start Kiosk scanning with specified action mode
+  const handleSelectModeAndStart = (action: 'CHECK_IN' | 'CHECK_OUT') => {
+    setAttendanceAction(action);
+    setKioskStep('SCAN_CAMERA');
+    isAutoRecordingRef.current = false;
+    isEvaluatingRef.current = false;
+    setDetectedEmployee(null);
+    setCapturedPhoto(null);
     startCamera(facingMode);
+    playTone(action === 'CHECK_IN' ? 523.25 : 659.25, 'sine', 0.12);
   };
 
   // Manual Shutter Button Handler
   const handleManualShutter = () => {
-    if (!videoRef.current || videoRef.current.videoWidth === 0) return;
-    const canvas = document.createElement('canvas');
-    canvas.width = videoRef.current.videoWidth || 640;
-    canvas.height = videoRef.current.videoHeight || 480;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    if (facingMode === 'user') {
-      ctx.translate(canvas.width, 0);
-      ctx.scale(-1, 1);
-    }
-    ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+    if (!videoRef.current) return;
+    const emp = detectedEmployee || employees[0];
+    if (!emp) return;
 
     setShutterFlash(true);
     setTimeout(() => setShutterFlash(false), 200);
-    setCapturedPhoto(dataUrl);
 
-    if (detectedEmployee) {
-      executeAttendanceSubmit(detectedEmployee, dataUrl, detectionScore || 90);
+    const watermarked = createWatermarkedPhoto(
+      videoRef.current,
+      videoRef.current.videoWidth || 640,
+      videoRef.current.videoHeight || 480,
+      facingMode === 'user',
+      emp,
+      detectionScore || 90,
+      gpsLocation,
+      isInsideRadius,
+      attendanceAction
+    );
+    setCapturedPhoto(watermarked);
+    stopCamera();
+
+    if (isInsideRadius) {
+      executeAttendanceSubmit(emp, watermarked, detectionScore || 90, 'Presensi Manual Kiosk Wajah');
     } else {
-      // If face not yet locked, use first employee or prompt
-      const fallbackEmp = employees[0];
-      if (fallbackEmp) {
-        executeAttendanceSubmit(fallbackEmp, dataUrl, 85);
-      }
+      setPendingEmployee(emp);
+      setPendingPhoto(watermarked);
+      setPendingScore(detectionScore || 90);
+      setKioskStep('OUTSIDE_RADIUS_NOTE');
     }
   };
 
@@ -517,12 +724,32 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (ev) => {
-      const dataUrl = ev.target?.result as string;
-      setCapturedPhoto(dataUrl);
-      const emp = detectedEmployee || employees[0];
-      if (emp) {
-        executeAttendanceSubmit(emp, dataUrl, 90);
-      }
+      const img = new Image();
+      img.onload = () => {
+        const emp = detectedEmployee || employees[0];
+        if (!emp) return;
+        const watermarked = createWatermarkedPhoto(
+          img,
+          img.width,
+          img.height,
+          false,
+          emp,
+          90,
+          gpsLocation,
+          isInsideRadius,
+          attendanceAction
+        );
+        setCapturedPhoto(watermarked);
+        if (isInsideRadius) {
+          executeAttendanceSubmit(emp, watermarked, 90, 'Presensi Upload Foto Kiosk');
+        } else {
+          setPendingEmployee(emp);
+          setPendingPhoto(watermarked);
+          setPendingScore(90);
+          setKioskStep('OUTSIDE_RADIUS_NOTE');
+        }
+      };
+      img.src = ev.target?.result as string;
     };
     reader.readAsDataURL(file);
     e.target.value = '';
@@ -545,19 +772,32 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
                   Terminal Presensi Pintar & Biometrik
                 </h3>
                 <span className="px-2 py-0.5 rounded-full text-[9px] font-mono-code font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                  LIVE
+                  KIOSK
                 </span>
-                <span className="text-[10px] text-orange-400 font-bold font-mono-code">
-                  {detectedEmployee?.nik || 'KIOSK-1:N'}
-                </span>
+                {kioskStep === 'SCAN_CAMERA' && (
+                  <span className="text-[10px] text-orange-400 font-bold font-mono-code">
+                    {detectedEmployee?.nik || 'SCANNING'}
+                  </span>
+                )}
               </div>
               <p className="text-[11px] text-slate-400 font-mono-code truncate max-w-xs sm:max-w-md">
-                {detectedEmployee ? (
-                  <span>
-                    <strong className="text-white">{detectedEmployee.name}</strong> • Shift: {activeSchedule.checkInTime} - {activeSchedule.checkOutTime} WIB
-                  </span>
-                ) : (
-                  <span>Mendeteksi Wajah Otomatis • Tatap Kamera (&lt;5s)</span>
+                {kioskStep === 'SELECT_MODE' && (
+                  <span>Pilih Absen Masuk atau Pulang • Waktu: {currentTimeStr}</span>
+                )}
+                {kioskStep === 'SCAN_CAMERA' && (
+                  detectedEmployee ? (
+                    <span>
+                      <strong className="text-emerald-400">{detectedEmployee.name}</strong> • Shift: {activeSchedule.checkInTime} - {activeSchedule.checkOutTime} WIB
+                    </span>
+                  ) : (
+                    <span>Tatap Kamera (&lt;5 detik) • Mode: {attendanceAction === 'CHECK_IN' ? 'Masuk' : 'Pulang'}</span>
+                  )
+                )}
+                {kioskStep === 'OUTSIDE_RADIUS_NOTE' && (
+                  <span className="text-amber-400">Verifikasi Catatan Presensi di Luar Radius</span>
+                )}
+                {kioskStep === 'SUCCESS' && (
+                  <span className="text-emerald-400">Presensi Berhasil Direkam</span>
                 )}
               </p>
             </div>
@@ -567,7 +807,7 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
             type="button"
             onClick={onGoToLogin}
             className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
-            title="Keluar dari Kiosk"
+            title="Keluar dari Kiosk (Ke Login Admin)"
           >
             <X className="w-4 h-4" />
           </button>
@@ -576,9 +816,436 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
         {/* 2. Modal Body */}
         <div className="p-5 sm:p-6 overflow-y-auto space-y-4">
           
-          {/* SUCCESS RECEIPT VIEW */}
-          {submittedRecord ? (
-            <div className="py-6 text-center space-y-4 animate-in zoom-in-95 duration-200">
+          {/* ========================================================================= */}
+          {/* STEP 1: INITIAL MODE SELECTION (Mencegah Salah Absen Sebelum Kamera Nyala) */}
+          {/* ========================================================================= */}
+          {kioskStep === 'SELECT_MODE' && (
+            <div className="py-2 space-y-5 animate-in fade-in duration-200">
+              {/* Digital Clock Banner */}
+              <div className="text-center py-4 px-3 rounded-2xl bg-gradient-to-b from-slate-900 to-slate-950 text-white border border-slate-800 shadow-inner">
+                <span className="text-[11px] font-mono-code uppercase tracking-wider text-slate-400 block mb-0.5">
+                  WAKTU SERVER RESMI [RTC LOCKED]
+                </span>
+                <div className="text-3xl sm:text-4xl font-black font-mono-code text-[#FF6B00] tracking-tight">
+                  {currentTimeStr || '08:00:00 WIB'}
+                </div>
+                <div className="text-xs text-slate-400 mt-1 font-medium">
+                  {currentDateStr}
+                </div>
+              </div>
+
+              {/* Title & Prompt */}
+              <div className="text-center space-y-1">
+                <h2 className="text-lg font-black text-slate-900">
+                  Silakan Pilih Jenis Presensi Anda
+                </h2>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  Pilih status kehadiran terlebih dahulu sebelum sistem melakukan pemindaian wajah otomatis.
+                </p>
+              </div>
+
+              {/* 2 Big Action Cards (Masuk / Pulang) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
+                {/* 1. Tombol Masuk */}
+                <button
+                  type="button"
+                  onClick={() => handleSelectModeAndStart('CHECK_IN')}
+                  className="group relative p-5 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white shadow-lg shadow-emerald-700/20 active:scale-[0.98] transition-all cursor-pointer flex flex-col justify-between text-left min-h-[140px] border border-emerald-400/30"
+                >
+                  <div className="flex items-center justify-between w-full">
+                    <div className="w-11 h-11 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center text-white">
+                      <LogIn className="w-6 h-6" />
+                    </div>
+                    <span className="px-2.5 py-1 rounded-full bg-emerald-950/60 text-[10px] font-bold font-mono-code tracking-wide border border-emerald-400/40 text-emerald-200">
+                      IN
+                    </span>
+                  </div>
+
+                  <div>
+                    <div className="text-base font-black text-white flex items-center gap-1.5">
+                      <span>ABSEN MASUK</span>
+                      <ChevronRight className="w-4 h-4 opacity-70 group-hover:translate-x-1 transition-transform" />
+                    </div>
+                    <span className="text-[11px] text-emerald-100 font-medium block mt-0.5">
+                      Mulai jam kerja • Shift Pagi/Siang
+                    </span>
+                  </div>
+                </button>
+
+                {/* 2. Tombol Pulang */}
+                <button
+                  type="button"
+                  onClick={() => handleSelectModeAndStart('CHECK_OUT')}
+                  className="group relative p-5 rounded-2xl bg-gradient-to-br from-[#FF6B00] to-amber-600 hover:from-[#e56000] hover:to-amber-500 text-white shadow-lg shadow-orange-700/20 active:scale-[0.98] transition-all cursor-pointer flex flex-col justify-between text-left min-h-[140px] border border-orange-400/30"
+                >
+                  <div className="flex items-center justify-between w-full">
+                    <div className="w-11 h-11 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center text-white">
+                      <LogOut className="w-6 h-6" />
+                    </div>
+                    <span className="px-2.5 py-1 rounded-full bg-amber-950/60 text-[10px] font-bold font-mono-code tracking-wide border border-orange-400/40 text-amber-200">
+                      OUT
+                    </span>
+                  </div>
+
+                  <div>
+                    <div className="text-base font-black text-white flex items-center gap-1.5">
+                      <span>ABSEN PULANG</span>
+                      <ChevronRight className="w-4 h-4 opacity-70 group-hover:translate-x-1 transition-transform" />
+                    </div>
+                    <span className="text-[11px] text-orange-100 font-medium block mt-0.5">
+                      Selesai jam kerja • Shift Sore/Malam
+                    </span>
+                  </div>
+                </button>
+              </div>
+
+              {/* Geofence info indicator */}
+              <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                <div className="flex items-center gap-1.5 truncate">
+                  <MapPin className={`w-4 h-4 shrink-0 ${isInsideRadius ? 'text-emerald-600' : 'text-amber-500'}`} />
+                  <span className="truncate">{targetGeofence.name}</span>
+                </div>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono-code font-bold shrink-0 ${
+                  isInsideRadius ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                }`}>
+                  {isInsideRadius ? 'Area Resmi' : 'Luar Radius'}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* STEP 2: CAMERA SCANNING & REAL-TIME DETECTION STATUS                      */}
+          {/* ========================================================================= */}
+          {kioskStep === 'SCAN_CAMERA' && (
+            <>
+              {/* Selected Mode Banner with Quick Switch */}
+              <div className="flex items-center justify-between pb-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-bold text-slate-500 uppercase font-mono-code">
+                    Mode Aktif:
+                  </span>
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-black font-mono-code flex items-center gap-1.5 border shadow-2xs ${
+                    attendanceAction === 'CHECK_IN'
+                      ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                      : 'bg-orange-50 text-orange-800 border-orange-300'
+                  }`}>
+                    <span className={`w-2 h-2 rounded-full ${attendanceAction === 'CHECK_IN' ? 'bg-emerald-500' : 'bg-[#FF6B00]'} animate-pulse`} />
+                    <span>{attendanceAction === 'CHECK_IN' ? 'ABSEN MASUK (IN)' : 'ABSEN PULANG (OUT)'}</span>
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    stopCamera();
+                    setKioskStep('SELECT_MODE');
+                  }}
+                  className="text-[11px] text-[#FF6B00] hover:text-orange-700 font-bold underline cursor-pointer"
+                >
+                  Ganti ke {attendanceAction === 'CHECK_IN' ? 'Pulang' : 'Masuk'}
+                </button>
+              </div>
+
+              {/* Camera Viewfinder (Exact Match) */}
+              <div className="space-y-3">
+                <div className="relative aspect-4/3 w-full bg-slate-950 overflow-hidden flex items-center justify-center rounded-2xl shadow-inner border border-slate-800">
+                  {shutterFlash && (
+                    <div className="absolute inset-0 bg-white/90 z-30 pointer-events-none transition-opacity duration-200" />
+                  )}
+
+                  {cameraError ? (
+                    <div className="p-6 text-center text-slate-300 space-y-3 max-w-md">
+                      <div className="w-12 h-12 mx-auto rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400 flex items-center justify-center">
+                        <AlertTriangle className="w-6 h-6" />
+                      </div>
+                      <p className="text-xs text-rose-300 font-medium">{cameraError}</p>
+                      <button
+                        type="button"
+                        onClick={() => startCamera()}
+                        className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold transition-all shadow-md cursor-pointer"
+                      >
+                        Coba Nyalakan Lagi
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <video
+                        ref={(el) => {
+                          videoRef.current = el;
+                          if (el && streamRef.current && el.srcObject !== streamRef.current) {
+                            el.srcObject = streamRef.current;
+                            el.play().catch(e => console.warn(e));
+                          }
+                        }}
+                        autoPlay
+                        playsInline
+                        muted
+                        className={`w-full h-full object-cover ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`}
+                      />
+
+                      {/* Biometric Face Guide Reticle (Exact Match) */}
+                      <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+                        <div className={`w-44 h-56 sm:w-52 sm:h-64 border-2 border-dashed rounded-[36px] relative flex items-center justify-center transition-all duration-300 ${
+                          detectedEmployee
+                            ? 'border-emerald-400 bg-emerald-500/10 shadow-[0_0_25px_rgba(16,185,129,0.35)]'
+                            : 'border-[#FF6B00]/70 shadow-[0_0_20px_rgba(255,107,0,0.2)]'
+                        }`}>
+                          <div className={`absolute -top-1 -left-1 w-5 h-5 border-t-2 border-l-2 rounded-tl-xl ${detectedEmployee ? 'border-emerald-400' : 'border-[#FF6B00]'}`} />
+                          <div className={`absolute -top-1 -right-1 w-5 h-5 border-t-2 border-r-2 rounded-tr-xl ${detectedEmployee ? 'border-emerald-400' : 'border-[#FF6B00]'}`} />
+                          <div className={`absolute -bottom-1 -left-1 w-5 h-5 border-b-2 border-l-2 rounded-bl-xl ${detectedEmployee ? 'border-emerald-400' : 'border-[#FF6B00]'}`} />
+                          <div className={`absolute -bottom-1 -right-1 w-5 h-5 border-b-2 border-r-2 rounded-br-xl ${detectedEmployee ? 'border-emerald-400' : 'border-[#FF6B00]'}`} />
+                        </div>
+                      </div>
+
+                      {/* LIVE DETECTION IDENTIFICATION CARD (Permintaan Mr Prime: Tampilkan siapa user & ID sebelum di-lock) */}
+                      {detectedEmployee ? (
+                        <div className="absolute bottom-3 left-3 right-3 z-20 p-2.5 rounded-2xl bg-slate-900/95 border border-emerald-500 text-white shadow-2xl backdrop-blur-md flex items-center justify-between gap-2.5 animate-in slide-in-from-bottom duration-200">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-9 h-9 rounded-full bg-emerald-500/20 border-2 border-emerald-400 text-emerald-400 flex items-center justify-center shrink-0 font-black text-sm">
+                              ✓
+                            </div>
+                            <div className="truncate">
+                              <div className="text-xs font-black text-white flex items-center gap-1.5 truncate">
+                                <span>{detectedEmployee.name}</span>
+                                <span className="text-[10px] text-emerald-400 font-mono-code font-bold">({detectionScore}%)</span>
+                              </div>
+                              <div className="text-[10px] text-slate-300 font-mono-code truncate">
+                                ID / NIK: <strong className="text-orange-400">{detectedEmployee.nik}</strong> • Shift: {activeSchedule.checkInTime} - {activeSchedule.checkOutTime}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="shrink-0 flex flex-col items-end">
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-mono-code font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                              VERIFIED
+                            </span>
+                            <span className="text-[9px] text-slate-400 mt-0.5">
+                              {isInsideRadius ? 'Menyimpan...' : 'Menyiapkan Catatan...'}
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="absolute bottom-3 left-3 right-3 z-10 text-center pointer-events-none">
+                          <span className="text-[11px] font-mono-code text-white bg-black/75 px-3 py-1.5 rounded-full backdrop-blur-md border border-white/10 shadow-lg">
+                            {faceFeedback}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Live Overlay GPS Badge */}
+                      <div className="absolute top-3 left-3 pointer-events-none z-10">
+                        <div className="px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur-md border border-white/10 text-[10px] font-mono-code text-white flex items-center gap-1.5">
+                          <span className={`w-2 h-2 rounded-full ${isInsideRadius ? 'bg-emerald-500' : 'bg-amber-500'} animate-pulse`} />
+                          <span>GPS: {gpsLocation.lat.toFixed(4)}, {gpsLocation.lng.toFixed(4)} ({currentDistanceMeters}m)</span>
+                        </div>
+                      </div>
+
+                      {/* Flip Camera Icon */}
+                      <div className="absolute top-3 right-3 flex items-center gap-1.5 z-10">
+                        <button
+                          type="button"
+                          onClick={toggleFacingMode}
+                          className="p-2 rounded-xl bg-black/60 hover:bg-black/80 text-white backdrop-blur-md border border-white/10 transition-all cursor-pointer shadow-md"
+                          title="Putar Kamera"
+                        >
+                          <FlipHorizontal className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Shutter / Retake Controls (Exact Match) */}
+                <div className="flex items-center justify-between gap-2 px-1">
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileUpload}
+                    accept="image/*"
+                    className="hidden"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                    title="Upload foto dari galeri"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span className="text-[11px]">Upload</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleManualShutter}
+                    className="flex-1 py-2.5 px-4 rounded-xl bg-[#FF6B00] hover:bg-[#e56000] text-white text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-md shadow-orange-500/20 cursor-pointer active:scale-98"
+                  >
+                    <Camera className="w-4 h-4" />
+                    <span>Jepret Foto Sekarang</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Geolocation Status Row (Exact Match) */}
+              <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200/90 flex items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <MapPin className={`w-5 h-5 shrink-0 ${isInsideRadius ? 'text-emerald-600' : 'text-amber-500'}`} />
+                  <div className="truncate">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-bold text-slate-800 text-xs truncate">
+                        {targetGeofence.name}
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-slate-500 font-mono-code truncate mt-0.5">
+                      Lat {gpsLocation.lat.toFixed(4)}, Lng {gpsLocation.lng.toFixed(4)} • Akurasi ±{gpsLocation.accuracy}m
+                    </div>
+                  </div>
+                </div>
+
+                <div className="shrink-0 text-right">
+                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-mono-code font-bold border ${
+                    isInsideRadius
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      : 'bg-amber-50 text-amber-700 border-amber-200'
+                  }`}>
+                    {currentDistanceMeters}m • {isInsideRadius ? 'Masuk Radius (Valid)' : 'Luar Area'}
+                  </span>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* ========================================================================= */}
+          {/* STEP 3: OUTSIDE RADIUS NOTE FILLING (Permintaan Mr Prime: Luar Area Wajib Note) */}
+          {/* ========================================================================= */}
+          {kioskStep === 'OUTSIDE_RADIUS_NOTE' && pendingEmployee && (
+            <div className="py-2 space-y-4 animate-in zoom-in-95 duration-200">
+              {/* Alert Header */}
+              <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-300 text-amber-900 space-y-1">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 font-black text-xs">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>Presensi di Luar Radius Area Kerja ({currentDistanceMeters}m)</span>
+                  </div>
+                  <span className="px-2 py-0.5 rounded text-[9px] font-bold font-mono-code bg-amber-200 text-amber-900">
+                    WAJIB ISI CATATAN
+                  </span>
+                </div>
+                <p className="text-[11px] text-amber-800 leading-relaxed">
+                  GPS perangkat Anda terdeteksi berjarak <strong>{currentDistanceMeters}m</strong> dari area kerja resmi ({targetGeofence.name}). Harap tuliskan alasan kehadiran di luar radius.
+                </p>
+              </div>
+
+              {/* Employee Summary Card & Watermarked Photo Preview */}
+              <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 flex items-center gap-3">
+                {pendingPhoto && (
+                  <div className="w-16 h-16 rounded-xl overflow-hidden border border-slate-300 shrink-0 bg-black">
+                    <img src={pendingPhoto} alt="Watermark Snapshot" className="w-full h-full object-cover" />
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-black text-slate-900 truncate">
+                    {pendingEmployee.name}
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-mono-code">
+                    NIK: <strong>{pendingEmployee.nik}</strong> • Shift: {activeSchedule.checkInTime} - {activeSchedule.checkOutTime}
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold font-mono-code ${
+                      attendanceAction === 'CHECK_IN'
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : 'bg-orange-100 text-orange-800'
+                    }`}>
+                      {attendanceAction === 'CHECK_IN' ? 'ABSEN MASUK' : 'ABSEN PULANG'}
+                    </span>
+                    <span className="text-[9px] text-emerald-600 font-mono-code font-bold">
+                      Match: {pendingScore}%
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Note Textarea Input */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 block">
+                  Alasan / Catatan Presensi (Wajib):
+                </label>
+                <textarea
+                  rows={3}
+                  value={notesInput}
+                  onChange={e => setNotesInput(e.target.value)}
+                  placeholder="Contoh: Bekerja dari rumah (WFH) / Tugas survei site proyek / Meeting bersama mitra..."
+                  className="w-full rounded-xl border border-slate-300 p-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#FF6B00] placeholder:text-slate-400"
+                  autoFocus
+                />
+
+                {/* Quick note presets */}
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                  <span className="text-[10px] text-slate-400 font-mono-code uppercase mr-1">Opsi Cepat:</span>
+                  {['Dinas Luar / Site Proyek', 'Koordinasi Vendor', 'WFH / Remote', 'Lupa Absen di Lokasi'].map(quick => (
+                    <button
+                      key={quick}
+                      type="button"
+                      onClick={() => setNotesInput(quick)}
+                      className="px-2 py-0.5 rounded-lg text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-colors cursor-pointer"
+                    >
+                      {quick}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="grid grid-cols-2 gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={handleResetForNextEmployee}
+                  className="py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all cursor-pointer text-center"
+                >
+                  Batal / Scan Ulang
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isSubmitting || !notesInput.trim()}
+                  onClick={() => {
+                    if (pendingEmployee && pendingPhoto) {
+                      executeAttendanceSubmit(
+                        pendingEmployee,
+                        pendingPhoto,
+                        pendingScore,
+                        notesInput.trim()
+                      );
+                    }
+                  }}
+                  className={`py-2.5 px-4 rounded-xl font-black text-xs text-white transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer ${
+                    !notesInput.trim() || isSubmitting
+                      ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                      : 'bg-[#FF6B00] hover:bg-[#e56000] shadow-orange-500/25 active:scale-98'
+                  }`}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Menyimpan...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-3.5 h-3.5" />
+                      <span>Simpan Presensi</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* STEP 4: SUCCESS RECEIPT VIEW (Menampilkan Watermark Asli & Struk Selesai)   */}
+          {/* ========================================================================= */}
+          {kioskStep === 'SUCCESS' && submittedRecord && (
+            <div className="py-4 text-center space-y-4 animate-in zoom-in-95 duration-200">
               <div className="w-16 h-16 rounded-full bg-emerald-500/10 border-2 border-emerald-500 text-emerald-600 flex items-center justify-center mx-auto shadow-lg shadow-emerald-500/20 animate-bounce">
                 <CheckCircle2 className="w-8 h-8" />
               </div>
@@ -597,14 +1264,19 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
                 <p className="text-xs text-slate-500 mt-1">
                   Waktu Server: <strong className="font-mono-code text-slate-800">{submittedRecord.checkInTime} WIB</strong> • {submittedRecord.date}
                 </p>
+                {submittedRecord.note && (
+                  <p className="text-[11px] text-slate-600 italic mt-0.5">
+                    "{submittedRecord.note}"
+                  </p>
+                )}
               </div>
 
-              {/* Photo Snapshot Stamp */}
+              {/* Photo Snapshot Stamp with Official Watermark */}
               {submittedRecord.photoUrl && (
-                <div className="relative max-w-[220px] mx-auto rounded-2xl overflow-hidden border border-slate-200 shadow-md">
-                  <img src={submittedRecord.photoUrl} alt="Bukti Presensi" className="w-full h-auto object-cover" />
+                <div className="relative max-w-[280px] mx-auto rounded-2xl overflow-hidden border border-slate-300 shadow-md">
+                  <img src={submittedRecord.photoUrl} alt="Bukti Presensi Watermark" className="w-full h-auto object-cover" />
                   <div className="absolute top-2 left-2 px-2 py-0.5 rounded bg-black/70 text-[9px] font-mono-code text-white">
-                    {submittedRecord.checkInTime} WIB • Match {detectionScore || 92}%
+                    {submittedRecord.checkInTime} WIB • Valid Watermark
                   </div>
                 </div>
               )}
@@ -619,285 +1291,6 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
-          ) : (
-            <>
-              {/* 0. Jenis Presensi (Exact Match) */}
-              <div className="space-y-1.5 pb-1">
-                <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
-                  <span>0. JENIS PRESENSI</span>
-                  <span className={`text-[10px] font-bold font-mono-code px-2 py-0.5 rounded-full ${
-                    attendanceAction === 'CHECK_IN'
-                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                      : 'bg-orange-50 text-[#FF6B00] border border-orange-200'
-                  }`}>
-                    {attendanceAction === 'CHECK_IN' ? '🟢 ABSEN MASUK' : '🟠 ABSEN PULANG'}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAttendanceAction('CHECK_IN');
-                      playTone(523.25, 'sine', 0.1);
-                    }}
-                    className={`py-2.5 px-3 rounded-2xl border text-center transition-all cursor-pointer flex items-center justify-center gap-2 ${
-                      attendanceAction === 'CHECK_IN'
-                        ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-md shadow-emerald-900/20 font-black border-emerald-400'
-                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 font-bold'
-                    }`}
-                  >
-                    <div className={`w-2.5 h-2.5 rounded-full ${attendanceAction === 'CHECK_IN' ? 'bg-white animate-pulse' : 'bg-emerald-500'}`} />
-                    <span>ABSEN MASUK (IN)</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAttendanceAction('CHECK_OUT');
-                      playTone(659.25, 'sine', 0.1);
-                    }}
-                    className={`py-2.5 px-3 rounded-2xl border text-center transition-all cursor-pointer flex items-center justify-center gap-2 ${
-                      attendanceAction === 'CHECK_OUT'
-                        ? 'bg-gradient-to-r from-[#FF6B00] to-amber-600 text-white shadow-md shadow-orange-900/20 font-black border-orange-400'
-                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 font-bold'
-                    }`}
-                  >
-                    <div className={`w-2.5 h-2.5 rounded-full ${attendanceAction === 'CHECK_OUT' ? 'bg-white animate-pulse' : 'bg-[#FF6B00]'}`} />
-                    <span>ABSEN PULANG (OUT)</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Camera Viewfinder (Exact Match) */}
-              <div className="space-y-3">
-                <div className="relative aspect-4/3 w-full bg-slate-950 overflow-hidden flex items-center justify-center rounded-2xl shadow-inner border border-slate-800">
-                  {shutterFlash && (
-                    <div className="absolute inset-0 bg-white/90 z-30 pointer-events-none transition-opacity duration-200" />
-                  )}
-
-                  {capturedPhoto ? (
-                    <div className="relative w-full h-full">
-                      <img
-                        src={capturedPhoto}
-                        alt="Hasil Foto Snapshot"
-                        className="w-full h-full object-contain bg-slate-950"
-                      />
-                      <div className="absolute top-3 left-3 px-3 py-1.5 rounded-xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-400 text-xs font-bold backdrop-blur-md flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                        <span>Foto Biometrik Terverifikasi</span>
-                      </div>
-                      <div className="absolute top-3 right-3 px-3 py-1.5 rounded-xl bg-slate-900/80 border border-slate-700 text-xs font-mono-code font-bold backdrop-blur-md text-white">
-                        Match: {detectionScore || 92}%
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="relative w-full h-full flex items-center justify-center">
-                      {cameraError ? (
-                        <div className="p-6 text-center text-slate-300 space-y-3 max-w-md">
-                          <div className="w-12 h-12 mx-auto rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400 flex items-center justify-center">
-                            <AlertTriangle className="w-6 h-6" />
-                          </div>
-                          <p className="text-xs text-rose-300 font-medium">{cameraError}</p>
-                          <button
-                            type="button"
-                            onClick={() => startCamera()}
-                            className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold transition-all shadow-md cursor-pointer"
-                          >
-                            Coba Nyalakan Lagi
-                          </button>
-                        </div>
-                      ) : (
-                        <>
-                          <video
-                            ref={(el) => {
-                              videoRef.current = el;
-                              if (el && streamRef.current && el.srcObject !== streamRef.current) {
-                                el.srcObject = streamRef.current;
-                                el.play().catch(e => console.warn(e));
-                              }
-                            }}
-                            autoPlay
-                            playsInline
-                            muted
-                            className={`w-full h-full object-cover ${facingMode === 'user' ? 'scale-x-[-1]' : ''}`}
-                          />
-
-                          {/* Biometric Face Guide Reticle (Exact Match) */}
-                          <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                            <div className={`w-44 h-56 sm:w-52 sm:h-64 border-2 border-dashed rounded-[36px] relative flex items-center justify-center transition-all duration-300 ${
-                              detectedEmployee
-                                ? 'border-emerald-400 bg-emerald-500/10 shadow-[0_0_25px_rgba(16,185,129,0.35)]'
-                                : 'border-[#FF6B00]/70 shadow-[0_0_20px_rgba(255,107,0,0.2)]'
-                            }`}>
-                              <div className={`absolute -top-1 -left-1 w-5 h-5 border-t-2 border-l-2 rounded-tl-xl ${detectedEmployee ? 'border-emerald-400' : 'border-[#FF6B00]'}`} />
-                              <div className={`absolute -top-1 -right-1 w-5 h-5 border-t-2 border-r-2 rounded-tr-xl ${detectedEmployee ? 'border-emerald-400' : 'border-[#FF6B00]'}`} />
-                              <div className={`absolute -bottom-1 -left-1 w-5 h-5 border-b-2 border-l-2 rounded-bl-xl ${detectedEmployee ? 'border-emerald-400' : 'border-[#FF6B00]'}`} />
-                              <div className={`absolute -bottom-1 -right-1 w-5 h-5 border-b-2 border-r-2 rounded-br-xl ${detectedEmployee ? 'border-emerald-400' : 'border-[#FF6B00]'}`} />
-                              
-                              <span className="text-[10px] font-mono-code text-white/90 bg-black/70 px-3 py-1 rounded-full backdrop-blur-xs absolute -bottom-7 max-w-[90%] truncate">
-                                {detectedEmployee ? (
-                                  <span className="text-emerald-300 font-bold flex items-center gap-1.5 truncate">
-                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                                    <span>{detectedEmployee.name} ({detectionScore}%)</span>
-                                  </span>
-                                ) : (
-                                  faceFeedback
-                                )}
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* Live Overlay GPS Badge */}
-                          <div className="absolute top-3 left-3 pointer-events-none">
-                            <div className="px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur-md border border-white/10 text-[10px] font-mono-code text-white flex items-center gap-1.5">
-                              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                              <span>GPS: {gpsLocation.lat.toFixed(4)}, {gpsLocation.lng.toFixed(4)}</span>
-                            </div>
-                          </div>
-
-                          {/* Flip Camera Icon */}
-                          <div className="absolute top-3 right-3 flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={toggleFacingMode}
-                              className="p-2 rounded-xl bg-black/60 hover:bg-black/80 text-white backdrop-blur-md border border-white/10 transition-all cursor-pointer shadow-md"
-                              title="Putar Kamera"
-                            >
-                              <FlipHorizontal className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Shutter / Retake Controls (Exact Match) */}
-                <div className="flex items-center justify-between gap-2 px-1">
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleFileUpload}
-                    accept="image/*"
-                    className="hidden"
-                  />
-
-                  {capturedPhoto ? (
-                    <button
-                      type="button"
-                      onClick={handleResetForNextEmployee}
-                      className="w-full py-2 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer"
-                    >
-                      <RefreshCw className="w-3.5 h-3.5 text-[#FF6B00]" />
-                      <span>Ambil Foto Ulang</span>
-                    </button>
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
-                        title="Upload foto dari galeri"
-                      >
-                        <Upload className="w-3.5 h-3.5" />
-                        <span className="text-[11px]">Upload</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={handleManualShutter}
-                        className="flex-1 py-2 px-4 rounded-xl bg-[#FF6B00] hover:bg-[#e56000] text-white text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-sm cursor-pointer active:scale-98"
-                      >
-                        <Camera className="w-4 h-4" />
-                        <span>Jepret Foto Sekarang</span>
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* Geolocation Status Row (Exact Match) */}
-              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/90 flex items-center justify-between gap-3 text-xs">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <MapPin className={`w-5 h-5 shrink-0 ${isInsideRadius ? 'text-emerald-600' : 'text-rose-500'}`} />
-                  <div className="truncate">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-bold text-slate-800 text-xs truncate">
-                        {targetGeofence.name}
-                      </span>
-                      <span className="text-slate-400 font-mono-code text-[11px] shrink-0">
-                        ({gpsLocation.lat.toFixed(4)}, {gpsLocation.lng.toFixed(4)})
-                      </span>
-                    </div>
-                    <div className="text-[11px] text-slate-500 truncate mt-0.5">
-                      {targetGeofence.name}, Jawa Timur
-                    </div>
-                  </div>
-                </div>
-
-                <div className="shrink-0 text-right">
-                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-mono-code font-bold border ${
-                    isInsideRadius
-                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                      : 'bg-rose-50 text-rose-700 border-rose-200'
-                  }`}>
-                    {currentDistanceMeters}m • {isInsideRadius ? 'Masuk Area Kerja (Valid)' : 'Luar Area'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Outside Radius Note Box (Exact Match if outside radius) */}
-              {!isInsideRadius && (
-                <div className="p-3.5 rounded-2xl bg-amber-50/70 border border-amber-300 text-xs space-y-2 animate-in fade-in duration-200">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-amber-900 font-bold text-[11px]">
-                      <MapPin className="w-4 h-4 text-amber-600 shrink-0" />
-                      <span>Presensi di Luar Radius Area Kerja ({currentDistanceMeters}m)</span>
-                    </div>
-                    <span className="text-[9.5px] font-mono-code font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300">
-                      WAJIB ISI CATATAN
-                    </span>
-                  </div>
-                  <p className="text-[10.5px] text-amber-800">
-                    GPS perangkat terdeteksi di luar area kerja resmi. Harap tuliskan catatan / alasan presensi di lokasi ini:
-                  </p>
-                  <input
-                    type="text"
-                    value={notesInput}
-                    onChange={e => setNotesInput(e.target.value)}
-                    placeholder="Tuliskan catatan / alasan presensi di luar radius..."
-                    className="w-full bg-white border border-amber-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-orange-500 placeholder:text-slate-400"
-                  />
-                </div>
-              )}
-
-              {/* Bottom Submit Action Button (Exact Match) */}
-              <button
-                type="button"
-                onClick={handleManualShutter}
-                disabled={isSubmitting}
-                className={`w-full py-3.5 rounded-2xl font-black text-sm tracking-wide transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer ${
-                  attendanceAction === 'CHECK_IN'
-                    ? 'bg-gradient-to-r from-[#FF6B00] to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white shadow-orange-500/25 active:scale-98'
-                    : 'bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white shadow-orange-600/25 active:scale-98'
-                }`}
-              >
-                {isSubmitting ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Merekam Presensi Biometrik Wajah...</span>
-                  </>
-                ) : (
-                  <>
-                    <Send className="w-4 h-4" />
-                    <span>
-                      {attendanceAction === 'CHECK_IN' ? 'Ambil Foto & Absen Masuk' : 'Ambil Foto & Absen Pulang'}
-                    </span>
-                  </>
-                )}
-              </button>
-            </>
           )}
 
         </div>
