@@ -1488,9 +1488,8 @@ export function authenticateUser(identifier, password, ipAddress = '127.0.0.1') 
   const trimmed = (identifier || '').trim().toLowerCase();
   const candidates = db.prepare(`
     SELECT u.* FROM user_accounts u
-    LEFT JOIN employees e ON u.employee_id = e.id
-    WHERE LOWER(u.email) = ? OR LOWER(u.username) = ? OR LOWER(e.nik) = ?;
-  `).all(trimmed, trimmed, trimmed);
+    WHERE LOWER(u.email) = ? OR LOWER(u.username) = ?;
+  `).all(trimmed, trimmed);
 
   if (!candidates || candidates.length === 0) {
     addAuditLog({
@@ -1504,7 +1503,7 @@ export function authenticateUser(identifier, password, ipAddress = '127.0.0.1') 
       status: 'FAILED',
       details: `Percobaan login gagal: Kredensial "${identifier}" tidak terdaftar dalam sistem.`
     });
-    return { success: false, error: 'Email atau Username / NIK tidak terdaftar' };
+    return { success: false, error: 'ID Login Akun atau Email tidak terdaftar' };
   }
 
   let user = null;

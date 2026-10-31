@@ -271,7 +271,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onOpenKios
         }
 
         if (resp.status === 'AMBIGUOUS') {
-          setFaceFeedback(resp.message || '⚠️ Kemiripan wajah ambigu! Harap login via Email / NIK.');
+          setFaceFeedback(resp.message || '⚠️ Kemiripan wajah ambigu! Harap login via ID Akun / Email.');
           setRecognitionProgress(0);
           setDetectedCandidate(null);
           return;
@@ -695,7 +695,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onOpenKios
                   className="w-full py-2.5 px-4 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-xs transition cursor-pointer flex items-center justify-center gap-2"
                 >
                   <Lock className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Gunakan Kata Sandi / NIK</span>
+                  <span>Gunakan ID Login Akun & Kata Sandi</span>
                 </button>
               </div>
             ) : (
@@ -703,7 +703,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onOpenKios
               <form onSubmit={handleLogin} className="space-y-4">
                 <div>
                   <label className="block text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-600 mb-1.5">
-                    Email atau Username
+                    ID Login Akun atau Email
                   </label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -713,7 +713,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onOpenKios
                       type="text"
                       value={identifier}
                       onChange={(e) => setIdentifier(e.target.value)}
-                      placeholder="misal: D001, admin, atau galih"
+                      placeholder="misal: d072, d073, admin, atau email"
                       className="w-full pl-10 pr-3.5 py-2.5 bg-slate-50/80 border border-slate-200 rounded-xl text-[13.5px] text-slate-900 font-medium placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0066FF] focus:border-transparent focus:bg-white transition"
                       disabled={isLoading}
                     />
@@ -844,7 +844,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onOpenKios
               {!forgotSuccess ? (
                 <form onSubmit={handleForgotPassword} className="space-y-4">
                   <div className="p-3 bg-blue-50/60 border border-blue-100 rounded-xl text-blue-900 text-xs leading-relaxed">
-                    Masukkan <strong>Nomor WhatsApp</strong>, <strong>Email</strong>, atau <strong>Username/NIK</strong> Anda. Sistem akan memverifikasi dan langsung mengirimkan kata sandi sementara ke kontak terdaftar.
+                    Masukkan <strong>Nomor WhatsApp</strong>, <strong>Email</strong>, atau <strong>ID Login Akun</strong> Anda. Sistem akan memverifikasi dan langsung mengirimkan kata sandi sementara ke kontak terdaftar.
                   </div>
 
                   {forgotError && (
@@ -856,7 +856,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onOpenKios
 
                   <div>
                     <label className="block text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-600 mb-1.5">
-                      Nomor HP, Email, atau ID / NIK
+                      Nomor HP, Email, atau ID Login Akun
                     </label>
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">

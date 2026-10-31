@@ -56,8 +56,8 @@ export const FinanceTimelineChart: React.FC<FinanceTimelineChartProps> = ({
   const totalMonthlyBaseSalary = employees.reduce((acc, e) => acc + e.baseSalary, 0);
   const totalMonthlyFixedAllowance = employees.reduce((acc, e) => acc + e.fixedAllowance, 0);
   const totalMonthlyDailyAllowance = employees.reduce((acc, e) => acc + (e.dailyAllowance * 22), 0);
-  const totalEstimatedOvertime = 4750000; // Estimated overtime pool
-  const totalEstimatedGross = totalMonthlyBaseSalary + totalMonthlyFixedAllowance + totalMonthlyDailyAllowance + totalEstimatedOvertime;
+  const totalEstimatedOvertime = 0;
+  const totalEstimatedGross = totalMonthlyBaseSalary + totalMonthlyFixedAllowance + totalMonthlyDailyAllowance;
   const totalEstimatedDeductions = Math.round(totalMonthlyBaseSalary * (salaryRules.bpjsKetenagakerjaanRate + salaryRules.bpjsKesehatanRate)) + 3200000;
   const totalNetPayrollDisbursement = totalEstimatedGross - totalEstimatedDeductions;
 
@@ -88,12 +88,12 @@ export const FinanceTimelineChart: React.FC<FinanceTimelineChartProps> = ({
     {
       day: 15,
       dateStr: '15 September 2026',
-      title: 'Audit Lembur Mingguan & Tunjangan Site',
-      phase: 'Overtime & Site Audit',
+      title: 'Audit Kehadiran & Tunjangan Site',
+      phase: 'Attendance & Site Audit',
       category: 'PREPARATION',
       estAmount: totalEstimatedOvertime,
       status: 'SCHEDULED',
-      description: 'Verifikasi lembur teknisi dan personil lapangan sesuai formula Depnaker 1/173 Upah Pokok.',
+      description: 'Verifikasi presensi tervalidasi dan tunjangan penugasan personil lapangan.',
       parties: ['Project Manager Divisi', 'Payroll Officer']
     },
     {
@@ -199,7 +199,7 @@ export const FinanceTimelineChart: React.FC<FinanceTimelineChartProps> = ({
             Timeline Arus Kas Penggajian & Anggaran Proyek (30 Hari)
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Simulasi komitmen arus kas pencairan gaji, akumulasi lembur Depnaker, serta pembebanan biaya ke proyek PRIME Enterprise.
+            Simulasi komitmen arus kas pencairan gaji, serta pembebanan biaya ke proyek PRIME Enterprise.
           </p>
         </div>
 
@@ -267,7 +267,7 @@ export const FinanceTimelineChart: React.FC<FinanceTimelineChartProps> = ({
 
         <div className="p-3 rounded-2xl bg-amber-50/70 border border-amber-200/60">
           <span className="text-[10px] font-black uppercase tracking-wider text-amber-800 font-mono-code block">
-            Estimasi Lembur Depnaker
+            Total Tunjangan Proyek
           </span>
           <div className="text-lg font-black text-amber-900 font-mono-code mt-0.5">
             {formatSalaryDisplay(totalEstimatedOvertime, showChartNominal)}

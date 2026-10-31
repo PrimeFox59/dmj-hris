@@ -140,8 +140,8 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
   // Monthly payroll estimate
   const totalBaseSalary = scopedEmployees.reduce((acc, e) => acc + e.baseSalary, 0);
   const totalAllowances = scopedEmployees.reduce((acc, e) => acc + e.fixedAllowance + (e.dailyAllowance * 22), 0);
-  const totalOvertimeEst = activeSelectedProject ? Math.round(4750000 * (scopedEmployees.length / (employees.length || 1))) : 4750000;
-  const totalGrossPayroll = totalBaseSalary + totalAllowances + totalOvertimeEst;
+  const totalOvertimeEst = 0;
+  const totalGrossPayroll = totalBaseSalary + totalAllowances;
   const totalNetPayrollDisbursement = Math.round(totalGrossPayroll * 0.91);
 
   return (
@@ -630,17 +630,17 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
             <div className="glass-card rounded-2xl p-5 hover:shadow-lg transition-all border border-slate-200/80 card-interactive">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wider font-mono-code">
-                  Beban Lembur Depnaker
+                  Tunjangan & Operasional
                 </span>
-                <div className="w-9 h-9 rounded-xl bg-orange-50 text-[#FF6B00] flex items-center justify-center">
-                  <Clock className="w-4 h-4" />
+                <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                  <Banknote className="w-4 h-4" />
                 </div>
               </div>
-              <div className="text-xl sm:text-2xl font-black text-orange-600 font-mono-code">
-                {formatSalaryDisplay(totalOvertimeEst, showFinanceNominal)}
+              <div className="text-xl sm:text-2xl font-black text-indigo-600 font-mono-code">
+                {formatSalaryDisplay(totalAllowances, showFinanceNominal)}
               </div>
               <div className="mt-2 text-xs text-slate-500">
-                Formula 1/173 x Upah Pokok Jam Kerja
+                Tunjangan Tetap, Jabatan & Uang Harian
               </div>
             </div>
 
@@ -806,10 +806,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                     <span className="text-slate-600">Uang Makan / Harian</span>
                     <span className="font-bold text-slate-900 font-mono-code">{formatSalaryDisplay(employees.reduce((acc, e) => acc + (e.dailyAllowance * 22), 0), showFinanceNominal)}</span>
                   </div>
-                  <div className="flex justify-between items-center py-1 border-b border-slate-100">
-                    <span className="text-slate-600">Upah Lembur Depnaker</span>
-                    <span className="font-bold text-orange-600 font-mono-code">+{formatSalaryDisplay(totalOvertimeEst, showFinanceNominal)}</span>
-                  </div>
+                  
                   <div className="flex justify-between items-center py-1.5 font-black text-slate-900 text-xs">
                     <span>Total Beban Bruto</span>
                     <span className="font-mono-code">{formatSalaryDisplay(totalGrossPayroll, showFinanceNominal)}</span>

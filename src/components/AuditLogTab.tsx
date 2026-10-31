@@ -392,7 +392,7 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
               {auditStats ? auditStats.approvals : totalApprCount}
             </div>
             <span className="text-[10px] text-emerald-700 font-mono-code">
-              Cuti & Lembur
+              Cuti & Dispensasi
             </span>
           </div>
         </div>

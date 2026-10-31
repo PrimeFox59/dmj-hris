@@ -596,8 +596,8 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
 
   const exportCSV = () => {
     const headers = [
-      'NIK', 'Nama', 'Departemen', 'Posisi', 'Proyek Utama', 'Hari Kerja', 'Hadir', 'Cuti', 'Unpaid',
-      'Gaji Pokok', 'Tunjangan Tetap', 'Uang Harian', 'Tunjangan Proyek', 'Lembur', 'Potongan Unpaid', 'Potongan Terlambat',
+      'ID Akun', 'Nama', 'Departemen', 'Posisi', 'Proyek Utama', 'Hari Kerja', 'Hadir', 'Cuti', 'Unpaid',
+      'Gaji Pokok', 'Tunjangan Tetap', 'Uang Harian', 'Tunjangan Proyek', 'Potongan Unpaid', 'Potongan Terlambat',
       'BPJS Ketenagakerjaan', 'BPJS Kesehatan', 'PPh 21', 'Gaji Bersih (THP)', 'Status Validasi HR'
     ];
 
@@ -605,7 +605,7 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
       const emp = employees.find(e => e.id === p.employeeId);
       const proj = projects.find(prj => prj.id === emp?.assignedProjectId);
       return [
-        p.nik,
+        emp?.loginId || p.employeeId,
         `"${p.employeeName}"`,
         `"${p.department}"`,
         `"${p.position}"`,
@@ -618,7 +618,6 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
         p.fixedAllowance,
         p.dailyAllowanceTotal,
         p.projectAllowance,
-        p.overtimePay,
         p.unpaidLeaveDeduction,
         p.unapprovedLateDeduction,
         p.bpjsKetenagakerjaan,
@@ -688,7 +687,7 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
             </h1>
             <p className="text-xs text-slate-500 mt-0.5">
               {isSelfOnly
-                ? 'Rincian resmi kalkulasi upah pokok, tunjangan kerja, upah lembur, potongan BPJS & THP Anda.'
+                ? 'Rincian resmi kalkulasi upah pokok, tunjangan kerja, potongan BPJS & THP Anda.'
                 : 'Workflow penggajian 2 tahap: Audit presensi & cuti oleh HR Manager disusul kalkulasi dan otorisasi disbursement Finance.'}
             </p>
           </div>
@@ -855,13 +854,13 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
 
               <div className="rounded-2xl bg-slate-50/80 border border-slate-200/80 p-2.5">
                 <span className="text-[10px] uppercase font-bold text-slate-400 font-mono-code block">
-                  Upah Lembur Depnaker
+                  Total Tunjangan Kerja
                 </span>
-                <span className="text-sm sm:text-base font-black text-orange-600 font-mono-code block truncate">
-                  {formatSalaryDisplay(totalOvertimeSpent, showPayrollNominal)}
+                <span className="text-sm sm:text-base font-black text-indigo-600 font-mono-code block truncate">
+                  {formatSalaryDisplay(filteredRecords.reduce((acc, p) => acc + p.fixedAllowance + p.dailyAllowanceTotal + p.projectAllowance, 0), showPayrollNominal)}
                 </span>
                 <span className="text-[10px] text-slate-400 font-medium">
-                  Formula 1/173
+                  Tetap & Uang Harian
                 </span>
               </div>
 
@@ -1127,7 +1126,7 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
               <div className="relative">
                 <input
                   type="text"
-                  placeholder="Cari nama, NIK, divisi..."
+                  placeholder="Cari nama, ID akun, divisi..."
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
                   className="bg-white border border-slate-200 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/30 w-40 sm:w-52"
@@ -1171,12 +1170,11 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50/80 text-slate-500 uppercase font-mono-code text-[10px] tracking-wider border-b border-slate-200">
                 <tr>
-                  <th className="px-2.5 py-2.5 sm:px-3">NIK & Karyawan</th>
+                  <th className="px-2.5 py-2.5 sm:px-3">Karyawan</th>
                   <th className="px-2.5 py-2.5 sm:px-3">Departemen & Posisi</th>
                   <th className="px-2 py-2.5 text-center whitespace-nowrap">Presensi & Cuti</th>
                   <th className="px-2 py-2.5 sm:px-2.5 text-right whitespace-nowrap">Gaji Pokok & Tunjangan</th>
-                  <th className="px-2 py-2.5 sm:px-2.5 text-right whitespace-nowrap">Lembur Depnaker</th>
-                  <th className="px-2 py-2.5 sm:px-2.5 text-right whitespace-nowrap">Potongan</th>
+                                    <th className="px-2 py-2.5 sm:px-2.5 text-right whitespace-nowrap">Potongan</th>
                   <th className="px-2 py-2.5 sm:px-2.5 text-right font-bold text-slate-900 whitespace-nowrap">Gaji Bersih (THP)</th>
                   <th className="px-1.5 py-2.5 text-center whitespace-nowrap">Status HR</th>
                   <th className="px-2 py-2.5 text-center whitespace-nowrap">Aksi</th>
@@ -1185,7 +1183,7 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
               <tbody className="divide-y divide-slate-100 font-medium">
                 {filteredRecords.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-4 py-8 text-center text-slate-400">
+                    <td colSpan={8} className="px-4 py-8 text-center text-slate-400">
                       Tidak ada karyawan yang sesuai dengan kriteria filter ini.
                     </td>
                   </tr>
@@ -1216,7 +1214,6 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                                 {item.employeeName}
                               </p>
                               <div className="flex items-center gap-1.5 mt-0.5">
-                                <span className="text-[10px] font-mono-code text-slate-500">{item.nik}</span>
                                 {emp?.employmentType && (
                                   <span className="text-[9px] px-1 py-0.2 rounded bg-slate-100 text-slate-600 font-mono-code">
                                     {emp.employmentType}
@@ -1272,13 +1269,7 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                           </span>
                         </td>
 
-                        {/* 5. Lembur Depnaker */}
-                        <td className="px-2 py-2.5 sm:px-2.5 text-right font-mono-code text-orange-600 font-semibold whitespace-nowrap">
-                          +{formatSalaryDisplay(item.overtimePay, showPayrollNominal)}
-                          <span className="block text-[9px] text-slate-400 font-normal">
-                            ({item.overtimeHours} Jam)
-                          </span>
-                        </td>
+
 
                         {/* 6. Potongan */}
                         <td className="px-2 py-2.5 sm:px-2.5 text-right font-mono-code text-rose-600 whitespace-nowrap">
@@ -1740,7 +1731,7 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
               </div>
               <div>
                 <h3 className="text-base font-black text-slate-900 tracking-tight">
-                  Audit Presensi, Cuti & Lembur (HR Manager)
+                  Audit Presensi, Cuti & Absensi (HR Manager)
                 </h3>
                 <p className="text-xs text-slate-500">
                   {auditingEmployee.employee.name} • {auditingEmployee.employee.position} ({auditingEmployee.employee.department})
@@ -1931,25 +1922,7 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                 </p>
               </div>
 
-              {/* Lembur Depnaker */}
-              <div>
-                <label className="block text-slate-700 font-bold mb-1">
-                  Jam Lembur Disetujui (Depnaker Overtime Hours):
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    min={0}
-                    max={120}
-                    value={auditFormOvertimeHours}
-                    onChange={e => setAuditFormOvertimeHours(Number(e.target.value))}
-                    className="w-28 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 font-bold font-mono-code text-orange-600 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/30"
-                  />
-                  <span className="text-xs text-slate-500 font-medium">
-                    Estimasi Upah Lembur: <strong>{formatSalaryDisplay(Math.round(auditFormOvertimeHours * (salaryRules.overtimeFormula.subsequentHourRateMultiplier * (auditingEmployee.employee.baseSalary / salaryRules.overtimeFormula.hourlyRateDivisor))), showPayrollNominal)}</strong>
-                  </span>
-                </div>
-              </div>
+
 
               {/* Catatan Verifikasi HR */}
               <div>
@@ -2059,8 +2032,13 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                 <span className="font-bold text-slate-900">{selectedSlip.employeeName}</span>
               </div>
               <div>
-                <span className="text-[10px] text-slate-400 font-mono-code uppercase block">Nomor Induk (NIK)</span>
-                <span className="font-bold text-slate-900 font-mono-code">{selectedSlip.nik}</span>
+                <span className="text-[10px] text-slate-400 font-mono-code uppercase block">ID Login Akun</span>
+                <span className="font-bold text-slate-900 font-mono-code">
+                  {(() => {
+                    const emp = employees.find(e => e.id === selectedSlip.employeeId);
+                    return emp?.loginId || (selectedSlip.employeeId === 'EMP-001' ? 'admin' : ('d' + String(selectedSlip.employeeId.replace(/\D/g, '')).padStart(3, '0')));
+                  })()}
+                </span>
               </div>
               <div>
                 <span className="text-[10px] text-slate-400 font-mono-code uppercase block">Departemen</span>
@@ -2109,10 +2087,7 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                   <span className="text-slate-600">Tunjangan Penugasan Proyek:</span>
                   <span className="font-mono-code font-semibold">{formatSalaryDisplay(selectedSlip.projectAllowance, showPayrollNominal)}</span>
                 </div>
-                <div className="flex justify-between py-0.5 text-orange-700 font-medium">
-                  <span>Upah Lembur ({selectedSlip.overtimeHours} Jam Depnaker):</span>
-                  <span className="font-mono-code font-bold">+{formatSalaryDisplay(selectedSlip.overtimePay, showPayrollNominal)}</span>
-                </div>
+
                 <div className="flex justify-between pt-1.5 border-t border-slate-200 font-bold text-slate-900">
                   <span>Total Penghasilan Bruto:</span>
                   <span className="font-mono-code">{formatSalaryDisplay(selectedSlip.grossSalary, showPayrollNominal)}</span>

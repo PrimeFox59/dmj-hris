@@ -264,7 +264,7 @@ export const UserPerformanceTab: React.FC<UserPerformanceTabProps> = ({
               >
                 {employees.map(emp => (
                   <option key={emp.id} value={emp.id}>
-                    {emp.name} - {emp.position} ({emp.nik ? emp.nik.replace(/^DMJ-/i, 'PRIME-') : emp.id})
+                    {emp.name} - {emp.position} ({emp.loginId || emp.id})
                   </option>
                 ))}
               </select>
@@ -301,7 +301,7 @@ export const UserPerformanceTab: React.FC<UserPerformanceTabProps> = ({
                   {selectedEmployeeId === currentUser.id ? 'PORTAL PERSONAL KARYAWAN' : 'TINJAUAN KINERJA PERSONEL'}
                 </span>
                 <span className="text-xs font-mono-code text-slate-400 font-bold">
-                  {activeEmployee.nik ? activeEmployee.nik.replace(/^DMJ-/i, 'PRIME-') : ''}
+                  {activeEmployee.loginId || (activeEmployee.id === 'EMP-001' ? 'admin' : ('d' + String(activeEmployee.id.replace(/\D/g, '')).padStart(3, '0')))}
                 </span>
                 <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 text-[10px] font-mono-code">
                   Status: {activeEmployee.employmentType}
@@ -396,7 +396,7 @@ export const UserPerformanceTab: React.FC<UserPerformanceTabProps> = ({
           { id: 'SALARY', label: 'Cek Gaji & Slip', icon: Banknote },
           { id: 'ATTENDANCE', label: 'Presensi & Jam Kerja', icon: Clock },
           { id: 'LEAVE', label: `Sisa Cuti (${remainingLeave} Hari)`, icon: Calendar },
-          { id: 'PROJECTION', label: 'Proyeksi Gaji & Lembur', icon: TrendingUp }
+          
         ].map(tab => {
           const Icon = tab.icon;
           const isActive = activeSection === tab.id;
@@ -1371,8 +1371,8 @@ export const UserPerformanceTab: React.FC<UserPerformanceTabProps> = ({
                 <span className="font-bold text-slate-900">{activeEmployee.name}</span>
               </div>
               <div>
-                <span className="text-[10px] text-slate-400 font-mono-code uppercase block">Nomor Induk (NIK)</span>
-                <span className="font-bold text-slate-900 font-mono-code">{activeEmployee.nik}</span>
+                <span className="text-[10px] text-slate-400 font-mono-code uppercase block">ID Login Akun</span>
+                <span className="font-bold text-slate-900 font-mono-code">{activeEmployee.loginId || (activeEmployee.id === 'EMP-001' ? 'admin' : ('d' + String(activeEmployee.id.replace(/\D/g, '')).padStart(3, '0')))}</span>
               </div>
               <div>
                 <span className="text-[10px] text-slate-400 font-mono-code uppercase block">Departemen</span>

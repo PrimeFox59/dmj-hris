@@ -530,7 +530,7 @@ export const SalaryRulesTab: React.FC<SalaryRulesTabProps> = ({
           Area Khusus Manajemen & Direksi
         </h2>
         <p className="text-xs text-slate-600 leading-relaxed mb-6">
-          Modul konfigurasi bot WhatsApp, aturan gaji, formula lembur Depnaker RI, persentase BPJS, dan registry IP Gateway kantor hanya dapat diakses oleh level <b>Superuser (Direksi)</b>, <b>Finance</b>, dan <b>HR</b>.
+          Modul konfigurasi bot WhatsApp, aturan gaji, persentase BPJS, dan registry IP Gateway kantor hanya dapat diakses oleh level <b>Superuser (Direksi)</b>, <b>Finance</b>, dan <b>HR</b>.
         </p>
         <div className="p-3.5 rounded-2xl bg-white/80 border border-slate-200 text-left flex items-center justify-between">
           <div>
@@ -558,7 +558,7 @@ export const SalaryRulesTab: React.FC<SalaryRulesTabProps> = ({
     simLateDeduction = blocks * config.latePenaltyPerBlock;
   }
 
-  const simGross = simBase + simDailyTotal + simRemoteAllowance + simOtPay;
+  const simGross = simBase + simDailyTotal + simRemoteAllowance;
   const simBpjsTk = Math.round(simBase * config.bpjsKetenagakerjaanRate);
   const simBpjsKes = Math.round(simBase * config.bpjsKesehatanRate);
   const simTotalDeduct = simLateDeduction + simBpjsTk + simBpjsKes;
@@ -1642,7 +1642,7 @@ export const SalaryRulesTab: React.FC<SalaryRulesTabProps> = ({
                   <label className="p-3 rounded-2xl bg-slate-50/80 border border-slate-200/70 flex items-center justify-between cursor-pointer hover:bg-slate-100/70 transition-all">
                     <div className="pr-2">
                       <span className="text-xs font-bold text-slate-900 block">Keputusan Review (Disetujui/Ditolak)</span>
-                      <span className="text-[10px] text-slate-500 block">Konfirmasi status cuti/izin/lembur ke pemohon</span>
+                      <span className="text-[10px] text-slate-500 block">Konfirmasi status cuti/izin ke pemohon</span>
                     </div>
                     <input
                       type="checkbox"

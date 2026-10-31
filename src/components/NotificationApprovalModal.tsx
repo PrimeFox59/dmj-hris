@@ -487,7 +487,7 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
     list.push({
       id: 'notif-payroll-sep',
       title: 'Slip Gaji Periode September 2026 Siap Diterbitkan',
-      desc: 'Perhitungan lembur Depnaker 173 jam & tunjangan site proyek telah disinkronisasikan.',
+      desc: 'Perhitungan tunjangan site proyek telah disinkronisasikan.',
       time: 'Hari ini, 07:00 WIB',
       type: 'info',
       icon: Banknote,

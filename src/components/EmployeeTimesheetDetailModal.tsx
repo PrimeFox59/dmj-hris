@@ -529,7 +529,7 @@ export const EmployeeTimesheetDetailModal: React.FC<EmployeeTimesheetDetailModal
                   {employee.name}
                 </h3>
                 <span className="text-[10px] px-2 py-0.5 rounded bg-white/15 text-orange-200 font-mono-code font-bold">
-                  {employee.nik}
+                  {employee.loginId || (employee.id === 'EMP-001' ? 'admin' : ('d' + String(employee.id.replace(/\D/g, '')).padStart(3, '0')))}
                 </span>
                 <span className="text-[9px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono-code font-semibold border border-emerald-500/30">
                   {employee.employmentType || 'TETAP'}

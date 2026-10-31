@@ -726,7 +726,7 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                         <div className="min-w-0">
                           <div className="font-bold text-slate-900 leading-tight text-xs sm:text-[13px] truncate">{emp.name}</div>
                           <div className="text-[10.5px] text-slate-500 font-mono-code mt-0.5">
-                            {emp.nik} • {emp.employmentType}
+                            {emp.employmentType}
                           </div>
                         </div>
                       </div>
@@ -964,7 +964,7 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
         >
           <div className="px-3.5 py-2 bg-slate-50/90">
             <p className="font-bold text-slate-900 text-xs truncate">{dropdownAnchor.emp.name}</p>
-            <p className="text-[10px] text-slate-500 font-mono-code">{dropdownAnchor.emp.nik} • {dropdownAnchor.emp.workLocationType === 'NON_LOKAL' ? '✈️ Non-Lokal' : '📍 Lokal'}</p>
+            <p className="text-[10px] text-slate-500 font-mono-code">{dropdownAnchor.emp.employmentType} • {dropdownAnchor.emp.workLocationType === 'NON_LOKAL' ? '✈️ Non-Lokal' : '📍 Lokal'}</p>
           </div>
 
           <div className="py-1">
@@ -1590,7 +1590,7 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                   <div className="font-bold text-slate-900 text-sm truncate">{resetTargetEmployee.name}</div>
                   <div className="text-[11px] text-slate-500 truncate">{resetTargetEmployee.position} • {resetTargetEmployee.department}</div>
                   <div className="text-[10px] text-slate-500 font-mono-code mt-0.5">
-                    NIK Resmi: <span className="font-bold text-slate-800">{resetTargetEmployee.nik}</span>
+                    ID Login Akun: <span className="font-bold text-slate-800 font-mono">{resetTargetEmployee.loginId || (resetTargetEmployee.id === 'EMP-001' ? 'admin' : ('d' + String(resetTargetEmployee.id.replace(/\D/g, '')).padStart(3, '0')))}</span>
                   </div>
                 </div>
               </div>
@@ -1645,7 +1645,7 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                 </div>
 
                 <p className="text-[10.5px] text-indigo-800/80 leading-relaxed font-mono-code">
-                  Karyawan dapat masuk menggunakan <strong className="text-indigo-950 font-bold">ID Login ({resetTargetEmployee.loginId || 'd...'})</strong> atau <strong className="text-indigo-950 font-bold">NIK Resmi ({resetTargetEmployee.nik})</strong>.
+                  Karyawan dapat masuk menggunakan <strong className="text-indigo-950 font-bold">ID Login Akun ({resetTargetEmployee.loginId || 'd...'})</strong> atau <strong className="text-indigo-950 font-bold">Email Resmi</strong>.
                 </p>
               </div>
 

@@ -226,7 +226,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                         {isFinanceOrSuper ? 'Payroll & Proyek' : 'Slip Gaji Saya'}
                       </p>
                       <p className="text-[10px] text-slate-500 mt-0.5 line-clamp-1">
-                        {isFinanceOrSuper ? 'Rekap lembur & slip resmi' : 'Rincian gaji & cetak slip'}
+                        {isFinanceOrSuper ? 'Rekap gaji & slip resmi' : 'Rincian gaji & cetak slip'}
                       </p>
                     </div>
                   </button>

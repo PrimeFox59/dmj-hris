@@ -49,7 +49,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {
           id: 'dashboard',
           title: 'PORTAL KINERJA SAYA',
-          desc: 'Ringkasan kehadiran pribadi, sisa cuti tahunan, slip gaji & proyeksi lembur Anda',
+          desc: 'Ringkasan kehadiran pribadi, sisa cuti tahunan, slip gaji & performa kerja Anda',
           icon: LayoutDashboard,
           badge: null
         },
@@ -63,14 +63,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {
           id: 'approvals',
           title: 'PENGAJUAN & IZIN SAYA',
-          desc: 'Formulir & riwayat pengajuan cuti, izin sakit & dispensasi lembur',
+          desc: 'Formulir & riwayat pengajuan cuti, izin sakit & dispensasi kehadiran',
           icon: CheckSquare,
           badge: pendingApprovalsCount > 0 ? pendingApprovalsCount : null
         },
         {
           id: 'payroll',
           title: 'SLIP GAJI SAYA',
-          desc: 'Rincian penerimaan gaji pokok, tunjangan kerja, upah lembur & cetak slip resmi PRIME hris',
+          desc: 'Rincian penerimaan gaji pokok, tunjangan kerja, cetak slip resmi PRIME hris',
           icon: Banknote,
           badge: null
         }
@@ -122,7 +122,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {
           id: 'approvals',
           title: 'PUSAT APPROVAL SDM',
-          desc: 'Otorisasi berjenjang pengajuan cuti, izin, lembur & dinas luar',
+          desc: 'Otorisasi berjenjang pengajuan cuti, izin & dinas luar',
           icon: CheckSquare,
           badge: pendingApprovalsCount > 0 ? pendingApprovalsCount : null
         },
@@ -183,7 +183,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {
           id: 'payroll',
           title: 'PAYROLL & PENGGAJIAN',
-          desc: 'Otoritas penggajian per proyek, rekap lembur Depnaker, cetak slip gaji resmi & audit upah',
+          desc: 'Otoritas penggajian per proyek, cetak slip gaji resmi & audit upah',
           icon: Banknote,
           badge: null
         },
@@ -203,15 +203,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
         },
         {
           id: 'approvals',
-          title: 'APPROVAL CUTI & LEMBUR',
-          desc: 'Pusat otorisasi permohonan cuti, kompensasi lembur & justifikasi presensi staf',
+          title: 'APPROVAL CUTI & DISPENSASI',
+          desc: 'Pusat otorisasi permohonan cuti, justifikasi presensi staf',
           icon: CheckSquare,
           badge: pendingApprovalsCount > 0 ? pendingApprovalsCount : null
         },
         {
           id: 'attendance',
-          title: 'REKAP PRESENSI & LEMBUR',
-          desc: 'Audit rekapitulasi kehadiran, jam lembur aktual & presensi dinas luar untuk payroll',
+          title: 'REKAP PRESENSI & JADWAL',
+          desc: 'Audit rekapitulasi kehadiran, presensi dinas luar untuk payroll',
           icon: Camera,
           badge: null
         },
@@ -265,7 +265,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {
           id: 'approvals',
           title: 'APPROVAL & PENGAJUAN',
-          desc: 'Pusat otorisasi tiket SDM, persetujuan dispensasi cuti & kompensasi lembur',
+          desc: 'Pusat otorisasi tiket SDM, persetujuan dispensasi cuti & absensi',
           icon: CheckSquare,
           badge: pendingApprovalsCount > 0 ? pendingApprovalsCount : null
         },

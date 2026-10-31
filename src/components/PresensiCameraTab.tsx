@@ -1884,7 +1884,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                     </td>
                     <td className="py-3 px-3">
                       <div className="font-bold text-slate-900">{item.employeeName}</div>
-                      <div className="text-[10px] text-slate-500 font-mono-code">{item.employeeNik}</div>
+                      <div className="text-[10px] text-indigo-600 font-mono-code font-semibold">{item.employeeId ? (item.employeeId === 'EMP-001' ? 'admin' : ('d' + String(item.employeeId.replace(/\D/g, '')).padStart(3, '0'))) : ''}</div>
                     </td>
                     <td className="py-3 px-3 whitespace-nowrap">
                       {item.checkInTime ? (
