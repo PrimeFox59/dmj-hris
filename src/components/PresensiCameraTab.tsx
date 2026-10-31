@@ -1846,17 +1846,18 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                 <th className="py-2.5 px-3">Karyawan</th>
                 <th className="py-2.5 px-3">Absen Masuk</th>
                 <th className="py-2.5 px-3">Absen Pulang</th>
-                <th className="py-2.5 px-3">Mode</th>
                 <th className="py-2.5 px-3">Lokasi & Geofence</th>
                 <th className="py-2.5 px-3">Catatan / Keterangan</th>
                 <th className="py-2.5 px-3">Status Verifikasi</th>
-                <th className="py-2.5 px-3 text-right">Foto Snapshot</th>
+                {currentRole === 'superuser' && onDeleteAttendance && (
+                  <th className="py-2.5 px-3 text-right">Aksi</th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {visibleAttendanceHistory.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-10 text-center text-slate-400 text-xs">
+                  <td colSpan={currentRole === 'superuser' && onDeleteAttendance ? 8 : 7} className="py-10 text-center text-slate-400 text-xs">
                     {isDbLoading ? (
                       <div className="flex flex-col items-center justify-center gap-2 animate-pulse py-4">
                         <div className="w-5 h-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
@@ -1881,42 +1882,43 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                     </td>
                     <td className="py-3 px-3">
                       <div className="font-bold text-slate-900">{item.employeeName}</div>
-                      <div className="text-[10px] text-slate-500 font-mono-code">{item.employeeNik} • {item.department}</div>
+                      <div className="text-[10px] text-slate-500 font-mono-code">{item.employeeNik}</div>
                     </td>
                     <td className="py-3 px-3 whitespace-nowrap">
-                      <div className="flex items-center gap-1.5 font-mono-code">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                        <span className="font-bold text-slate-800 text-[11px]">
-                          {item.checkInTime ? `${item.checkInTime} WIB` : '-'}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="py-3 px-3 whitespace-nowrap">
-                      <div className="flex items-center gap-1.5 font-mono-code">
-                        {item.checkOutTime ? (
-                          <>
-                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
-                            <span className="font-bold text-emerald-600 text-[11px]">
-                              {item.checkOutTime} WIB
-                            </span>
-                          </>
-                        ) : (
-                          <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-400 text-[10px] italic font-medium">
-                            Belum Pulang
+                      {item.checkInTime ? (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedHistoryItem(item)}
+                          className="flex items-center gap-1.5 font-mono-code group cursor-pointer text-left focus:outline-none"
+                          title="Klik untuk melihat bukti foto & watermark presensi masuk"
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0 group-hover:scale-125 transition-transform" />
+                          <span className="font-bold text-slate-800 text-[11px] group-hover:text-[#FF6B00] group-hover:underline transition-colors">
+                            {item.checkInTime} WIB
                           </span>
-                        )}
-                      </div>
+                        </button>
+                      ) : (
+                        <span className="text-slate-400 text-[11px] font-mono-code">-</span>
+                      )}
                     </td>
-                    <td className="py-3 px-3">
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        item.mode === 'DINAS_LUAR'
-                          ? 'bg-amber-100 text-amber-800'
-                          : item.mode === 'WFH'
-                          ? 'bg-blue-100 text-blue-800'
-                          : 'bg-emerald-100 text-emerald-800'
-                      }`}>
-                        {item.mode.replace('_', ' ')}
-                      </span>
+                    <td className="py-3 px-3 whitespace-nowrap">
+                      {item.checkOutTime ? (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedHistoryItem(item)}
+                          className="flex items-center gap-1.5 font-mono-code group cursor-pointer text-left focus:outline-none"
+                          title="Klik untuk melihat bukti foto & watermark presensi pulang"
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0 group-hover:scale-125 transition-transform" />
+                          <span className="font-bold text-emerald-600 text-[11px] group-hover:text-[#FF6B00] group-hover:underline transition-colors">
+                            {item.checkOutTime} WIB
+                          </span>
+                        </button>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-400 text-[10px] italic font-medium font-mono-code">
+                          Belum Pulang
+                        </span>
+                      )}
                     </td>
                     <td className="py-3 px-3">
                       <div className="font-semibold text-slate-800 text-[11px] truncate max-w-[200px] flex items-center gap-1">
@@ -1950,37 +1952,27 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                         </span>
                       )}
                     </td>
-                    <td className="py-3 px-3 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
+                    {currentRole === 'superuser' && onDeleteAttendance && (
+                      <td className="py-3 px-3 text-right">
                         <button
-                          onClick={() => setSelectedHistoryItem(item)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-[10px] cursor-pointer transition-colors"
-                          title="Lihat Foto & Watermark Presensi"
-                        >
-                          <Eye className="w-3 h-3 text-[#FF6B00]" />
-                          <span>Lihat Foto</span>
-                        </button>
-                        {currentRole === 'superuser' && onDeleteAttendance && (
-                          <button
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              if (window.confirm(`Hapus permanen rekaman presensi tanggal ${item.date} (${item.employeeName})? Tindakan ini tidak dapat dibatalkan.`)) {
-                                try {
-                                  await onDeleteAttendance(item.id);
-                                } catch (err: any) {
-                                  alert('Gagal menghapus presensi: ' + (err?.message || err));
-                                }
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            if (window.confirm(`Hapus permanen rekaman presensi tanggal ${item.date} (${item.employeeName})? Tindakan ini tidak dapat dibatalkan.`)) {
+                              try {
+                                await onDeleteAttendance(item.id);
+                              } catch (err: any) {
+                                alert('Gagal menghapus presensi: ' + (err?.message || err));
                               }
-                            }}
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 font-semibold text-[10px] cursor-pointer transition-colors"
-                            title="Hapus Rekaman Presensi (Khusus Superuser)"
-                          >
-                            <Trash2 className="w-3 h-3 text-rose-600" />
-                            <span>Hapus</span>
-                          </button>
-                        )}
-                      </div>
-                    </td>
+                            }
+                          }}
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 font-semibold text-[10px] cursor-pointer transition-colors"
+                          title="Hapus Rekaman Presensi (Khusus Superuser)"
+                        >
+                          <Trash2 className="w-3 h-3 text-rose-600" />
+                          <span>Hapus</span>
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))
               )}
