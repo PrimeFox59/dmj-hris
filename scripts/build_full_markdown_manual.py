@@ -21,7 +21,7 @@ def generate_markdown():
     doc_lines.append("**Nomor Dokumen:** `DOC-PRIME-HRIS-MANUAL-2026-V3-SSOT`  ")
     doc_lines.append("**Klasifikasi:** Enterprise Restricted Standard / Dokumen Operasional Resmi Korporat  ")
     doc_lines.append("**Lead Systems Architect:** Galih Primananda (PT Prime Infinity Systems / Prime Projectx)  ")
-    doc_lines.append("**Repositori Tunggal SSOT:** `https://github.com/PrimeFox59/prime-hris.git`  \n")
+    doc_lines.append("**Ekosistem Sistem SSOT:** Prime Projectx Ecosystem (https://primeprojectx.net)  \n")
     doc_lines.append("---\n")
 
     # DAFTAR ISI
@@ -94,7 +94,7 @@ def generate_markdown():
 
     # LEMBAR PENGESAHAN
     doc_lines.append("## LEMBAR PENGESAHAN ARSITEKTUR DIGITAL & PENGENDALIAN MUTU\n")
-    doc_lines.append("Sesuai Kebijakan Rekayasa Sistem Prime Projectx, dokumen manual operasional ini merupakan **System-Automated Digital Enterprise Report**. Seluruh isi dokumen ini, termasuk logika bisnis presensi, formulasi matematis payroll, matriks otorisasi RBAC, hingga skema relasi basis data, diverifikasi secara langsung terhadap basis kode produksi aktif pada repositori `https://github.com/PrimeFox59/prime-hris.git`.\n")
+    doc_lines.append("Sesuai Kebijakan Rekayasa Sistem Prime Projectx, dokumen manual operasional ini merupakan **System-Automated Digital Enterprise Report**. Seluruh isi dokumen ini, termasuk logika bisnis presensi, formulasi matematis payroll, matriks otorisasi RBAC, hingga skema relasi basis data, diverifikasi secara langsung terhadap basis kode produksi aktif sistem PRIME HRIS Enterprise Core Engine.\n")
     doc_lines.append("> [!NOTE]")
     doc_lines.append("> **Prinsip Pemisahan Buku Panduan Per Peran (Role Separation):**")
     doc_lines.append("> Untuk mencegah kebingungan pengguna di lapangan, buku panduan ini membagi panduan operasional ke dalam bab-bab khusus independen untuk setiap peran (Staff, Project Manager, HR, Finance, Superuser). Pengguna hanya perlu membaca bab yang sesuai dengan perannya masing-masing untuk memahami seluruh tugas, fungsi tombol, input data, dan keterkaitan data yang dihasilkannya.\n")

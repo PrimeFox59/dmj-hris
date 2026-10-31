@@ -3,7 +3,7 @@
 **Nomor Dokumen:** `DOC-PRIME-HRIS-MANUAL-2026-V3-SSOT`  
 **Klasifikasi:** Enterprise Restricted Standard / Dokumen Operasional Resmi Korporat  
 **Lead Systems Architect:** Galih Primananda (PT Prime Infinity Systems / Prime Projectx)  
-**Repositori Tunggal SSOT:** `https://github.com/PrimeFox59/prime-hris.git`  
+**Ekosistem Sistem SSOT:** Prime Projectx Ecosystem (https://primeprojectx.net)  
 
 ---
 
@@ -78,7 +78,7 @@
 
 ## LEMBAR PENGESAHAN ARSITEKTUR DIGITAL & PENGENDALIAN MUTU
 
-Sesuai Kebijakan Rekayasa Sistem Prime Projectx, dokumen manual operasional ini merupakan **System-Automated Digital Enterprise Report**. Seluruh isi dokumen ini, termasuk logika bisnis presensi, formulasi matematis payroll, matriks otorisasi RBAC, hingga skema relasi basis data, diverifikasi secara langsung terhadap basis kode produksi aktif pada repositori `https://github.com/PrimeFox59/prime-hris.git`.
+Sesuai Kebijakan Rekayasa Sistem Prime Projectx, dokumen manual operasional ini merupakan **System-Automated Digital Enterprise Report**. Seluruh isi dokumen ini, termasuk logika bisnis presensi, formulasi matematis payroll, matriks otorisasi RBAC, hingga skema relasi basis data, diverifikasi secara langsung terhadap basis kode produksi aktif sistem PRIME HRIS Enterprise Core Engine.
 
 > [!NOTE]
 > **Prinsip Pemisahan Buku Panduan Per Peran (Role Separation):**
