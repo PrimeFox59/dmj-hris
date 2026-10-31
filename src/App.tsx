@@ -138,7 +138,7 @@ export function App() {
   // SQLite Database Sync State
   const [isDbLoading, setIsDbLoading] = useState<boolean>(true);
   const [dbInfo, setDbInfo] = useState<any>(null);
-  const [workCalendar, setWorkCalendar] = useState<AnnualWorkCalendarConfig | null>(null);
+  const [workCalendar, setWorkCalendar] = useState<AnnualWorkCalendarConfig | null>(() => bootCache?.workCalendar || null);
 
   // Active Tab - Default to URL query (?tab=...) or hash (#...) or 'dashboard'
   const [activeTab, setActiveTab] = useState<string>(() => {
@@ -444,6 +444,9 @@ export function App() {
         if (data.salaryRules) {
           setSalaryRules(data.salaryRules);
         }
+        if (data.workCalendar) {
+          setWorkCalendar(data.workCalendar);
+        }
         if (data.dbInfo) {
           setDbInfo(data.dbInfo);
         }
@@ -455,7 +458,8 @@ export function App() {
             projects: data.projects,
             attendances: data.attendances,
             approvals: data.approvals,
-            salaryRules: data.salaryRules
+            salaryRules: data.salaryRules,
+            workCalendar: data.workCalendar
           }));
         } catch (cacheErr) {
           console.warn('Failed to cache bootstrap data', cacheErr);
@@ -1583,6 +1587,7 @@ export function App() {
             projects={projects}
             attendances={isStaffUser ? attendances.filter(a => a.employeeId === currentUser.id) : attendances}
             salaryRules={salaryRules}
+            workCalendar={workCalendar}
             selectedProjectId={selectedProjectId}
             onSelectProjectId={setSelectedProjectId}
             onUpdateEmployee={handleUpdateEmployee}
@@ -1600,7 +1605,10 @@ export function App() {
         )}
 
         {activeTab === 'work_calendar' && (
-          <AnnualWorkCalendarTab currentUser={currentUser} />
+          <AnnualWorkCalendarTab
+            currentUser={currentUser}
+            onUpdateCalendar={(cal) => setWorkCalendar(cal)}
+          />
         )}
 
         {activeTab === 'audit' && (

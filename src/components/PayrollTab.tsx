@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Banknote,
@@ -29,7 +29,9 @@ import {
   Send,
   Search
 } from 'lucide-react';
-import { Employee, PayrollRecord, Project, SalaryRuleConfig, AttendanceRecord, SystemRole, getEffectiveSystemRole, AnnualWorkCalendarConfig } from '../types';
+import { Employee, PayrollRecord, Project, SalaryRuleConfig, AttendanceRecord, SystemRole, getEffectiveSystemRole, AnnualWorkCalendarConfig, WorkPeriodItem } from '../types';
+import { api } from '../services/api';
+import { rtcService } from '../services/rtcService';
 import { formatSalaryDisplay, calculateEmployeePayroll, EmployeeAuditOverride } from '../utils/payrollCalculator';
 import { EmployeeTimesheetDetailModal } from './EmployeeTimesheetDetailModal';
 
@@ -71,7 +73,9 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
   const isFinanceOrSuper = isFinance || isSuperuser;
 
   // Selected Period & Project Filter
-  const [selectedPeriod, setSelectedPeriod] = useState('September 2026');
+  const [selectedPeriod, setSelectedPeriod] = useState<string>(() => {
+    return localStorage.getItem('prime_payroll_selected_period') || 'Periode Oktober 2026';
+  });
   const [currentProjectFilter, setCurrentProjectFilter] = useState<string>(selectedProjectId);
   const [activeSubView, setActiveSubView] = useState<'REKAP_GAJI' | 'ALOKASI_PROYEK' | 'PROYEKSI_EAC'>('REKAP_GAJI');
   const [searchQuery, setSearchQuery] = useState('');
@@ -205,94 +209,145 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
   };
 
   
-  // Derived active calendar periods from workCalendar (annual master)
-  const calendarPeriods = useMemo(() => {
-    if (workCalendar?.periods && workCalendar.periods.length > 0) {
-      return workCalendar.periods;
+  // Master Work Calendar State (Synchronized with prop and SQLite backend)
+  const [activeWorkCalendar, setActiveWorkCalendar] = useState<AnnualWorkCalendarConfig | null>(workCalendar || null);
+
+  useEffect(() => {
+    if (workCalendar) {
+      setActiveWorkCalendar(workCalendar);
+    } else {
+      api.getWorkCalendar(2026).then(res => {
+        const cal = res?.calendar || res?.config;
+        if (cal) setActiveWorkCalendar(cal);
+      }).catch(err => console.warn('[PayrollTab] Could not load work calendar fallback', err));
     }
-    return [];
   }, [workCalendar]);
 
-  // Auto-sync payroll period, cutoff dates, and working days with workCalendar
+  useEffect(() => {
+    const unsub = rtcService.subscribe('WORK_CALENDAR_UPDATED', (packet) => {
+      if (packet.payload) {
+        setActiveWorkCalendar(packet.payload);
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  // Derived active calendar periods from activeWorkCalendar
+  const calendarPeriods: WorkPeriodItem[] = useMemo(() => {
+    if (activeWorkCalendar?.periods && activeWorkCalendar.periods.length > 0) {
+      return activeWorkCalendar.periods;
+    }
+    return [];
+  }, [activeWorkCalendar]);
+
+  const findMatchingPeriod = useCallback((nameOrId?: string | null): WorkPeriodItem | null => {
+    if (!calendarPeriods.length || !nameOrId) return null;
+    const clean = nameOrId.toLowerCase().trim();
+    return calendarPeriods.find(p => 
+      p.periodName.toLowerCase() === clean ||
+      p.periodId.toLowerCase() === clean ||
+      p.periodName.toLowerCase().replace('periode ', '') === clean.replace('periode ', '') ||
+      p.periodName.toLowerCase().includes(clean) ||
+      clean.includes(p.periodName.toLowerCase())
+    ) || null;
+  }, [calendarPeriods]);
+
+  // Active Period Object based on selection or current month
+  const currentPeriodObj = useMemo(() => {
+    if (!calendarPeriods.length) return null;
+    const matched = findMatchingPeriod(selectedPeriod);
+    if (matched) return matched;
+    const currentMonthIndex = new Date().getMonth();
+    return calendarPeriods.find(p => p.monthIndex === currentMonthIndex) || calendarPeriods[0];
+  }, [calendarPeriods, selectedPeriod, findMatchingPeriod]);
+
+  const handleSelectPeriod = (target: WorkPeriodItem) => {
+    if (!target) return;
+    setSelectedPeriod(target.periodName);
+    setStartDate(target.startDate);
+    setEndDate(target.endDate);
+    setCustomWorkingDays(target.effectiveWorkDays || 22);
+    try {
+      localStorage.setItem('prime_payroll_selected_period', target.periodName);
+      localStorage.setItem('prime_payroll_start_date', target.startDate);
+      localStorage.setItem('prime_payroll_end_date', target.endDate);
+      localStorage.setItem('prime_payroll_working_days', String(target.effectiveWorkDays || 22));
+    } catch (e) {}
+  };
+
+  // Auto-sync payroll period, cutoff dates, and working days with active calendar
   useEffect(() => {
     if (calendarPeriods.length > 0) {
-      const currentMonthIndex = new Date().getMonth();
-      let target = calendarPeriods.find(p => p.periodName === selectedPeriod);
-      if (!target) {
-        target = calendarPeriods.find(p => p.monthIndex === currentMonthIndex) || calendarPeriods[0];
-      }
+      const savedPeriod = localStorage.getItem('prime_payroll_selected_period');
+      const target = findMatchingPeriod(savedPeriod) || findMatchingPeriod(selectedPeriod) || calendarPeriods.find(p => p.monthIndex === new Date().getMonth()) || calendarPeriods[0];
       if (target) {
         setSelectedPeriod(target.periodName);
         setStartDate(target.startDate);
         setEndDate(target.endDate);
         setCustomWorkingDays(target.effectiveWorkDays || 22);
-        localStorage.setItem('prime_payroll_selected_period', target.periodName);
-        localStorage.setItem('prime_payroll_start_date', target.startDate);
-        localStorage.setItem('prime_payroll_end_date', target.endDate);
-        localStorage.setItem('prime_payroll_working_days', String(target.effectiveWorkDays || 22));
+        try {
+          localStorage.setItem('prime_payroll_selected_period', target.periodName);
+          localStorage.setItem('prime_payroll_start_date', target.startDate);
+          localStorage.setItem('prime_payroll_end_date', target.endDate);
+          localStorage.setItem('prime_payroll_working_days', String(target.effectiveWorkDays || 22));
+        } catch (e) {}
       }
     }
-  }, [calendarPeriods]);
-
-  const handleSelectPeriod = (periodName: string) => {
-    setSelectedPeriod(periodName);
-    const target = calendarPeriods.find(p => p.periodName === periodName);
-    if (target) {
-      setStartDate(target.startDate);
-      setEndDate(target.endDate);
-      setCustomWorkingDays(target.effectiveWorkDays || 22);
-      localStorage.setItem('prime_payroll_selected_period', periodName);
-      localStorage.setItem('prime_payroll_start_date', target.startDate);
-      localStorage.setItem('prime_payroll_end_date', target.endDate);
-      localStorage.setItem('prime_payroll_working_days', String(target.effectiveWorkDays || 22));
-    }
-  };
+  }, [calendarPeriods, findMatchingPeriod]);
 
   const handleSyncFromCalendar = () => {
-    if (calendarPeriods.length === 0) return;
-    const currentMonthIndex = new Date().getMonth();
-    let target = calendarPeriods.find(p => p.periodName === selectedPeriod);
-    if (!target) {
-      target = calendarPeriods.find(p => p.monthIndex === currentMonthIndex) || calendarPeriods[0];
-    }
-    if (target) {
-      setSelectedPeriod(target.periodName);
-      setStartDate(target.startDate);
-      setEndDate(target.endDate);
-      setCustomWorkingDays(target.effectiveWorkDays || 22);
-      localStorage.setItem('prime_payroll_selected_period', target.periodName);
-      localStorage.setItem('prime_payroll_start_date', target.startDate);
-      localStorage.setItem('prime_payroll_end_date', target.endDate);
-      localStorage.setItem('prime_payroll_working_days', String(target.effectiveWorkDays || 22));
+    if (currentPeriodObj) {
+      handleSelectPeriod(currentPeriodObj);
     }
   };
 
   // Helper to set preset cutoff date ranges
   const handleSetPresetCutoff = (preset: 'STANDARD' | 'FULL_MONTH' | 'MONTH_END') => {
-    let start = '2026-08-21';
-    let end = '2026-09-20';
-    let days = 22;
-
     if (preset === 'STANDARD') {
-      start = '2026-08-21';
-      end = '2026-09-20';
-      days = 22;
-    } else if (preset === 'FULL_MONTH') {
-      start = '2026-09-01';
-      end = '2026-09-30';
-      days = 22;
-    } else if (preset === 'MONTH_END') {
-      start = '2026-08-26';
-      end = '2026-09-25';
-      days = 22;
+      if (currentPeriodObj) {
+        handleSelectPeriod(currentPeriodObj);
+        return;
+      }
+      setStartDate('2026-09-21');
+      setEndDate('2026-10-20');
+      setCustomWorkingDays(25);
+      return;
     }
 
-    setStartDate(start);
-    setEndDate(end);
-    setCustomWorkingDays(days);
-    localStorage.setItem('prime_payroll_start_date', start);
-    localStorage.setItem('prime_payroll_end_date', end);
-    localStorage.setItem('prime_payroll_working_days', String(days));
+    if (preset === 'FULL_MONTH') {
+      const monthIdx = currentPeriodObj?.monthIndex !== undefined ? currentPeriodObj.monthIndex : (new Date().getMonth());
+      const yr = activeWorkCalendar?.year || 2026;
+      const start = `${yr}-${String(monthIdx + 1).padStart(2, '0')}-01`;
+      const lastDay = new Date(yr, monthIdx + 1, 0).getDate();
+      const end = `${yr}-${String(monthIdx + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+      setStartDate(start);
+      setEndDate(end);
+      setCustomWorkingDays(currentPeriodObj?.effectiveWorkDays || 22);
+      try {
+        localStorage.setItem('prime_payroll_start_date', start);
+        localStorage.setItem('prime_payroll_end_date', end);
+        localStorage.setItem('prime_payroll_working_days', String(currentPeriodObj?.effectiveWorkDays || 22));
+      } catch (e) {}
+      return;
+    }
+
+    if (preset === 'MONTH_END') {
+      const monthIdx = currentPeriodObj?.monthIndex !== undefined ? currentPeriodObj.monthIndex : (new Date().getMonth());
+      const yr = activeWorkCalendar?.year || 2026;
+      const prevMonth = monthIdx === 0 ? 12 : monthIdx;
+      const prevYear = monthIdx === 0 ? yr - 1 : yr;
+      const start = `${prevYear}-${String(prevMonth).padStart(2, '0')}-26`;
+      const end = `${yr}-${String(monthIdx + 1).padStart(2, '0')}-25`;
+      setStartDate(start);
+      setEndDate(end);
+      setCustomWorkingDays(currentPeriodObj?.effectiveWorkDays || 22);
+      try {
+        localStorage.setItem('prime_payroll_start_date', start);
+        localStorage.setItem('prime_payroll_end_date', end);
+        localStorage.setItem('prime_payroll_working_days', String(currentPeriodObj?.effectiveWorkDays || 22));
+      } catch (e) {}
+      return;
+    }
   };
 
   const handleStartDateChange = (val: string) => {
@@ -566,9 +621,31 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                 {isStaff ? 'SLIP GAJI PERSONAL' : 'PAYROLL & COST ACCOUNTING'}
               </span>
               <span className="text-xs font-bold text-slate-500">PRIME ENTERPRISE</span>
-              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 font-mono-code">
-                Periode: {selectedPeriod}
-              </span>
+              <div className="relative inline-flex items-center">
+                <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 hover:bg-slate-200 border border-slate-200/90 text-slate-800 text-xs font-mono-code font-bold transition-all shadow-2xs">
+                  <Calendar className="w-3.5 h-3.5 text-[#FF6B00]" />
+                  <span>Periode:</span>
+                  {calendarPeriods.length > 0 ? (
+                    <select
+                      value={currentPeriodObj?.periodName || selectedPeriod}
+                      onChange={e => {
+                        const target = calendarPeriods.find(p => p.periodName === e.target.value);
+                        if (target) handleSelectPeriod(target);
+                      }}
+                      className="bg-transparent text-xs font-bold text-slate-900 border-none outline-none cursor-pointer pr-1"
+                      aria-label="Pilih Periode Penggajian"
+                    >
+                      {calendarPeriods.map(p => (
+                        <option key={p.periodId || p.periodName} value={p.periodName} className="text-slate-900 bg-white">
+                          {p.periodName} ({p.effectiveWorkDays || 22} Hari Kerja • Cutoff {p.startDate} s/d {p.endDate})
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="font-bold text-slate-900">{selectedPeriod}</span>
+                  )}
+                </div>
+              </div>
             </div>
             <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
               {isSelfOnly ? 'Rincian Slip Gaji & Penerimaan Saya' : 'Penggajian Karyawan & Alokasi Anggaran Proyek'}
@@ -801,46 +878,42 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
             {/* Cutoff Quick Presets */}
             <div className="flex items-center gap-1.5 flex-wrap">
               <span className="text-[10px] text-slate-400 font-mono-code uppercase mr-1">Preset:</span>
-              {calendarPeriods.length > 0 && (
+              {currentPeriodObj && (
                 <button
                   type="button"
                   onClick={handleSyncFromCalendar}
-                  className="px-2 py-0.5 rounded-lg text-[11px] font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 transition-all cursor-pointer flex items-center gap-1"
+                  className={`px-2 py-0.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                    startDate === currentPeriodObj.startDate && endDate === currentPeriodObj.endDate && customWorkingDays === currentPeriodObj.effectiveWorkDays
+                      ? 'bg-emerald-600 text-white shadow-2xs'
+                      : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300'
+                  }`}
                   title="Terapkan rentang tanggal & hari kerja resmi dari Kalender Tahunan"
                 >
                   <RotateCcw className="w-3 h-3" />
-                  Sesuai Kalender ({calendarPeriods.find(p => p.periodName === selectedPeriod)?.effectiveWorkDays || customWorkingDays} Hari)
+                  Sesuai Kalender ({currentPeriodObj.effectiveWorkDays || customWorkingDays} Hari)
                 </button>
               )}
               <button
+                type="button"
                 onClick={() => handleSetPresetCutoff('STANDARD')}
                 className={`px-2 py-0.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
-                  startDate === '2026-08-21' && endDate === '2026-09-20'
+                  startDate === (currentPeriodObj?.startDate || '2026-09-21') && endDate === (currentPeriodObj?.endDate || '2026-10-20')
                     ? 'bg-slate-900 text-white shadow-2xs'
                     : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
                 }`}
               >
-                21 Ags - 20 Sep (Standar)
+                Cutoff Kalender ({currentPeriodObj ? `${currentPeriodObj.startDate.slice(5)} s/d ${currentPeriodObj.endDate.slice(5)}` : 'Standar'})
               </button>
               <button
+                type="button"
                 onClick={() => handleSetPresetCutoff('FULL_MONTH')}
                 className={`px-2 py-0.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
-                  startDate === '2026-09-01' && endDate === '2026-09-30'
+                  startDate.endsWith('-01')
                     ? 'bg-slate-900 text-white shadow-2xs'
                     : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
                 }`}
               >
-                01 Sep - 30 Sep (Bulan Penuh)
-              </button>
-              <button
-                onClick={() => handleSetPresetCutoff('MONTH_END')}
-                className={`px-2 py-0.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
-                  startDate === '2026-08-26' && endDate === '2026-09-25'
-                    ? 'bg-slate-900 text-white shadow-2xs'
-                    : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
-                }`}
-              >
-                26 Ags - 25 Sep (Akhir Bulan)
+                Bulan Penuh (01 - 30/31)
               </button>
             </div>
           </div>

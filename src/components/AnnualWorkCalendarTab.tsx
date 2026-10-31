@@ -27,6 +27,7 @@ import { rtcService } from '../services/rtcService';
 
 interface AnnualWorkCalendarTabProps {
   currentUser?: Employee;
+  onUpdateCalendar?: (cal: AnnualWorkCalendarConfig) => void;
 }
 
 const INDONESIA_HOLIDAYS_2026: Record<string, string> = {
@@ -53,7 +54,7 @@ const MONTH_NAMES = [
   'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
 ];
 
-export const AnnualWorkCalendarTab: React.FC<AnnualWorkCalendarTabProps> = ({ currentUser }) => {
+export const AnnualWorkCalendarTab: React.FC<AnnualWorkCalendarTabProps> = ({ currentUser, onUpdateCalendar }) => {
   const currentRole: SystemRole = getEffectiveSystemRole(currentUser);
   const isHrOrAdmin = ['admin', 'superuser', 'hr'].includes(currentRole);
 
@@ -107,6 +108,7 @@ export const AnnualWorkCalendarTab: React.FC<AnnualWorkCalendarTabProps> = ({ cu
     const unsubscribeUpdated = rtcService.subscribe('WORK_CALENDAR_UPDATED', (packet) => {
       if (packet.payload) {
         setCalendarConfig(packet.payload);
+        if (onUpdateCalendar) onUpdateCalendar(packet.payload);
       }
     });
 
@@ -283,6 +285,7 @@ export const AnnualWorkCalendarTab: React.FC<AnnualWorkCalendarTabProps> = ({ cu
       const cal = res?.calendar || res?.config;
       if (cal) {
         setCalendarConfig(cal);
+        if (onUpdateCalendar) onUpdateCalendar(cal);
         setSaveSuccessMessage('Konfigurasi kalender kerja tahunan dan periode cut-off berhasil disimpan.');
       } else {
         setSaveSuccessMessage('Pengaturan berhasil diperbarui secara live.');
