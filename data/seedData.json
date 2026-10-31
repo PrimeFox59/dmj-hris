@@ -9821,36 +9821,7 @@
       }
     }
   ],
-  "INITIAL_ATTENDANCE": [
-    {
-      "id": "ATT-20260908-01",
-      "employeeId": "EMP-001",
-      "employeeName": "Galih Primananda, S.E.",
-      "employeeNik": "PRIME-2024-001",
-      "department": "Engineering & Digital Transformation",
-      "date": "2026-09-08",
-      "checkInTime": "07:54:12",
-      "mode": "WFO",
-      "status": "ON_TIME",
-      "photoUrl": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&auto=format&fit=crop&q=80",
-      "location": {
-        "lat": -7.119011,
-        "lng": 112.584402,
-        "accuracy": 5.8,
-        "address": "Workshop Utama PRIME Enterprise, Blok A1-A4",
-        "inGeofence": true,
-        "distanceMeters": 22
-      },
-      "note": "Dandori alat ukur & calibrator mesin CNC Fabrikasi PRIME Line A",
-      "isLate": false,
-      "lateMinutes": 0,
-      "approvalStatus": "NOT_REQUIRED",
-      "networkAudit": {
-        "ipAddress": "103.31.205.218",
-        "connectionType": "Secure GPS Geofence"
-      }
-    }
-  ],
+  "INITIAL_ATTENDANCE": [],
   "INITIAL_APPROVALS": [
     {
       "id": "APP-2026-004",

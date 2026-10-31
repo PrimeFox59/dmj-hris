@@ -46,7 +46,10 @@ export function calculateEmployeePayroll(
 ): PayrollRecord {
   // Filter attendance records by employee and optional date range [startDate, endDate]
   const empAttendances = attendances.filter(a => {
-    if (a.employeeId !== employee.id) return false;
+    const idMatch = a.employeeId === employee.id;
+    const nikMatch = Boolean(employee.nik && a.employeeNik === employee.nik);
+    const nameMatch = Boolean(a.employeeName && employee.name && a.employeeName.trim().toLowerCase() === employee.name.trim().toLowerCase());
+    if (!idMatch && !nikMatch && !nameMatch) return false;
     if (startDate && a.date < startDate) return false;
     if (endDate && a.date > endDate) return false;
     return true;
@@ -54,21 +57,21 @@ export function calculateEmployeePayroll(
 
   const workingDays = customWorkingDays || rules.standardWorkDaysPerMonth || 22;
 
-  // Actual count or overridden by HR
-  const initialLeaveDays = employee.usedLeave || 0;
-  const initialPresentDays = empAttendances.length;
+  // Actual count: STRICTLY REAL ATTENDANCES (NO DUMMY FALLBACK)
+  const actualPresentDays = empAttendances.length;
 
   const presentDays = auditOverride?.presentDays !== undefined 
     ? auditOverride.presentDays 
-    : (initialPresentDays > 0 ? initialPresentDays : Math.max(1, workingDays - initialLeaveDays));
+    : actualPresentDays;
 
+  // Leave in this specific cutoff period (defaults to 0 unless audited/approved for this period)
   const leaveDays = auditOverride?.leaveDays !== undefined 
     ? auditOverride.leaveDays 
-    : initialLeaveDays;
+    : 0;
 
   const unpaidLeaveDays = auditOverride?.unpaidLeaveDays !== undefined 
     ? auditOverride.unpaidLeaveDays 
-    : (employee.unpaidLeaveDaysTotal || 0);
+    : 0;
 
   // Gaji Pokok Harian (Ditentukan Finance atau Otomatis Gaji Pokok / Hari Kerja)
   const defaultDailyBase = Math.round(employee.baseSalary / Math.max(1, workingDays));
@@ -80,7 +83,7 @@ export function calculateEmployeePayroll(
   const calculatedAlphaDays = Math.max(0, workingDays - presentDays - leaveDays - unpaidLeaveDays);
   const alphaDays = auditOverride?.alphaDays !== undefined
     ? auditOverride.alphaDays
-    : (initialPresentDays > 0 ? calculatedAlphaDays : 0);
+    : calculatedAlphaDays;
 
   const alphaDeduction = alphaDays * dailyBaseSalary;
   const unpaidLeaveDeduction = (unpaidLeaveDays * dailyBaseSalary) + alphaDeduction;
@@ -105,18 +108,18 @@ export function calculateEmployeePayroll(
     }
   }
 
-  // Calculate Overtime
+  // Calculate Overtime: STRICTLY 0 UNLESS AUDITED/APPROVED (NO DUMMY 16 HOURS!)
   const hourlyBaseRate = Math.round(employee.baseSalary / rules.overtimeFormula.hourlyRateDivisor);
   const overtimeHours = auditOverride?.overtimeHours !== undefined 
     ? auditOverride.overtimeHours 
-    : (employee.role === 'Director' ? 0 : 16);
+    : 0;
   const overtimePay = Math.round(
     overtimeHours * (rules.overtimeFormula.subsequentHourRateMultiplier * hourlyBaseRate)
   );
 
-  // Allowances
+  // Allowances (Daily allowance strictly paid for actual days present!)
   const dailyAllowanceTotal = presentDays * (employee.dailyAllowance || rules.defaultDailyAllowance);
-  const isRemoteSite = employee.assignedProjectId !== 'PRJ-HQ-04';
+  const isRemoteSite = employee.assignedProjectId !== 'PRJ-HQ-04' && employee.workLocationType === 'NON_LOKAL';
   const projectAllowance = isRemoteSite ? rules.remoteProjectAllowance : 0;
   const grossSalary = employee.baseSalary + employee.fixedAllowance + dailyAllowanceTotal + projectAllowance + overtimePay;
 
@@ -144,7 +147,7 @@ export function calculateEmployeePayroll(
         projectId: primaryProject.id,
         projectCode: primaryProject.code || primaryProject.id,
         projectName: primaryProject.name,
-        allocatedHours: 125,
+        allocatedHours: Math.round(presentDays * 8 * 0.75),
         allocatedCost: Math.round(grossSalary * 0.75),
         percentage: 75
       });
@@ -152,7 +155,7 @@ export function calculateEmployeePayroll(
         projectId: secondaryProject.id,
         projectCode: secondaryProject.code || secondaryProject.id,
         projectName: secondaryProject.name,
-        allocatedHours: 42,
+        allocatedHours: Math.round(presentDays * 8 * 0.25),
         allocatedCost: Math.round(grossSalary * 0.25),
         percentage: 25
       });
@@ -161,7 +164,7 @@ export function calculateEmployeePayroll(
         projectId: primaryProject.id,
         projectCode: primaryProject.code || primaryProject.id,
         projectName: primaryProject.name,
-        allocatedHours: 167,
+        allocatedHours: presentDays * 8,
         allocatedCost: grossSalary,
         percentage: 100
       });

@@ -1240,11 +1240,21 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                           title="Klik untuk Buka Detail Kalender Presensi & Verifikasi Foto Biometrik"
                         >
                           <div className="inline-flex flex-col items-center">
-                            <span className="font-mono-code font-bold text-slate-800 group-hover:text-[#FF6B00] transition-colors">
+                            <span className={`font-mono-code font-bold transition-colors ${
+                              item.presentDays > 0 ? 'text-slate-800 group-hover:text-[#FF6B00]' : 'text-slate-400'
+                            }`}>
                               {item.presentDays}/{item.workingDays} Hadir
                             </span>
                             <div className="flex items-center gap-1 text-[10px] text-slate-400 mt-0.5">
-                              <span>Cuti: {item.leaveDays}h</span>
+                              {item.leaveDays > 0 && <span>Cuti: {item.leaveDays}h</span>}
+                              {item.alphaDays > 0 && (
+                                <span className={item.presentDays === 0 ? "text-slate-400 font-medium" : "text-amber-600 font-medium"}>
+                                  Alpha: {item.alphaDays}h
+                                </span>
+                              )}
+                              {item.leaveDays === 0 && item.alphaDays === 0 && (
+                                <span>Cuti: 0h</span>
+                              )}
                               {item.unpaidLeaveDays > 0 && (
                                 <span className="text-rose-600 font-bold">
                                   • Unpaid: {item.unpaidLeaveDays}h
