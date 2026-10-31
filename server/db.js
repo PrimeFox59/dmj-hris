@@ -3077,7 +3077,12 @@ export function recordWaOptIn(phone, messageText = '', pushName = '') {
   try {
     const empRows = db.prepare('SELECT id, name, phone, data_json FROM employees;').all();
     for (const emp of empRows) {
-      if (messageText && (messageText.toUpperCase().includes(emp.id) || (emp.nik && messageText.includes(emp.nik)))) {
+      const lowerMsg = (messageText || '').toLowerCase();
+      if (lowerMsg && (
+        lowerMsg.includes(emp.id.toLowerCase()) ||
+        (emp.id === 'EMP-001' && (lowerMsg.includes('admin') || lowerMsg.includes('galih'))) ||
+        (emp.name && lowerMsg.includes(emp.name.toLowerCase()))
+      )) {
         matchedEmpId = emp.id;
         matchedEmpName = emp.name;
         break;

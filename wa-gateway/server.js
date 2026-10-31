@@ -263,7 +263,9 @@ async function buildClient() {
     version,
     auth: state,
     logger,
-    printQRInTerminal: false
+    printQRInTerminal: false,
+    syncFullHistory: false,
+    defaultQueryTimeoutMs: undefined
   });
 
   instance.ev.on('creds.update', saveCreds);
