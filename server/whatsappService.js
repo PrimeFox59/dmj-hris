@@ -386,6 +386,75 @@ export async function notifyApproachingCutoff(employee, projectScheduleOrCutoff 
 }
 
 /**
+ * 4b. Notification: Overdue Check-In Warning (After Cutoff Passed & Still Not Clocked In)
+ */
+export async function notifyOverdueCheckIn(employee, projectSchedule = null, dateStr = null) {
+  if (!employee || !employee.phone) return null;
+
+  const sched = typeof projectSchedule === 'object' && projectSchedule !== null
+    ? projectSchedule
+    : getEmployeeProjectSchedule(employee);
+
+  const todayStr = dateStr || new Date().toISOString().substring(0, 10);
+  const nowWib = new Date().toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hour12: false }).replace(/\./g, ':');
+  const cutoffStr = sched.cutoffTime || '08:30';
+  const projectName = sched.projectName ? (sched.projectName + ' (' + sched.projectCode + ')') : 'Site Penugasan Proyek';
+
+  const msg = 
+'🚨 *PERINGATAN: ANDA BELUM MELAKUKAN PRESENSI MASUK - PRIME HRIS*\n' +
+'Halo *' + employee.name + '* (' + employee.id + '),\n\n' +
+'Waktu toleransi presensi masuk untuk shift proyek *' + projectName + '* telah berakhir pada pukul *' + cutoffStr + ' WIB*.\n' +
+'Hingga pukul *' + nowWib + ' WIB*, sistem mencatat Anda *MASIH BELUM* melakukan presensi masuk hari ini (' + todayStr + ').\n\n' +
+'🏢 *Proyek Penugasan:* ' + projectName + '\n' +
+'⏰ *Shift Kerja Proyek:* ' + sched.checkInTime + ' - ' + sched.checkOutTime + ' WIB\n' +
+'⚠️ *Batas Toleransi Cutoff:* ' + cutoffStr + ' WIB\n\n' +
+'Segera buka portal presensi kamera untuk melakukan check-in dan menuliskan alasan keterlambatan agar kehadiran Anda tetap tercatat resmi dan terhindar dari status mangkir (Alpha):\n' +
+'🌐 https://hris.primeprojectx.net\n\n' +
+'_Abaikan pesan ini jika Anda sedang dalam status Cuti Tahunan / Izin Sakit yang telah disetujui HRD._\n\n' +
+'_Manajemen Operasional PT Prime Infinity Systems_';
+
+  return sendWhatsAppMessage(employee.phone, msg, {
+    recipientId: employee.id,
+    recipientName: employee.name,
+    eventType: 'OVERDUE_CHECKIN_WARNING',
+    title: 'Peringatan Lewat Jam Masuk Belum Presensi - ' + sched.projectCode,
+    date: todayStr
+  });
+}
+
+/**
+ * 4c. Notification: Shift Check-Out Reminder (Belum Presensi Pulang)
+ */
+export async function notifyCheckOutReminder(employee, projectSchedule = null, dateStr = null) {
+  if (!employee || !employee.phone) return null;
+
+  const sched = typeof projectSchedule === 'object' && projectSchedule !== null
+    ? projectSchedule
+    : getEmployeeProjectSchedule(employee);
+
+  const todayStr = dateStr || new Date().toISOString().substring(0, 10);
+  const projectName = sched.projectName ? (sched.projectName + ' (' + sched.projectCode + ')') : 'Site Penugasan Proyek';
+
+  const msg = 
+'🌆 *PENGINGAT PRESENSI PULANG (CHECK-OUT) - PRIME HRIS*\n' +
+'Halo *' + employee.name + '* (' + employee.id + '),\n\n' +
+'Jam operasional shift proyek *' + projectName + '* telah selesai pada pukul *' + sched.checkOutTime + ' WIB*.\n' +
+'Sistem mencatat Anda *BELUM* melakukan check-out presensi pulang hari ini (' + todayStr + ').\n\n' +
+'Silakan segera lakukan presensi pulang melalui portal sebelum meninggalkan site/kantor kerja:\n' +
+'🌐 https://hris.primeprojectx.net\n\n' +
+'Terima kasih atas kedisiplinan dan dedikasi Anda hari ini. Selamat beristirahat dan hati-hati dalam perjalanan pulang!\n\n' +
+'_Departemen HR & Manajemen Operasional PT Prime Infinity Systems_';
+
+  return sendWhatsAppMessage(employee.phone, msg, {
+    recipientId: employee.id,
+    recipientName: employee.name,
+    eventType: 'CHECKOUT_REMINDER',
+    title: 'Pengingat Presensi Pulang - ' + sched.projectCode,
+    date: todayStr
+  });
+}
+
+/**
  * 5. Notification: Leave / Attendance Correction Request Submitted
  */
 export async function notifyApprovalSubmitted(approvalItem, employee, targetApprover = null) {
@@ -553,7 +622,9 @@ async function evaluateScheduledReminders() {
     enabled: true,
     notifyMorningReminder: true,
     notifyApproachingCutoff: true,
-    approachingCutoffMinutesBefore: 15
+    approachingCutoffMinutesBefore: 15,
+    notifyOverdueCheckIn: true,
+    notifyCheckOutReminder: true
   };
 
   if (waConfig.enabled === false) return;
@@ -562,8 +633,15 @@ async function evaluateScheduledReminders() {
     try { return JSON.parse(r.data_json); } catch (e) { return r; }
   });
 
-  const todayAttendances = db.prepare("SELECT employeeId FROM attendances WHERE date = ?;").all(todayStr).map(a => a.employeeId);
-  const attendedSet = new Set(todayAttendances);
+  // Fetch today attendances with checkIn and checkOut status
+  const todayAttendances = db.prepare(
+    "SELECT employeeId, checkInTime, checkOutTime, attendanceType FROM attendances WHERE date = ?;"
+  ).all(todayStr);
+
+  const attMap = new Map();
+  for (const a of todayAttendances) {
+    attMap.set(a.employeeId, a);
+  }
 
   // Check approved leaves today
   const approvedLeaves = db.prepare(
@@ -582,30 +660,65 @@ async function evaluateScheduledReminders() {
 
   for (const emp of employees) {
     if (emp.status === 'INACTIVE') continue;
-    if (attendedSet.has(emp.id)) continue; // Already clocked in
     if (!emp.phone) continue;
 
     // Strictly resolve each employee's individual project schedule
     const sched = getEmployeeProjectSchedule(emp, rulesConfig);
+    const attRecord = attMap.get(emp.id);
 
-    // 1. Morning Reminder: evaluated against the employee's project checkInTime (30 mins before project check-in)
-    if (waConfig.notifyMorningReminder !== false) {
-      const empMorningTarget = addMins(sched.checkInTime, -30);
-      if (nowWib === empMorningTarget && !hasSentTodayWaReminder(emp.id, 'MORNING_REMINDER', todayStr)) {
-        await notifyMorningReminder(emp, sched, todayStr);
-        await new Promise(r => setTimeout(r, 2000));
-        continue;
+    // =========================================================================
+    // KONDISI 1: KARYAWAN BELUM PRESENSI MASUK
+    // =========================================================================
+    if (!attRecord) {
+      if (leaveSet.has(emp.id)) continue; // Sedang cuti resmi disetujui
+
+      // 1. Pengingat Pagi Hari (30 menit sebelum shift jam masuk proyek)
+      if (waConfig.notifyMorningReminder !== false) {
+        const empMorningTarget = addMins(sched.checkInTime, -30);
+        if (nowWib === empMorningTarget && !hasSentTodayWaReminder(emp.id, 'MORNING_REMINDER', todayStr)) {
+          await notifyMorningReminder(emp, sched, todayStr);
+          await new Promise(r => setTimeout(r, 2000));
+          continue;
+        }
+      }
+
+      // 2. Peringatan 15 Menit Batas Jam Masuk (Mendekati cutoff toleransi proyek)
+      if (waConfig.notifyApproachingCutoff !== false) {
+        const warningMinutes = Number(waConfig.approachingCutoffMinutesBefore ?? 15);
+        const empWarningTarget = addMins(sched.cutoffTime, -warningMinutes);
+        if (nowWib === empWarningTarget && !hasSentTodayWaReminder(emp.id, 'CUTOFF_WARNING', todayStr)) {
+          await notifyApproachingCutoff(emp, sched, todayStr);
+          await new Promise(r => setTimeout(r, 2000));
+          continue;
+        }
+      }
+
+      // 3. Peringatan Lewat Jam Masuk Belum Presensi (15 menit setelah batas cutoff berakhir)
+      if (waConfig.notifyOverdueCheckIn !== false) {
+        const overdueTarget = addMins(sched.cutoffTime, 15);
+        if (nowWib === overdueTarget && !hasSentTodayWaReminder(emp.id, 'OVERDUE_CHECKIN_WARNING', todayStr)) {
+          await notifyOverdueCheckIn(emp, sched, todayStr);
+          await new Promise(r => setTimeout(r, 2000));
+          continue;
+        }
       }
     }
 
-    // 2. Approaching Cutoff Warning: evaluated against the employee's project cutoffTime
-    if (waConfig.notifyApproachingCutoff !== false) {
-      if (leaveSet.has(emp.id)) continue; // Legitimate approved leave
-      const warningMinutes = Number(waConfig.approachingCutoffMinutesBefore ?? 15);
-      const empWarningTarget = addMins(sched.cutoffTime, -warningMinutes);
-      if (nowWib === empWarningTarget && !hasSentTodayWaReminder(emp.id, 'CUTOFF_WARNING', todayStr)) {
-        await notifyApproachingCutoff(emp, sched, todayStr);
-        await new Promise(r => setTimeout(r, 2000));
+    // =========================================================================
+    // KONDISI 2: KARYAWAN SUDAH MASUK TETAPI BELUM PRESENSI PULANG (CHECK-OUT)
+    // =========================================================================
+    if (attRecord) {
+      const hasCheckedOut = Boolean(attRecord.checkOutTime) || attRecord.attendanceType === 'CHECK_OUT';
+      if (!hasCheckedOut) {
+        // 4. Pengingat Presensi Pulang (Tepat jam shift pulang berakhir atau 10 menit setelahnya)
+        if (waConfig.notifyCheckOutReminder !== false) {
+          const checkOutTarget1 = sched.checkOutTime;
+          const checkOutTarget2 = addMins(sched.checkOutTime, 10);
+          if ((nowWib === checkOutTarget1 || nowWib === checkOutTarget2) && !hasSentTodayWaReminder(emp.id, 'CHECKOUT_REMINDER', todayStr)) {
+            await notifyCheckOutReminder(emp, sched, todayStr);
+            await new Promise(r => setTimeout(r, 2000));
+          }
+        }
       }
     }
   }
@@ -711,6 +824,62 @@ export async function blastUnrecordedEmployees(targetDate = null) {
   };
 }
 
+
+
+/**
+ * Manual Instant Blast to all employees who have clocked in but haven't clocked out today
+ */
+export async function blastUnrecordedCheckOut(targetDate = null) {
+  const now = new Date();
+  const todayStr = targetDate || now.toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
+
+  const db = getDatabase();
+  const employees = db.prepare("SELECT id, name, nik, data_json FROM employees;").all().map(r => {
+    try { return JSON.parse(r.data_json); } catch (e) { return r; }
+  });
+
+  const todayAttendances = db.prepare(
+    "SELECT employeeId, checkInTime, checkOutTime, attendanceType FROM attendances WHERE date = ?;"
+  ).all(todayStr);
+
+  const attMap = new Map();
+  for (const a of todayAttendances) {
+    attMap.set(a.employeeId, a);
+  }
+
+  const targets = employees.filter(e => {
+    if (e.status === 'INACTIVE' || !e.phone) return false;
+    const att = attMap.get(e.id);
+    if (!att) return false; // Belum masuk
+    const hasCheckedOut = Boolean(att.checkOutTime) || att.attendanceType === 'CHECK_OUT';
+    return !hasCheckedOut; // Sudah masuk tapi belum pulang
+  });
+
+  let sentCount = 0;
+  let failedCount = 0;
+  const details = [];
+
+  for (const emp of targets) {
+    const sched = getEmployeeProjectSchedule(emp);
+    const res = await notifyCheckOutReminder(emp, sched, todayStr);
+    if (res?.success) {
+      sentCount++;
+      details.push({ id: emp.id, name: emp.name, phone: emp.phone, status: 'SUCCESS' });
+    } else {
+      failedCount++;
+      details.push({ id: emp.id, name: emp.name, phone: emp.phone, status: 'FAILED', error: res?.error });
+    }
+    await new Promise(r => setTimeout(r, 2000));
+  }
+
+  return {
+    targetDate: todayStr,
+    totalTargeted: targets.length,
+    sentCount,
+    failedCount,
+    details
+  };
+}
 
 export function getWaOptInRegistry() {
   return getWaOptIns();

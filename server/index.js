@@ -55,6 +55,9 @@ import {
   notifyApprovalSubmitted,
   notifyApprovalDecision,
   blastUnrecordedEmployees,
+  blastUnrecordedCheckOut,
+  notifyOverdueCheckIn,
+  notifyCheckOutReminder,
   startWaBackgroundScheduler,
   restartGatewayClient,
   logoutGatewayClient

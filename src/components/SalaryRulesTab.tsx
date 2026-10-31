@@ -933,6 +933,32 @@ export const SalaryRulesTab: React.FC<SalaryRulesTabProps> = ({
                       className="w-4 h-4 accent-emerald-600 cursor-pointer"
                     />
                   </div>
+
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-white border border-slate-200 hover:border-slate-300 transition-colors">
+                    <div>
+                      <p className="font-bold text-slate-800 text-xs">Peringatan Lewat Jam Masuk Belum Presensi</p>
+                      <p className="text-[10px] text-slate-500">Kirim peringatan tegas jika belum check-in setelah cutoff toleransi proyek berakhir</p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={config.whatsappConfig?.notifyOverdueCheckIn !== false}
+                      onChange={e => updateWaConfig({ notifyOverdueCheckIn: e.target.checked })}
+                      className="w-4 h-4 accent-emerald-600 cursor-pointer"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-white border border-slate-200 hover:border-slate-300 transition-colors">
+                    <div>
+                      <p className="font-bold text-slate-800 text-xs">Pengingat Presensi Pulang (Check-Out)</p>
+                      <p className="text-[10px] text-slate-500">Kirim pengingat saat shift proyek berakhir ke staf yang belum check-out</p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={config.whatsappConfig?.notifyCheckOutReminder !== false}
+                      onChange={e => updateWaConfig({ notifyCheckOutReminder: e.target.checked })}
+                      className="w-4 h-4 accent-emerald-600 cursor-pointer"
+                    />
+                  </div>
                 </div>
 
               </div>

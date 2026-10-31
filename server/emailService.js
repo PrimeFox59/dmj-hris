@@ -431,6 +431,119 @@ export async function notifyAttendanceLateEmail(employee, record, salaryRules = 
   });
 }
 
+
+/**
+ * 2b. Notification: Overdue Check-In Warning (After Cutoff Passed & Still Not Clocked In)
+ */
+export async function notifyOverdueCheckInEmail(employee, projectSchedule = null, dateStr = null) {
+  if (!employee || !employee.email) return null;
+
+  const sched = typeof projectSchedule === 'object' && projectSchedule !== null
+    ? projectSchedule
+    : getEmployeeProjectSchedule(employee);
+
+  const todayStr = dateStr || new Date().toISOString().substring(0, 10);
+  const cutoffStr = sched.cutoffTime || '08:30';
+  const projectName = sched.projectName ? (sched.projectName + ' (' + sched.projectCode + ')') : 'Site Penugasan Proyek';
+
+  const subject = '[PRIME HRIS Peringatan] Anda Belum Melakukan Presensi Masuk - ' + sched.projectCode + ' - ' + todayStr;
+
+  const html = 
+    '<div style="margin-bottom: 20px;">' +
+      '<span style="display: inline-block; background-color: #fef2f2; color: #dc2626; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 9999px; border: 1px solid #fecaca;">' +
+        'PERINGATAN BELUM PRESENSI' +
+      '</span>' +
+      '<h2 style="font-size: 18px; font-weight: 700; color: #0f172a; margin: 12px 0 6px 0;">' +
+        'Batas Toleransi Presensi Masuk Telah Berakhir' +
+      '</h2>' +
+      '<p style="margin: 0; color: #475569; font-size: 14px;">' +
+        'Halo <strong>' + employee.name + '</strong> (' + employee.id + '), sistem mencatat Anda belum melakukan presensi masuk hari ini untuk jadwal proyek penugasan Anda.' +
+      '</p>' +
+    '</div>' +
+
+    '<table width="100%" cellpadding="8" cellspacing="0" border="0" style="background-color: #fff1f2; border-radius: 10px; border: 1px solid #fecdd3; font-size: 13px; margin-bottom: 20px;">' +
+      '<tr>' +
+        '<td width="35%" style="color: #9f1239; border-bottom: 1px solid #fecdd3;">Tanggal</td>' +
+        '<td style="font-weight: 600; color: #0f172a; border-bottom: 1px solid #fecdd3;">' + todayStr + '</td>' +
+      '</tr>' +
+      '<tr>' +
+        '<td style="color: #9f1239; border-bottom: 1px solid #fecdd3;">Proyek Penugasan</td>' +
+        '<td style="font-weight: 600; color: #0f172a; border-bottom: 1px solid #fecdd3;">' + projectName + '</td>' +
+      '</tr>' +
+      '<tr>' +
+        '<td style="color: #9f1239; border-bottom: 1px solid #fecdd3;">Shift Kerja Proyek</td>' +
+        '<td style="font-weight: 600; color: #0f172a; border-bottom: 1px solid #fecdd3;">' + sched.checkInTime + ' - ' + sched.checkOutTime + ' WIB</td>' +
+      '</tr>' +
+      '<tr>' +
+        '<td style="color: #9f1239;">Batas Cutoff Masuk</td>' +
+        '<td style="font-weight: 700; color: #dc2626;">' + cutoffStr + ' WIB</td>' +
+      '</tr>' +
+    '</table>' +
+
+    '<p style="margin: 0 0 16px 0; color: #334155; font-size: 13px;">' +
+      'Harap segera buka portal presensi untuk melakukan check-in dan mengisi form catatan alasan keterlambatan/dispensasi agar tidak tercatat mangkir (Alpha):<br>' +
+      '<a href="https://hris.primeprojectx.net" style="color: #FF6B00; font-weight: 700; text-decoration: none;">https://hris.primeprojectx.net</a>' +
+    '</p>';
+
+  return sendEmailNotification({
+    to: employee.email,
+    toName: employee.name,
+    subject,
+    html,
+    eventType: 'OVERDUE_CHECKIN_WARNING',
+    recipientId: employee.id,
+    metadata: { date: todayStr, projectId: sched.projectId }
+  });
+}
+
+/**
+ * 2c. Notification: Shift Check-Out Reminder (Belum Presensi Pulang)
+ */
+export async function notifyCheckOutReminderEmail(employee, projectSchedule = null, dateStr = null) {
+  if (!employee || !employee.email) return null;
+
+  const sched = typeof projectSchedule === 'object' && projectSchedule !== null
+    ? projectSchedule
+    : getEmployeeProjectSchedule(employee);
+
+  const todayStr = dateStr || new Date().toISOString().substring(0, 10);
+  const projectName = sched.projectName ? (sched.projectName + ' (' + sched.projectCode + ')') : 'Site Penugasan Proyek';
+
+  const subject = '[PRIME HRIS Pengingat] Jangan Lupa Presensi Pulang (Check-Out) - ' + sched.projectCode + ' - ' + todayStr;
+
+  const html = 
+    '<div style="margin-bottom: 20px;">' +
+      '<span style="display: inline-block; background-color: #f0fdf4; color: #15803d; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 9999px; border: 1px solid #bbf7d0;">' +
+        'PENGINGAT PRESENSI PULANG' +
+      '</span>' +
+      '<h2 style="font-size: 18px; font-weight: 700; color: #0f172a; margin: 12px 0 6px 0;">' +
+        'Jam Shift Kerja Proyek Telah Berakhir' +
+      '</h2>' +
+      '<p style="margin: 0; color: #475569; font-size: 14px;">' +
+        'Halo <strong>' + employee.name + '</strong> (' + employee.id + '), shift operasional proyek Anda telah berakhir pada pukul <strong>' + sched.checkOutTime + ' WIB</strong>.' +
+      '</p>' +
+    '</div>' +
+
+    '<p style="margin: 0 0 16px 0; color: #334155; font-size: 13px;">' +
+      'Sistem mencatat Anda belum melakukan presensi pulang (check-out) hari ini (' + todayStr + '). Silakan segera lakukan check-out melalui portal sebelum meninggalkan site/kantor:<br>' +
+      '<a href="https://hris.primeprojectx.net" style="color: #FF6B00; font-weight: 700; text-decoration: none;">https://hris.primeprojectx.net</a>' +
+    '</p>' +
+
+    '<p style="margin: 0; color: #64748b; font-size: 12px;">' +
+      'Terima kasih atas kedisiplinan dan kerja keras Anda hari ini. Selamat beristirahat dan hati-hati dalam perjalanan pulang!' +
+    '</p>';
+
+  return sendEmailNotification({
+    to: employee.email,
+    toName: employee.name,
+    subject,
+    html,
+    eventType: 'CHECKOUT_REMINDER',
+    recipientId: employee.id,
+    metadata: { date: todayStr, projectId: sched.projectId }
+  });
+}
+
 /**
  * 3. Notification: Approval Request Submitted (To Approver & Applicant Confirmation)
  */

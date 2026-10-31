@@ -443,6 +443,8 @@ export interface WhatsAppConfig {
   notifyApproachingCutoff: boolean;
   approachingCutoffMinutesBefore: number; // e.g. 15
   notifyApprovalUpdates: boolean;
+  notifyOverdueCheckIn?: boolean;
+  notifyCheckOutReminder?: boolean;
 }
 
 export interface SmtpConfig {
@@ -460,6 +462,8 @@ export interface SmtpConfig {
   notifyApprovalUpdates: boolean;
   notifyMorningReminder: boolean;
   morningReminderTime: string; // e.g. "07:30"
+  notifyOverdueCheckIn?: boolean;
+  notifyCheckOutReminder?: boolean;
 }
 
 export interface EmailNotificationLog {
