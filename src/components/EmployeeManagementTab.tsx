@@ -333,7 +333,7 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
     if (!resetTargetEmployee) return;
     const loginId = resetTargetEmployee.loginId || (resetTargetEmployee.id === 'EMP-001' ? 'admin' : `d${String(resetTargetEmployee.id.replace(/\D/g, '')).padStart(3, '0')}`);
     const pw = resetSuccessMessage ? (customPassword.trim() || 'zzz') : 'zzz';
-    const text = `*Kredensial Akses PRIME HRIS Enterprise*\n` +
+    const text = `*Kredensial Akses DMJ HRIS Enterprise*\n` +
       `👤 Nama: ${resetTargetEmployee.name}\n` +
       `🔑 ID Login: ${loginId}\n` +
       `🆔 NIK Resmi: ${resetTargetEmployee.nik}\n` +

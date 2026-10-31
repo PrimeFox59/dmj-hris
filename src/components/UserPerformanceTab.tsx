@@ -1331,7 +1331,7 @@ export const UserPerformanceTab: React.FC<UserPerformanceTabProps> = ({
                     </div>
                     <div>
                       <h2 className="text-base sm:text-lg font-black tracking-tight text-slate-900 font-mono-code leading-none">
-                        PRIME HRIS ENTERPRISE
+                        DMJ HRIS ENTERPRISE
                       </h2>
                       <p className="text-[10px] text-slate-500 font-semibold tracking-wider uppercase mt-0.5">
                         PT Prime Infinity Systems  Advanced HR & Payroll Engineering Platform

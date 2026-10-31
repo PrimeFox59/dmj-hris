@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "PRIME HRIS — Enterprise Human Resource & Payroll System",
-  "short_name": "PRIME HRIS",
+  "name": "DMJ HRIS — Enterprise Human Resource & Payroll System",
+  "short_name": "DMJ HRIS",
   "description": "Sistem Presensi Biometrik Wajah, Geofencing Proyek & Penggajian Enterprise PT Dwi Martha Jaya",
   "start_url": "/?source=pwa",
   "scope": "/",

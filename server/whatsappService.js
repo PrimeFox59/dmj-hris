@@ -13,7 +13,7 @@ import {
   getEmployeeByIdentifier
 } from './db.js';
 
-// Configuration: Dedicated PRIME HRIS WhatsApp Gateway (Port 9008)
+// Configuration: Dedicated DMJ HRIS WhatsApp Gateway (Port 9008)
 // Strictly bound to the system's own Baileys session (.prime_wa_auth).
 // ZERO external VPS routing and ZERO cross-project gateway usage.
 const GATEWAY_URL = process.env.WA_GATEWAY_URL || 'http://127.0.0.1:9008';
@@ -175,7 +175,7 @@ export async function sendWhatsAppMessage(phone, message, meta = {}) {
     recipientName: targetName,
     recipientPhone: normPhone,
     eventType: meta.eventType || 'GENERAL_NOTIFICATION',
-    title: meta.title || 'Notifikasi PRIME HRIS',
+    title: meta.title || 'Notifikasi DMJ HRIS',
     message: String(message).trim(),
     metadata: meta,
     sentAt: new Date().toISOString()
@@ -251,7 +251,7 @@ export async function notifyAttendanceSuccess(employee, record) {
     : 'Presensi Kamera Digital Valid';
 
   const msg = 
-`✅ *KONFIRMASI PRESENSI RESMI - PRIME HRIS*
+`✅ *KONFIRMASI PRESENSI RESMI - DMJ HRIS*
 Halo *${employee.name}* (ID: ${employee.loginId || (employee.id === "EMP-001" ? "admin" : employee.id)}),
 
 Presensi kehadiran Anda (*${typeLabel}*) telah berhasil dicatat ke sistem:
@@ -289,7 +289,7 @@ export async function notifyAttendanceLate(employee, record, salaryRules = null,
   const projectName = sched.projectName ? (sched.projectName + ' (' + sched.projectCode + ')') : 'Site Operasional PRIME';
 
   const msg = 
-'⚠️ *PEMBERITAHUAN KETERLAMBATAN KERJA - PRIME HRIS*\n' +
+'⚠️ *PEMBERITAHUAN KETERLAMBATAN KERJA - DMJ HRIS*\n' +
 'Halo *' + employee.name + '* (' + employee.id + '),\n\n' +
 'Sistem mencatat presensi masuk Anda melebihi batas cutoff jadwal proyek:\n' +
 '📅 *Tanggal:* ' + dateStr + '\n' +
@@ -329,7 +329,7 @@ export async function notifyMorningReminder(employee, projectScheduleOrRules = n
   const projectName = sched.projectName ? (sched.projectName + ' (' + sched.projectCode + ')') : 'Site Penugasan Proyek';
 
   const msg = 
-'🌅 *PENGINGAT PRESENSI PAGI - PRIME HRIS*\n' +
+'🌅 *PENGINGAT PRESENSI PAGI - DMJ HRIS*\n' +
 'Selamat pagi, *' + employee.name + '* (' + employee.id + ')!\n\n' +
 'Mengingatkan untuk segera melakukan presensi kehadiran hari ini:\n' +
 '📅 *Tanggal:* ' + todayStr + '\n' +
@@ -401,7 +401,7 @@ export async function notifyOverdueCheckIn(employee, projectSchedule = null, dat
   const projectName = sched.projectName ? (sched.projectName + ' (' + sched.projectCode + ')') : 'Site Penugasan Proyek';
 
   const msg = 
-'🚨 *PERINGATAN: ANDA BELUM MELAKUKAN PRESENSI MASUK - PRIME HRIS*\n' +
+'🚨 *PERINGATAN: ANDA BELUM MELAKUKAN PRESENSI MASUK - DMJ HRIS*\n' +
 'Halo *' + employee.name + '* (' + employee.id + '),\n\n' +
 'Waktu toleransi presensi masuk untuk shift proyek *' + projectName + '* telah berakhir pada pukul *' + cutoffStr + ' WIB*.\n' +
 'Hingga pukul *' + nowWib + ' WIB*, sistem mencatat Anda *MASIH BELUM* melakukan presensi masuk hari ini (' + todayStr + ').\n\n' +
@@ -436,7 +436,7 @@ export async function notifyCheckOutReminder(employee, projectSchedule = null, d
   const projectName = sched.projectName ? (sched.projectName + ' (' + sched.projectCode + ')') : 'Site Penugasan Proyek';
 
   const msg = 
-'🌆 *PENGINGAT PRESENSI PULANG (CHECK-OUT) - PRIME HRIS*\n' +
+'🌆 *PENGINGAT PRESENSI PULANG (CHECK-OUT) - DMJ HRIS*\n' +
 'Halo *' + employee.name + '* (' + employee.id + '),\n\n' +
 'Jam operasional shift proyek *' + projectName + '* telah selesai pada pukul *' + sched.checkOutTime + ' WIB*.\n' +
 'Sistem mencatat Anda *BELUM* melakukan check-out presensi pulang hari ini (' + todayStr + ').\n\n' +
@@ -473,7 +473,7 @@ export async function notifyApprovalSubmitted(approvalItem, employee, targetAppr
   // Notice to Applicant
   if (employee.phone) {
     const applicantMsg = 
-`📋 *PENGAJUAN BERHASIL DISERAHKAN - PRIME HRIS*
+`📋 *PENGAJUAN BERHASIL DISERAHKAN - DMJ HRIS*
 Halo *${employee.name}*,
 
 Permohonan Anda telah berhasil terdaftar ke sistem:
@@ -498,7 +498,7 @@ Pantau status di: https://hris.primeprojectx.net`;
   // Notice to Approver (if known)
   if (targetApprover && targetApprover.phone) {
     const approverMsg = 
-`🔔 *PERMOHONAN BUTUH PERSETUJUAN ANDA - PRIME HRIS*
+`🔔 *PERMOHONAN BUTUH PERSETUJUAN ANDA - DMJ HRIS*
 Halo *${targetApprover.name}*,
 
 Terdapat permohonan baru dari staf membutuhkan review dan persetujuan Anda:
@@ -510,7 +510,7 @@ Terdapat permohonan baru dari staf membutuhkan review dan persetujuan Anda:
 Silakan buka Portal Approval untuk menyetujui atau menolak permohonan:
 🌐 https://hris.primeprojectx.net
 
-_Sistem Notifikasi PRIME HRIS Enterprise_`;
+_Sistem Notifikasi DMJ HRIS Enterprise_`;
 
     sendWhatsAppMessage(targetApprover.phone, approverMsg, {
       recipientId: targetApprover.id,
@@ -540,7 +540,7 @@ export async function notifyApprovalDecision(approvalItem, employee) {
   const note = approvalItem.reviewNote || (approvalItem.status === 'APPROVED' ? 'Disetujui.' : (approvalItem.status === 'REVISION_REQUESTED' ? 'Mohon melengkapi berkas pendukung.' : 'Ditolak.'));
 
   const msg = 
-'📢 *UPDATE STATUS PERMOHONAN - PRIME HRIS*\n' +
+'📢 *UPDATE STATUS PERMOHONAN - DMJ HRIS*\n' +
 'Halo *' + employee.name + '*,\n\n' +
 'Permohonan Anda telah selesai ditinjau oleh pimpinan:\n' +
 '📌 *Judul:* ' + title + '\n' +

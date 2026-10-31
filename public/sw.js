@@ -1,4 +1,4 @@
-// PRIME HRIS — High Performance Progressive Web App (PWA) Service Worker
+// DMJ HRIS — High Performance Progressive Web App (PWA) Service Worker
 const CACHE_NAME = 'prime-hris-core-v1';
 
 // Core assets to pre-cache on install for instant native boot
@@ -95,7 +95,7 @@ self.addEventListener('fetch', (event) => {
         .catch(async () => {
           const cachedIndex = await caches.match('/index.html') || await caches.match('/');
           if (cachedIndex) return cachedIndex;
-          return new Response('Mode Offline - PRIME HRIS', {
+          return new Response('Mode Offline - DMJ HRIS', {
             headers: { 'Content-Type': 'text/html' }
           });
         })

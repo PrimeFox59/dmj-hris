@@ -70,7 +70,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {
           id: 'payroll',
           title: 'SLIP GAJI SAYA',
-          desc: 'Rincian penerimaan gaji pokok, tunjangan kerja, cetak slip resmi PRIME hris',
+          desc: 'Rincian penerimaan gaji pokok, tunjangan kerja, cetak slip resmi DMJ HRIS',
           icon: Banknote,
           badge: null
         }
@@ -239,7 +239,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {
           id: 'invoice',
           title: 'INVOICE & TAGIHAN RESMI',
-          desc: 'Invoice digital resmi Termin I (50%) proyek Prime HRIS PT DMJ & verifikasi QR',
+          desc: 'Invoice digital resmi Termin I (50%) proyek DMJ HRIS PT DMJ & verifikasi QR',
           icon: FileSpreadsheet,
           badge: null
         }
@@ -286,7 +286,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {
           id: 'payroll',
           title: 'PAYROLL & PROYEK',
-          desc: 'Penggajian rapi dengan filter per proyek & slip gaji resmi PRIME hris',
+          desc: 'Penggajian rapi dengan filter per proyek & slip gaji resmi DMJ HRIS',
           icon: Banknote,
           badge: null
         },
@@ -314,7 +314,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {
           id: 'invoice',
           title: 'INVOICE & TAGIHAN RESMI',
-          desc: 'Invoice digital resmi Termin I (50%) proyek Prime HRIS PT DMJ & verifikasi QR',
+          desc: 'Invoice digital resmi Termin I (50%) proyek DMJ HRIS PT DMJ & verifikasi QR',
           icon: FileSpreadsheet,
           badge: null
         }

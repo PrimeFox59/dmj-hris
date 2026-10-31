@@ -158,7 +158,7 @@ export const SalaryRulesTab: React.FC<SalaryRulesTabProps> = ({
   const [showTestModal, setShowTestModal] = useState(false);
   const [testSelectedEmpId, setTestSelectedEmpId] = useState<string>(currentUser?.id || 'EMP-001');
   const [testPhone, setTestPhone] = useState(currentUser?.phone || '6289524257778');
-  const [testMessage, setTestMessage] = useState('Halo! Ini adalah pesan uji coba integrasi WhatsApp Baileys dari sistem PRIME HRIS.');
+  const [testMessage, setTestMessage] = useState('Halo! Ini adalah pesan uji coba integrasi WhatsApp Baileys dari sistem DMJ HRIS.');
   const [sendingTest, setSendingTest] = useState(false);
   const [testForceBypass, setTestForceBypass] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; msg: string } | null>(null);
@@ -401,7 +401,7 @@ export const SalaryRulesTab: React.FC<SalaryRulesTabProps> = ({
         host: 'smtp.gmail.com',
         port: 465,
         secure: true,
-        fromName: prev.smtpConfig?.fromName || 'PRIME HRIS Enterprise',
+        fromName: prev.smtpConfig?.fromName || 'DMJ HRIS Enterprise',
         fromEmail: prev.smtpConfig?.fromEmail || prev.smtpConfig?.user || '',
         user: prev.smtpConfig?.user || '',
         pass: prev.smtpConfig?.pass || '',
@@ -428,7 +428,7 @@ export const SalaryRulesTab: React.FC<SalaryRulesTabProps> = ({
   };
 
   const handleLogoutWa = async () => {
-    if (!confirm('Putuskan koneksi bot WhatsApp PRIME HRIS? Anda dapat menautkan nomor bot baru setelahnya.')) {
+    if (!confirm('Putuskan koneksi bot WhatsApp DMJ HRIS? Anda dapat menautkan nomor bot baru setelahnya.')) {
       return;
     }
     setLoggingOutWa(true);
@@ -758,7 +758,7 @@ export const SalaryRulesTab: React.FC<SalaryRulesTabProps> = ({
                         {waStatus.clientInfo?.phone ? `+${waStatus.clientInfo.phone}` : 'Nomor Bot Terhubung'}
                       </h3>
                       <p className="text-xs text-slate-600">
-                        Nama Bot: <b>{waStatus.clientInfo?.pushname || 'PRIME HRIS Bot'}</b>
+                        Nama Bot: <b>{waStatus.clientInfo?.pushname || 'DMJ HRIS Bot'}</b>
                       </p>
                       <p className="text-[11px] text-slate-500">
                         Bot ini aktif mengirim notifikasi presensi tepat waktu, peringatan terlambat, pengingat pagi, dan status persetujuan tiket karyawan.
@@ -808,7 +808,7 @@ export const SalaryRulesTab: React.FC<SalaryRulesTabProps> = ({
                         </h4>
                       </div>
                       <ol className="list-decimal list-inside space-y-1.5 text-xs text-slate-700 leading-relaxed text-left">
-                        <li>Buka aplikasi WhatsApp di HP nomor resmi bot PRIME HRIS.</li>
+                        <li>Buka aplikasi WhatsApp di HP nomor resmi bot DMJ HRIS.</li>
                         <li>Ketuk menu <b>Titik Tiga (⋮)</b> di pojok kanan atas, lalu pilih <b>Perangkat Tertaut (Linked Devices)</b>.</li>
                         <li>Ketuk tombol <b>Tautkan Perangkat (Link a Device)</b>.</li>
                         <li>Arahkan kamera HP Anda ke gambar QR Code di samping.</li>
@@ -1352,7 +1352,7 @@ export const SalaryRulesTab: React.FC<SalaryRulesTabProps> = ({
                               secure: true,
                               user: '',
                               pass: '',
-                              fromName: 'PRIME HRIS Enterprise',
+                              fromName: 'DMJ HRIS Enterprise',
                               fromEmail: '',
                               notifyAttendanceSuccess: true,
                               notifyAttendanceLate: true,
@@ -1389,7 +1389,7 @@ export const SalaryRulesTab: React.FC<SalaryRulesTabProps> = ({
                             secure: prev.smtpConfig?.secure ?? true,
                             user: prev.smtpConfig?.user || '',
                             pass: prev.smtpConfig?.pass || '',
-                            fromName: prev.smtpConfig?.fromName || 'PRIME HRIS Enterprise',
+                            fromName: prev.smtpConfig?.fromName || 'DMJ HRIS Enterprise',
                             fromEmail: prev.smtpConfig?.fromEmail || '',
                             notifyAttendanceSuccess: prev.smtpConfig?.notifyAttendanceSuccess ?? true,
                             notifyAttendanceLate: prev.smtpConfig?.notifyAttendanceLate ?? true,
@@ -1507,7 +1507,7 @@ export const SalaryRulesTab: React.FC<SalaryRulesTabProps> = ({
                       </label>
                       <input
                         type="text"
-                        value={config.smtpConfig?.fromName ?? 'PRIME HRIS Enterprise'}
+                        value={config.smtpConfig?.fromName ?? 'DMJ HRIS Enterprise'}
                         onChange={e => setConfig(prev => ({
                           ...prev,
                           smtpConfig: {
@@ -1515,7 +1515,7 @@ export const SalaryRulesTab: React.FC<SalaryRulesTabProps> = ({
                             fromName: e.target.value
                           }
                         }))}
-                        placeholder="PRIME HRIS Enterprise"
+                        placeholder="DMJ HRIS Enterprise"
                         className="w-full glass-input rounded-xl px-3 py-2 text-xs font-bold text-slate-800"
                       />
                     </div>
@@ -1584,7 +1584,7 @@ export const SalaryRulesTab: React.FC<SalaryRulesTabProps> = ({
                     <li>Buka Akun Google di <a href="https://myaccount.google.com/security" target="_blank" rel="noopener noreferrer" className="font-bold text-[#18345E] underline inline-flex items-center gap-0.5">myaccount.google.com/security <ExternalLink className="w-2.5 h-2.5 inline" /></a>.</li>
                     <li>Pastikan fitur <b>Verifikasi 2 Langkah (2-Step Verification)</b> telah berstatus aktif.</li>
                     <li>Ketik <b>"Sandi Aplikasi"</b> (App Passwords) pada bilah pencarian Akun Google.</li>
-                    <li>Beri nama aplikasi, misal <b>PRIME HRIS</b>, lalu klik <b>Buat</b>.</li>
+                    <li>Beri nama aplikasi, misal <b>DMJ HRIS</b>, lalu klik <b>Buat</b>.</li>
                     <li>Salin kode 16 digit yang muncul (spasi akan otomatis dibersihkan saat dikirim).</li>
                   </ol>
                 </div>
@@ -2008,7 +2008,7 @@ export const SalaryRulesTab: React.FC<SalaryRulesTabProps> = ({
                     if (found) {
                       if (found.phone) setTestPhone(found.phone);
                       const displayId = (found as any).loginId || found.id;
-                      setTestMessage(`Halo ${found.name}! Ini pesan uji coba notifikasi WhatsApp resmi PRIME HRIS untuk ID ${displayId}.`);
+                      setTestMessage(`Halo ${found.name}! Ini pesan uji coba notifikasi WhatsApp resmi DMJ HRIS untuk ID ${displayId}.`);
                     }
                   }}
                   className="w-full glass-input rounded-xl px-3 py-2 text-xs font-bold text-slate-800"

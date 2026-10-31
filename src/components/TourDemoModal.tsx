@@ -47,12 +47,12 @@ export const TOUR_STEPS: TourStep[] = [
     tab: 'dashboard',
     subview: 'hris',
     targetSelector: '#tour-brand-logo',
-    title: 'Selamat Datang di PRIME HRIS Enterprise',
+    title: 'Selamat Datang di DMJ HRIS Enterprise',
     subtitle: 'Human Resource Information System Terpadu & Berstandar Industri',
     badge: 'Platform Enterprise • Overview',
     module: 'Navigasi',
     icon: Sparkles,
-    text: 'Selamat datang di PRIME HRIS Enterprise — sistem manajemen kepegawaian dan penggajian terintegrasi rancangan PT Prime Infinity Systems. Sistem ini mengintegrasikan presensi kamera pintar ber-watermark digital, verifikasi biometrik pengenalan wajah 4-pose, satelit GPS Geofence anti-fraud, pusat approval SDM, database master personil terenkripsi, penggajian otomatis formula Depnaker, hingga simulasi proyeksi payroll real-time. Mari kita jelajahi seluruh kapabilitasnya!'
+    text: 'Selamat datang di DMJ HRIS Enterprise — sistem manajemen kepegawaian dan penggajian terintegrasi rancangan PT Prime Infinity Systems. Sistem ini mengintegrasikan presensi kamera pintar ber-watermark digital, verifikasi biometrik pengenalan wajah 4-pose, satelit GPS Geofence anti-fraud, pusat approval SDM, database master personil terenkripsi, penggajian otomatis formula Depnaker, hingga simulasi proyeksi payroll real-time. Mari kita jelajahi seluruh kapabilitasnya!'
   },
   {
     id: 'rbac-switcher',
@@ -309,7 +309,7 @@ export const TOUR_STEPS: TourStep[] = [
     tab: 'proposal',
     targetSelector: '#tour-proposal-container',
     title: 'Menu 5: Proposal Penawaran Komersial Resmi',
-    subtitle: 'Dokumen Investasi & Implementasi Prime HRIS',
+    subtitle: 'Dokumen Investasi & Implementasi DMJ HRIS',
     badge: 'Menu 5 • Proposal Resmi',
     module: 'Proposal',
     icon: FileSpreadsheet,

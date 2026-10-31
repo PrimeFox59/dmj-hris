@@ -343,7 +343,7 @@ export const CommercialProposalTab: React.FC = () => {
           </div>
 
           <p className="text-[11.5px] print:text-[11px] text-slate-100 leading-relaxed font-medium">
-            Sistem <strong className="text-white font-bold">Prime HRIS PT Dwi Martha Jaya</strong> dibangun untuk mentransformasi tata kelola absensi, otomatisasi payroll Depnaker, dan kontrol biaya proyek lapangan menjadi <strong className="text-white font-bold">100% otomatis, akurat, dan transparan</strong>. Solusi ini menghilangkan kebocoran jam lembur, memangkas 90% waktu rekap bulanan, dan mencegah praktik titip absen melalui verifikasi biometrik selfie kamera & GPS satelit HP.
+            Sistem <strong className="text-white font-bold">DMJ HRIS PT Dwi Martha Jaya</strong> dibangun untuk mentransformasi tata kelola absensi, otomatisasi payroll Depnaker, dan kontrol biaya proyek lapangan menjadi <strong className="text-white font-bold">100% otomatis, akurat, dan transparan</strong>. Solusi ini menghilangkan kebocoran jam lembur, memangkas 90% waktu rekap bulanan, dan mencegah praktik titip absen melalui verifikasi biometrik selfie kamera & GPS satelit HP.
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 print:grid-cols-3 gap-2 pt-0.5 text-center">
@@ -379,7 +379,7 @@ export const CommercialProposalTab: React.FC = () => {
           <div className="flex items-center gap-2 border-b border-slate-200 pb-1.5">
             <TrendingUp className="w-4 h-4 text-[#FF6B00]" />
             <h2 className="text-xs sm:text-sm print:text-[13px] font-black text-slate-900 uppercase tracking-wider font-mono-code">
-              1. Analisis Kebutuhan: Kondisi Manual Saat Ini vs Solusi Prime HRIS
+              1. Analisis Kebutuhan: Kondisi Manual Saat Ini vs Solusi DMJ HRIS
             </h2>
           </div>
 
@@ -415,12 +415,12 @@ export const CommercialProposalTab: React.FC = () => {
               </ul>
             </div>
 
-            {/* Sisi Kanan: Solusi Prime HRIS */}
+            {/* Sisi Kanan: Solusi DMJ HRIS */}
             <div className="p-3.5 print:p-2.5 rounded-2xl bg-emerald-50/70 border border-emerald-200 space-y-1.5 print:space-y-1">
               <div className="flex items-center justify-between border-b border-emerald-200 pb-1 text-[11.5px] print:text-[11px]">
                 <div className="flex items-center gap-1.5 text-emerald-800 font-bold">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span>Efisiensi Nyata Bersama Sistem Prime HRIS PT DMJ</span>
+                  <span>Efisiensi Nyata Bersama Sistem DMJ HRIS PT DMJ</span>
                 </div>
                 <span className="text-[9px] font-mono-code font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded no-print print:hidden">
                   EFISIENSI 100%
@@ -865,7 +865,7 @@ export const CommercialProposalTab: React.FC = () => {
               </div>
             </div>
 
-            {/* Opsi 3: Paket Komplit (Prime HRIS Enterprise - Paling Hemat) */}
+            {/* Opsi 3: Paket Komplit (DMJ HRIS Enterprise - Paling Hemat) */}
             <div className={`p-4 print:p-2.5 rounded-3xl print:rounded-2xl border-2 flex flex-col justify-between space-y-3 print:space-y-1.5 relative overflow-hidden print-break-inside-avoid transition-all ${
               isFullSuite
                 ? 'border-[#FF6B00] bg-orange-50/80 shadow-xl ring-2 ring-orange-400'
@@ -879,7 +879,7 @@ export const CommercialProposalTab: React.FC = () => {
                 <span className="px-2 py-0.5 rounded-full bg-orange-100 text-[#FF6B00] text-[9.5px] print:text-[9px] font-bold font-mono-code uppercase">
                   PAKET KOMPLIT (FULL SUITE)
                 </span>
-                <h3 className="text-sm print:text-[12.5px] font-black text-slate-900 mt-1.5 print:mt-1">Prime HRIS Enterprise</h3>
+                <h3 className="text-sm print:text-[12.5px] font-black text-slate-900 mt-1.5 print:mt-1">DMJ HRIS Enterprise</h3>
                 <p className="text-xl print:text-[15px] font-black text-[#FF6B00] font-mono-code mt-0.5">
                   Rp 5.500.000 <span className="text-[10px] font-normal text-slate-500">(All-in One-Time)</span>
                 </p>

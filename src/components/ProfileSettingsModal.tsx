@@ -893,7 +893,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                 </div>
                 <p className="text-xs leading-relaxed opacity-90 font-sans">
                   {isOfficeNetwork
-                    ? 'IP Publik Anda berada dalam daftar Whitelist Gateway Resmi PRIME HRIS. Presensi dinyatakan langsung sah WFO tanpa surat penugasan.'
+                    ? 'IP Publik Anda berada dalam daftar Whitelist Gateway Resmi DMJ HRIS. Presensi dinyatakan langsung sah WFO tanpa surat penugasan.'
                     : `Anda terhubung melalui jaringan publik eksternal (${realDetectedIsp || 'ISP'}). Presensi luar kantor memerlukan form justifikasi dinas luar.`}
                 </p>
               </div>

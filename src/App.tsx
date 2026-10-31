@@ -292,7 +292,7 @@ export function App() {
         const res = await api.getMe();
         if (res.offline) {
           // Mode offline / PWA background cache: Pertahankan sesi lokal 30 hari
-          console.info('[PRIME HRIS] Perangkat offline: mempertahankan sesi login 30 hari.');
+          console.info('[DMJ HRIS] Perangkat offline: mempertahankan sesi login 30 hari.');
           return;
         }
         if (res.success && res.user) {
@@ -380,7 +380,7 @@ export function App() {
       action: 'LOGIN_WEB',
       entity: 'UserSession',
       entityId: user.id,
-      details: `Pengguna ${displayName} (${user.role}) berhasil masuk ke PRIME HRIS`,
+      details: `Pengguna ${displayName} (${user.role}) berhasil masuk ke DMJ HRIS`,
       status: 'SUCCESS',
       ipAddress: realDetectedIp,
       metadata: { systemRole: user.systemRole, username: user.username }
@@ -1280,7 +1280,7 @@ export function App() {
           P
         </div>
         <div className="w-6 h-6 border-2 border-blue-400 border-t-white rounded-full animate-spin mb-3"></div>
-        <p className="text-xs font-mono text-slate-400">Memverifikasi Sesi Prime HRIS...</p>
+        <p className="text-xs font-mono text-slate-400">Memverifikasi Sesi DMJ HRIS...</p>
       </div>
     );
   }
@@ -1638,7 +1638,7 @@ export function App() {
       {/* Footer */}
       <footer className="mt-auto py-6 border-t border-slate-200/80 bg-white/40 text-center text-xs text-slate-500 font-mono-code no-print">
         <p>
-          PRIME HRIS Enterprise  Production-Grade Human Resource Information System
+          DMJ HRIS Enterprise  Production-Grade Human Resource Information System
         </p>
         <p className="text-[10px] text-slate-400 mt-1 flex items-center justify-center gap-3">
           <span>Developed by PT Prime Infinity Systems (Prime ProjectX)</span>

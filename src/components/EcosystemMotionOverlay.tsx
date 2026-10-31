@@ -102,7 +102,7 @@ export const EcosystemMotionOverlay: React.FC<EcosystemMotionOverlayProps> = ({
         </defs>
 
         {/* ========================================================================= */}
-        {/* 1. CENTRAL HUB (PRIME HRIS) REACTOR BREATHING GLOW & EXPANDING PULSES     */}
+        {/* 1. CENTRAL HUB (DMJ HRIS) REACTOR BREATHING GLOW & EXPANDING PULSES     */}
         {/* ========================================================================= */}
         <g id="central-hub-effects">
           {/* Core Ambient Aura */}

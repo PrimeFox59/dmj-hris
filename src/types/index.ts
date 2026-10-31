@@ -454,7 +454,7 @@ export interface SmtpConfig {
   secure: boolean; // true for 465, false for 587
   user: string; // e.g. "hris.notification@gmail.com"
   pass: string; // 16-character Gmail App Password
-  fromName: string; // e.g. "PRIME HRIS Enterprise"
+  fromName: string; // e.g. "DMJ HRIS Enterprise"
   fromEmail: string; // e.g. "hris.notification@gmail.com"
   notifyAttendanceSuccess: boolean;
   notifyAttendanceLate: boolean;

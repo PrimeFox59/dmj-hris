@@ -1961,7 +1961,7 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
               <X className="w-4 h-4" />
             </button>
 
-            {/* Official Letterhead - PRIME HRIS Enterprise */}
+            {/* Official Letterhead - DMJ HRIS Enterprise */}
             <div className="border-b-2 border-slate-900 pb-4 mb-4">
               <div className="flex items-start justify-between">
                 <div>
@@ -1971,7 +1971,7 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                     </div>
                     <div>
                       <h2 className="text-base sm:text-lg font-black tracking-tight text-slate-900 font-mono-code leading-none">
-                        PRIME HRIS ENTERPRISE
+                        DMJ HRIS ENTERPRISE
                       </h2>
                       <p className="text-[10px] text-slate-500 font-semibold tracking-wider uppercase mt-0.5">
                         PT Prime Infinity Systems • Advanced HR & Payroll Engineering Platform
@@ -2126,7 +2126,7 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                 <div>
                   <span className="text-[9px] font-bold text-slate-400 font-mono-code block">DIGITAL VERIFICATION CODE</span>
                   <span className="text-[10px] font-mono-code font-bold text-slate-700">PRIME-VERIFIED-2026-PAYROLL</span>
-                  <p className="text-[9px] text-slate-500 mt-0.5">Sistem Dokumen Sah PRIME HRIS Enterprise</p>
+                  <p className="text-[9px] text-slate-500 mt-0.5">Sistem Dokumen Sah DMJ HRIS Enterprise</p>
                 </div>
               </div>
 

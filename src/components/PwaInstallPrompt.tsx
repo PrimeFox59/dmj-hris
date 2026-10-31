@@ -57,7 +57,7 @@ export const PwaInstallPrompt: React.FC = () => {
       setIsInstalled(true);
       setIsVisible(false);
       setDeferredPrompt(null);
-      console.log('[PWA] PRIME HRIS berhasil diinstal sebagai aplikasi native!');
+      console.log('[PWA] DMJ HRIS berhasil diinstal sebagai aplikasi native!');
     };
 
     window.addEventListener('appinstalled', handleAppInstalled);
@@ -117,7 +117,7 @@ export const PwaInstallPrompt: React.FC = () => {
             <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-[#FF6B00] to-amber-500 p-0.5 shrink-0 flex items-center justify-center shadow-md shadow-orange-500/30">
               <img
                 src="/icons/icon-96x96.png"
-                alt="PRIME HRIS Icon"
+                alt="DMJ HRIS Icon"
                 className="w-full h-full object-cover rounded-[10px]"
                 onError={(e) => {
                   // Fallback icon if image not yet loaded
@@ -128,7 +128,7 @@ export const PwaInstallPrompt: React.FC = () => {
             <div>
               <div className="flex items-center gap-1.5">
                 <span className="text-xs font-black tracking-wide text-white font-mono-code">
-                  PRIME HRIS
+                  DMJ HRIS
                 </span>
                 <span className="text-[9.5px] px-1.5 py-0.2 bg-emerald-500/20 text-emerald-400 font-bold rounded border border-emerald-500/30">
                   PWA Ready

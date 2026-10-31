@@ -449,7 +449,7 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
     // Line 5: Audit Stamp
     ctx.fillStyle = '#FF8533';
     ctx.font = 'bold 10px monospace';
-    ctx.fillText(`PRIME HRIS ENTERPRISE • SECURE AUDIT STAMP #${Math.floor(100000 + Math.random() * 900000)}`, 16, 458);
+    ctx.fillText(`DMJ HRIS ENTERPRISE • SECURE AUDIT STAMP #${Math.floor(100000 + Math.random() * 900000)}`, 16, 458);
 
     return canvas.toDataURL('image/jpeg', 0.88);
   };

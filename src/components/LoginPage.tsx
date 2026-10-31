@@ -484,7 +484,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onOpenKios
               <div className="w-1.5 h-11 bg-gradient-to-b from-[#0066FF] to-blue-700 rounded-full mt-0.5 shrink-0" />
               <div>
                 <div className="text-[21px] sm:text-[23px] font-black tracking-tight text-slate-900 leading-none">
-                  PRIME HRIS <span className="text-[#0066FF]">ENTERPRISE</span>
+                  DMJ HRIS <span className="text-[#0066FF]">ENTERPRISE</span>
                 </div>
                 <p className="text-[12.5px] text-slate-500 font-medium mt-1.5 leading-snug">
                   Ekosistem SDM Terintegrasi: Presensi Kamera Watermark &amp; Otomasi Penggajian.
@@ -774,7 +774,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onOpenKios
                   ) : (
                     <>
                       <LogIn className="w-4 h-4" />
-                      <span>Masuk ke PRIME HRIS</span>
+                      <span>Masuk ke DMJ HRIS</span>
                     </>
                   )}
                 </button>
@@ -800,7 +800,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onOpenKios
       {/* 3. FOOTER                                                                 */}
       {/* ========================================================================= */}
       <footer className="w-full py-3.5 px-4 text-center text-[11.5px] text-slate-400 border-t border-slate-200/60 bg-white/50 tracking-tight font-medium">
-        &copy; 2026 PRIME HRIS ENTERPRISE • PT PRIME INFINITY SYSTEMS • ALL RIGHTS RESERVED
+        &copy; 2026 DMJ HRIS ENTERPRISE • PT PRIME INFINITY SYSTEMS • ALL RIGHTS RESERVED
       </footer>
 
       {/* ========================================================================= */}
@@ -820,7 +820,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onOpenKios
                     Pemulihan Kata Sandi
                   </h3>
                   <p className="text-[11px] text-slate-500 font-medium">
-                    PRIME HRIS Security Gateway
+                    DMJ HRIS Security Gateway
                   </p>
                 </div>
               </div>

@@ -33,7 +33,7 @@ export function getSmtpConfig(customConfig = null) {
   // Strip spaces from Gmail 16-character App Passwords (e.g. "abcd efgh ijkl mnop" -> "abcdefghijklmnop")
   const cleanPass = rawPass.replace(/\s+/g, '');
 
-  const fromName = (customConfig?.fromName || dbSmtp.fromName || process.env.SMTP_FROM_NAME || 'PRIME HRIS Enterprise').trim();
+  const fromName = (customConfig?.fromName || dbSmtp.fromName || process.env.SMTP_FROM_NAME || 'DMJ HRIS Enterprise').trim();
   const fromEmail = (customConfig?.fromEmail || dbSmtp.fromEmail || rawUser || process.env.SMTP_FROM_EMAIL || 'noreply@primeprojectx.net').trim();
 
   return {
@@ -130,7 +130,7 @@ export async function verifySmtp(customConfig = null) {
 /**
  * Wrap HTML content inside executive responsive template
  */
-function wrapHtmlEmailTemplate(contentHtml, title = 'Notifikasi PRIME HRIS') {
+function wrapHtmlEmailTemplate(contentHtml, title = 'Notifikasi DMJ HRIS') {
   return `<!DOCTYPE html>
 <html lang="id">
 <head>
@@ -146,7 +146,7 @@ function wrapHtmlEmailTemplate(contentHtml, title = 'Notifikasi PRIME HRIS') {
         <table width="100%" cellpadding="0" cellspacing="0" border="0">
           <tr>
             <td>
-              <div style="font-size: 10px; font-weight: 800; color: #FF8533; letter-spacing: 1.5px; text-transform: uppercase;">PRIME HRIS ENTERPRISE</div>
+              <div style="font-size: 10px; font-weight: 800; color: #FF8533; letter-spacing: 1.5px; text-transform: uppercase;">DMJ HRIS ENTERPRISE</div>
               <div style="font-size: 20px; font-weight: 700; color: #ffffff; margin-top: 4px;">PT Prime Infinity Systems</div>
             </td>
             <td align="right">
@@ -185,7 +185,7 @@ function wrapHtmlEmailTemplate(contentHtml, title = 'Notifikasi PRIME HRIS') {
     <!-- FOOTER -->
     <tr>
       <td style="background-color: #f8fafc; padding: 18px 28px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #64748b; text-align: center;">
-        <p style="margin: 0 0 6px 0;">Notifikasi ini dikirimkan secara otomatis oleh sistem notifikasi server <strong>PRIME HRIS</strong>.</p>
+        <p style="margin: 0 0 6px 0;">Notifikasi ini dikirimkan secara otomatis oleh sistem notifikasi server <strong>DMJ HRIS</strong>.</p>
         <p style="margin: 0;">&copy; ${new Date().getFullYear()} PT Prime Infinity Systems &bull; <a href="https://hris.primeprojectx.net" style="color: #18345E; text-decoration: underline;">hris.primeprojectx.net</a></p>
       </td>
     </tr>
@@ -246,7 +246,7 @@ export async function sendEmailNotification(options) {
     recipientName: toRecipientName || toEmail,
     recipientEmail: toEmail,
     eventType,
-    subject: subject || 'Notifikasi PRIME HRIS',
+    subject: subject || 'Notifikasi DMJ HRIS',
     htmlBody: html,
     textBody: text,
     metadata,
@@ -304,7 +304,7 @@ export async function notifyAttendanceSuccessEmail(employee, record) {
     ? `Biometrik Wajah Valid (${record.biometricVerification.matchScore}%)`
     : 'Presensi Digital Terverifikasi';
 
-  const subject = `[PRIME HRIS] Bukti Kehadiran Resmi - ${dateStr} - ${employee.name}`;
+  const subject = `[DMJ HRIS] Bukti Kehadiran Resmi - ${dateStr} - ${employee.name}`;
 
   const html = `
     <div style="margin-bottom: 20px;">
@@ -373,7 +373,7 @@ export async function notifyAttendanceLateEmail(employee, record, salaryRules = 
   const estimatedPenalty = Math.ceil(lateMins / 15) * penaltyPerBlock;
   const projectName = sched.projectName ? (sched.projectName + ' (' + sched.projectCode + ')') : 'Site Operasional PRIME';
 
-  const subject = '[PRIME HRIS Peringatan] Keterlambatan Presensi (' + lateMins + ' Menit) - ' + sched.projectCode + ' - ' + dateStr + ' - ' + employee.name;
+  const subject = '[DMJ HRIS Peringatan] Keterlambatan Presensi (' + lateMins + ' Menit) - ' + sched.projectCode + ' - ' + dateStr + ' - ' + employee.name;
 
   const html = 
     '<div style="margin-bottom: 20px;">' +
@@ -446,7 +446,7 @@ export async function notifyOverdueCheckInEmail(employee, projectSchedule = null
   const cutoffStr = sched.cutoffTime || '08:30';
   const projectName = sched.projectName ? (sched.projectName + ' (' + sched.projectCode + ')') : 'Site Penugasan Proyek';
 
-  const subject = '[PRIME HRIS Peringatan] Anda Belum Melakukan Presensi Masuk - ' + sched.projectCode + ' - ' + todayStr;
+  const subject = '[DMJ HRIS Peringatan] Anda Belum Melakukan Presensi Masuk - ' + sched.projectCode + ' - ' + todayStr;
 
   const html = 
     '<div style="margin-bottom: 20px;">' +
@@ -509,7 +509,7 @@ export async function notifyCheckOutReminderEmail(employee, projectSchedule = nu
   const todayStr = dateStr || new Date().toISOString().substring(0, 10);
   const projectName = sched.projectName ? (sched.projectName + ' (' + sched.projectCode + ')') : 'Site Penugasan Proyek';
 
-  const subject = '[PRIME HRIS Pengingat] Jangan Lupa Presensi Pulang (Check-Out) - ' + sched.projectCode + ' - ' + todayStr;
+  const subject = '[DMJ HRIS Pengingat] Jangan Lupa Presensi Pulang (Check-Out) - ' + sched.projectCode + ' - ' + todayStr;
 
   const html = 
     '<div style="margin-bottom: 20px;">' +
@@ -552,7 +552,7 @@ export async function notifyApprovalSubmittedEmail(approvalItem, employee, targe
 
   // 1. Email confirmation to applicant
   if (employee.email) {
-    const subjectApplicant = `[PRIME HRIS] Pengajuan ${approvalItem.type} Berhasil Diserahkan - ${approvalItem.id}`;
+    const subjectApplicant = `[DMJ HRIS] Pengajuan ${approvalItem.type} Berhasil Diserahkan - ${approvalItem.id}`;
     const htmlApplicant = `
       <div style="margin-bottom: 20px;">
         <span style="display: inline-block; background-color: #f1f5f9; color: #334155; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 9999px; border: 1px solid #cbd5e1;">
@@ -607,7 +607,7 @@ export async function notifyApprovalSubmittedEmail(approvalItem, employee, targe
 
   // 2. Email alert to Approver
   if (targetApprover && targetApprover.email) {
-    const subjectApprover = `[PRIME HRIS Action Required] Permohonan Baru: ${approvalItem.type} - ${employee.name}`;
+    const subjectApprover = `[DMJ HRIS Action Required] Permohonan Baru: ${approvalItem.type} - ${employee.name}`;
     const htmlApprover = `
       <div style="margin-bottom: 20px;">
         <span style="display: inline-block; background-color: #eff6ff; color: #1d4ed8; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 9999px; border: 1px solid #bfdbfe;">
@@ -641,7 +641,7 @@ export async function notifyApprovalSubmittedEmail(approvalItem, employee, targe
       </table>
 
       <p style="margin: 0 0 16px 0; color: #475569; font-size: 13px;">
-        Silakan buka modul Approval pada portal PRIME HRIS untuk memberikan persetujuan atau catatan perbaikan.
+        Silakan buka modul Approval pada portal DMJ HRIS untuk memberikan persetujuan atau catatan perbaikan.
       </p>
     `;
 
@@ -673,7 +673,7 @@ export async function notifyApprovalDecisionEmail(approvalItem, employee) {
   const statusLabel = isApproved ? 'DISETUJUI (APPROVED)' : (isRevision ? 'PERMINTAAN REVISI (REVISION REQUIRED)' : 'DITOLAK (REJECTED)');
 
   const title = approvalItem.title || approvalItem.type || 'Permohonan Kepegawaian';
-  const subject = '[PRIME HRIS Update] Status Pengajuan ' + (approvalItem.type || 'Kepegawaian') + ': ' + approvalItem.status + ' - ' + approvalItem.id;
+  const subject = '[DMJ HRIS Update] Status Pengajuan ' + (approvalItem.type || 'Kepegawaian') + ': ' + approvalItem.status + ' - ' + approvalItem.id;
   const reviewer = approvalItem.reviewedBy || 'Direksi / HR Lead';
   const note = approvalItem.reviewNote || (isApproved ? 'Disetujui.' : (isRevision ? 'Mohon melengkapi berkas pendukung.' : 'Ditolak.'));
 
@@ -718,7 +718,7 @@ export async function notifyApprovalDecisionEmail(approvalItem, employee) {
     '</table>' +
 
     '<p style="margin: 0; color: #64748b; font-size: 13px;">' +
-      'Informasi lengkap dapat diakses melalui portal resmi PRIME HRIS:<br>' +
+      'Informasi lengkap dapat diakses melalui portal resmi DMJ HRIS:<br>' +
       '<a href="https://hris.primeprojectx.net" style="color: #FF6B00; text-decoration: none; font-weight: 600;">https://hris.primeprojectx.net</a>' +
     '</p>';
 
@@ -737,7 +737,7 @@ export async function notifyApprovalDecisionEmail(approvalItem, employee) {
  * 5. Test Email Dispatch
  */
 export async function sendTestEmail(targetEmail, customConfig = null) {
-  const subject = '[PRIME HRIS Test] Uji Coba Konfigurasi Email Gateway SMTP';
+  const subject = '[DMJ HRIS Test] Uji Coba Konfigurasi Email Gateway SMTP';
   const html = 
     '<div style="margin-bottom: 20px;">' +
       '<span style="display: inline-block; background-color: #ecfdf5; color: #047857; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 9999px; border: 1px solid #a7f3d0;">' +
@@ -747,7 +747,7 @@ export async function sendTestEmail(targetEmail, customConfig = null) {
         'Tes Pengiriman Email Berhasil' +
       '</h2>' +
       '<p style="margin: 0; color: #475569; font-size: 14px;">' +
-        'Halo! Email ini dikirimkan secara otomatis oleh <strong>PRIME HRIS Email Service</strong> untuk memvalidasi bahwa koneksi kredensial SMTP Gmail perusahaan Anda telah aktif, terhubung, dan siap mengirimkan notifikasi presensi, approval tiket, serta pengingat jam kerja.' +
+        'Halo! Email ini dikirimkan secara otomatis oleh <strong>DMJ HRIS Email Service</strong> untuk memvalidasi bahwa koneksi kredensial SMTP Gmail perusahaan Anda telah aktif, terhubung, dan siap mengirimkan notifikasi presensi, approval tiket, serta pengingat jam kerja.' +
       '</p>' +
     '</div>' +
     '<div style="background-color: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; padding: 12px 16px; font-size: 12px; color: #64748b; font-family: monospace;">' +

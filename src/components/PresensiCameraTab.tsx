@@ -972,7 +972,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
 
     ctx.fillStyle = '#FF8533';
     ctx.font = 'bold 10px monospace';
-    ctx.fillText(`PRIME HRIS ENTERPRISE • SECURE AUDIT STAMP #${Math.floor(100000 + Math.random() * 900000)}`, 16, 458);
+    ctx.fillText(`DMJ HRIS ENTERPRISE • SECURE AUDIT STAMP #${Math.floor(100000 + Math.random() * 900000)}`, 16, 458);
   };
 
   // Helper menggambar frame video / gambar ke canvas dengan menjaga rasio asli (object-cover) tanpa ter-resize menyempit
@@ -2143,7 +2143,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                 Presensi Berhasil Diterima & Disimpan!
               </h2>
               <p className="text-xs text-slate-600">
-                Data kehadiran dan foto selfie resmi telah dicatat ke dalam database PRIME HRIS Enterprise.
+                Data kehadiran dan foto selfie resmi telah dicatat ke dalam database DMJ HRIS Enterprise.
               </p>
             </div>
 

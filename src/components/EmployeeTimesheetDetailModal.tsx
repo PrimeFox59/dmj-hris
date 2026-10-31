@@ -975,7 +975,7 @@ export const EmployeeTimesheetDetailModal: React.FC<EmployeeTimesheetDetailModal
           <div className="flex items-center gap-2 text-slate-500 text-[11px]">
             <ShieldCheck className="w-4 h-4 text-emerald-600" />
             <span>
-              Sistem verifikasi presensi biometrik & audit log tersertifikasi PRIME HRIS Enterprise.
+              Sistem verifikasi presensi biometrik & audit log tersertifikasi DMJ HRIS Enterprise.
             </span>
           </div>
 

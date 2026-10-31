@@ -175,7 +175,7 @@ export const InvoiceTab: React.FC<InvoiceTabProps> = ({ onNavigateToTab }) => {
                       Pembayaran Termin I (Milestone Progress 50%)
                     </span>
                     <p className="text-xs text-slate-600 mt-0.5">
-                      Pengadaan & Implementasi Sistem Prime HRIS Enterprise Paket Komplit Full Suite
+                      Pengadaan & Implementasi Sistem DMJ HRIS Enterprise Paket Komplit Full Suite
                     </p>
                   </div>
 

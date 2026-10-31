@@ -108,7 +108,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-orange-50 border border-orange-200/70 shadow-xs shrink-0">
               <Clock className="w-3.5 h-3.5 text-[#FF6B00] animate-pulse" />
               <span className="text-[10px] sm:text-[11px] font-black tracking-wider text-[#FF6B00] font-mono-code">
-                PRIME hris
+                DMJ HRIS
               </span>
             </div>
           </div>
