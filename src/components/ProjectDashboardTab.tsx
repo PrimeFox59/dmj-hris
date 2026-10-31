@@ -1124,7 +1124,7 @@ export const ProjectDashboardTab: React.FC<ProjectDashboardTabProps> = ({
               <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/70 flex items-center justify-between">
                 <span className="text-slate-500 font-sans">Koordinat Pusat GPS:</span>
                 <span className="font-black text-slate-600 text-[11px]">
-                  {customGeofence?.latitude ? `${customGeofence.latitude}, ${customGeofence.longitude}` : '-7.395625, 112.717574'}
+                  {customGeofence?.latitude ? `${customGeofence.latitude}, ${customGeofence.longitude}` : '-7.293144, 112.775337'}
                 </span>
               </div>
 

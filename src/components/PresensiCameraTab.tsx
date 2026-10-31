@@ -44,7 +44,7 @@ import { api } from '../services/api';
 
 // Preset Lokasi Populer PRIME Enterprise & Site Proyek
 export const LOCATION_PRESETS = [
-  { name: 'Kantor Pusat & Workshop Sidoarjo', lat: -7.395625, lng: 112.717574, addr: 'Keboananom, Gedangan, Sidoarjo, Jawa Timur' },
+  { name: 'Kantor Pusat PT Dwi Martha Jaya (Surabaya)', lat: -7.293144, lng: 112.775337, addr: 'Jl. Klampis Anom No. 35 D-11, Wisma Mukti, Klampis Ngasem, Sukolilo, Surabaya' },
   { name: 'Site RS Ciremai Cirebon', lat: -6.737150, lng: 108.552860, addr: 'Jl. Kesambi No.237, Drajat, Kesambi, Cirebon, Jawa Barat' },
   { name: 'Site RS Dr AK Gani Palembang', lat: -2.991240, lng: 104.757310, addr: 'Jl. Merdeka No.1, Benteng Kuto Besak, Palembang, Sumsel' },
   { name: 'Jakarta Technology & Operations Hub', lat: -6.229740, lng: 106.829510, addr: 'Mega Kuningan, Setiabudi, Jakarta Selatan' }
@@ -81,7 +81,7 @@ export function getProjectCoordinates(proj: Project): { lat: number; lng: number
   // Jika nama proyek jelas Kantor Pusat
   const name = (proj.name || '').toUpperCase();
   if (name.includes('KANTOR PUSAT') || name.includes('HEAD OFFICE') || name.includes('INNOVATION HUB')) {
-    return { lat: -7.395625, lng: 112.717574, radius: 350 };
+    return { lat: -7.293144, lng: 112.775337, radius: 350 };
   }
 
   return null;
@@ -295,8 +295,8 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
   const [outOfRangeReason, setOutOfRangeReason] = useState('');
 
   const [coords, setCoords] = useState<{ lat: number; lng: number; accuracy: number; address: string }>({
-    lat: salaryRules?.officeGeofence?.lat ?? -7.395625,
-    lng: salaryRules?.officeGeofence?.lng ?? 112.717574,
+    lat: salaryRules?.officeGeofence?.lat ?? -7.293144,
+    lng: salaryRules?.officeGeofence?.lng ?? 112.775337,
     accuracy: 6.5,
     address: salaryRules?.officeGeofence?.address ?? 'Keboananom, Gedangan, Sidoarjo, Jawa Timur'
   });
@@ -318,8 +318,8 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
   const [geofenceTargetType, setGeofenceTargetType] = useState<'OFFICE' | 'PROJECT'>('OFFICE');
   const [selectedGeoProjectId, setSelectedGeoProjectId] = useState<string>(projects[0]?.id || '');
   const [tempOfficeName, setTempOfficeName] = useState(salaryRules.officeGeofence?.name || 'PRIME Enterprise - Kantor Pusat & Innovation Hub');
-  const [tempOfficeLat, setTempOfficeLat] = useState<number | string>(salaryRules.officeGeofence?.lat ?? -7.395625);
-  const [tempOfficeLng, setTempOfficeLng] = useState<number | string>(salaryRules.officeGeofence?.lng ?? 112.717574);
+  const [tempOfficeLat, setTempOfficeLat] = useState<number | string>(salaryRules.officeGeofence?.lat ?? -7.293144);
+  const [tempOfficeLng, setTempOfficeLng] = useState<number | string>(salaryRules.officeGeofence?.lng ?? 112.775337);
   const [tempOfficeRadius, setTempOfficeRadius] = useState<number>(salaryRules.officeGeofence?.radiusMeters || 350);
   const [tempOfficeAddress, setTempOfficeAddress] = useState(salaryRules.officeGeofence?.address || '');
   const [isSavingGeofence, setIsSavingGeofence] = useState(false);
@@ -340,8 +340,8 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
   const loadOfficeTarget = () => {
     setGeofenceTargetType('OFFICE');
     setTempOfficeName(salaryRules.officeGeofence?.name || 'PRIME Enterprise - Kantor Pusat & Innovation Hub');
-    setTempOfficeLat(salaryRules.officeGeofence?.lat ?? -7.395625);
-    setTempOfficeLng(salaryRules.officeGeofence?.lng ?? 112.717574);
+    setTempOfficeLat(salaryRules.officeGeofence?.lat ?? -7.293144);
+    setTempOfficeLng(salaryRules.officeGeofence?.lng ?? 112.775337);
     setTempOfficeRadius(salaryRules.officeGeofence?.radiusMeters || 350);
     setTempOfficeAddress(salaryRules.officeGeofence?.address || 'Keboananom, Gedangan, Sidoarjo, Jawa Timur');
     setGeofenceModalMsg(null);
@@ -808,8 +808,8 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
     setGpsError(null);
 
     const isMobile = typeof navigator !== 'undefined' && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    const officeLat = salaryRules?.officeGeofence?.lat ?? -7.395625;
-    const officeLng = salaryRules?.officeGeofence?.lng ?? 112.717574;
+    const officeLat = salaryRules?.officeGeofence?.lat ?? -7.293144;
+    const officeLng = salaryRules?.officeGeofence?.lng ?? 112.775337;
 
     if (!navigator.geolocation) {
       setIsGpsLoading(false);
@@ -877,8 +877,8 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
           const lat = Number(pos.coords.latitude.toFixed(6));
           const lng = Number(pos.coords.longitude.toFixed(6));
           const accuracy = Math.round(pos.coords.accuracy) || (isMobile ? 5 : 50);
-          const officeLat = salaryRules?.officeGeofence?.lat ?? -7.395625;
-          const officeLng = salaryRules?.officeGeofence?.lng ?? 112.717574;
+          const officeLat = salaryRules?.officeGeofence?.lat ?? -7.293144;
+          const officeLng = salaryRules?.officeGeofence?.lng ?? 112.775337;
           const dist = calculateDistanceMeters(lat, lng, officeLat, officeLng);
           setRealGeofenceDistance(dist);
           setGpsSource('DEVICE_HARDWARE');
@@ -2340,11 +2340,11 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                     step="0.000001"
                     value={tempOfficeLat}
                     onChange={e => setTempOfficeLat(e.target.value)}
-                    placeholder="-7.395625"
+                    placeholder="-7.293144"
                     className="w-full glass-input rounded-xl px-3 py-2 text-xs font-mono-code text-slate-800"
                     required
                   />
-                  <span className="text-[10px] text-slate-400">Contoh: -7.395625</span>
+                  <span className="text-[10px] text-slate-400">Contoh: -7.293144</span>
                 </div>
 
                 <div>
@@ -2356,11 +2356,11 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                     step="0.000001"
                     value={tempOfficeLng}
                     onChange={e => setTempOfficeLng(e.target.value)}
-                    placeholder="112.717574"
+                    placeholder="112.775337"
                     className="w-full glass-input rounded-xl px-3 py-2 text-xs font-mono-code text-slate-800"
                     required
                   />
-                  <span className="text-[10px] text-slate-400">Contoh: 112.717574</span>
+                  <span className="text-[10px] text-slate-400">Contoh: 112.775337</span>
                 </div>
               </div>
 

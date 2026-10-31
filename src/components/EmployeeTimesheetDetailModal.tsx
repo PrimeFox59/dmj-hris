@@ -325,8 +325,8 @@ export const EmployeeTimesheetDetailModal: React.FC<EmployeeTimesheetDetailModal
         photoUrl: correctingItem.photoInUrl || employee.avatar || '',
         photoOutUrl: corrCheckOut !== '-' ? (correctingItem.photoOutUrl || employee.avatar || '') : undefined,
         location: correctingItem.record?.location || {
-          lat: -7.395625,
-          lng: 112.717574,
+          lat: -7.293144,
+          lng: 112.775337,
           accuracy: 5.0,
           address: project?.location ? `Site Proyek ${project.name} (${project.location})` : 'Kantor Pusat PT Dwi Martha Jaya',
           inGeofence: true,

@@ -38,10 +38,10 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
   const [employees, setEmployees] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
   const [officeGeofence, setOfficeGeofence] = useState<any>({
-    lat: -7.3956,
-    lng: 112.7176,
-    radiusMeters: 500,
-    name: 'PT Dwi Martha Jaya - Kantor Pusat & Workshop Terpadu'
+    lat: -7.293144,
+    lng: 112.775337,
+    radiusMeters: 350,
+    name: 'PT Dwi Martha Jaya - Kantor Pusat (Surabaya)'
   });
   const [todayAttendances, setTodayAttendances] = useState<Record<string, any>>({});
   const [isLoadingDirectory, setIsLoadingDirectory] = useState<boolean>(true);
@@ -80,10 +80,10 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
     accuracy: number;
     address: string;
   }>({
-    lat: -7.3956,
-    lng: 112.7176,
+    lat: -7.293144,
+    lng: 112.775337,
     accuracy: 15,
-    address: 'Kawasan Industri Terpadu, Jl. Raya Utama Prime Blok A1-A4'
+    address: 'Jl. Klampis Anom No. 35 D-11, Sukolilo, Surabaya'
   });
   const [isGpsLocked, setIsGpsLocked] = useState<boolean>(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
@@ -178,6 +178,24 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
       setIsGpsLocked(true);
       return;
     }
+
+    // Fresh GPS query on mount (tanpa cache lama)
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        setGpsLocation({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracy: Math.round(pos.coords.accuracy),
+          address: 'Area Terdeteksi GPS Perangkat'
+        });
+        setIsGpsLocked(true);
+        setGpsError(null);
+      },
+      err => {
+        console.warn('[Kiosk GPS Initial]', err.message);
+      },
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+    );
 
     const watchId = navigator.geolocation.watchPosition(
       pos => {
@@ -279,13 +297,20 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
     const activeEmp = detectedEmployee || pendingEmployee;
     if (activeEmp?.assignedProjectId) {
       const proj = projects.find(p => p.id === activeEmp.assignedProjectId);
-      if (proj && proj.latitude && proj.longitude) {
-        return {
-          lat: proj.latitude,
-          lng: proj.longitude,
-          radiusMeters: proj.geofenceRadius || 300,
-          name: proj.name
-        };
+      if (proj) {
+        const geo = proj.geofence || proj.customRules?.geofence;
+        const pLat = geo?.latitude ?? geo?.lat ?? proj.latitude;
+        const pLng = geo?.longitude ?? geo?.lng ?? proj.longitude;
+        const pRadius = geo?.radiusMeters ?? geo?.radius ?? proj.geofenceRadius ?? 350;
+        const pName = geo?.siteName ?? geo?.name ?? proj.name;
+        if (typeof pLat === 'number' && typeof pLng === 'number' && !isNaN(pLat) && !isNaN(pLng)) {
+          return {
+            lat: pLat,
+            lng: pLng,
+            radiusMeters: pRadius,
+            name: pName || 'Site Proyek Resmi'
+          };
+        }
       }
     }
     return officeGeofence;

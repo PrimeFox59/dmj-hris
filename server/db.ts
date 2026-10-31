@@ -878,10 +878,10 @@ export function seedRealisticAuditLogs(db: DatabaseSync) {
       module: 'HR_RULES',
       entity: 'salary_rules',
       entityId: 'default',
-      details: 'Pembaruan titik koordinat Geofence: Lat -7.395625, Lng 112.717574, radius 350 meter (Kawasan Kantor Pusat & Hub PRIME).',
+      details: 'Pembaruan titik koordinat Geofence: Lat -7.293144, Lng 112.775337, radius 350 meter (Kawasan Kantor Pusat & Hub PRIME).',
       ipAddress: '103.31.205.218',
       status: 'SUCCESS',
-      metadata: JSON.stringify({ lat: -7.395625, lng: 112.717574, radiusMeters: 350 })
+      metadata: JSON.stringify({ lat: -7.293144, lng: 112.775337, radiusMeters: 350 })
     },
     {
       timestamp: '2026-09-09 11:20:45',

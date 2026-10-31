@@ -45,10 +45,10 @@ export const INITIAL_SALARY_RULES: SalaryRuleConfig = {
   ],
   officeGeofence: {
     name: "PRIME Enterprise - Kantor Pusat & Innovation Hub",
-    lat: -7.395625,
-    lng: 112.717574,
+    lat: -7.293144,
+    lng: 112.775337,
     radiusMeters: 350,
-    address: "Kawasan Industri Terpadu, Jl. Raya Utama Prime Blok A1-A4, Jawa Timur"
+    address: "Jl. Klampis Anom No. 35 D-11, Wisma Mukti, Klampis Ngasem, Sukolilo, Surabaya"
   },
   smtpConfig: {
     enabled: true,
