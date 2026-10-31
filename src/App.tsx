@@ -1142,6 +1142,9 @@ export function App() {
   };
 
   const handleRequestRevision = (id: string, reviewerNote?: string) => {
+    api.updateApproval(id, 'REVISION_REQUESTED', reviewerNote, `${currentUser.name} (${currentUser.role})`)
+      .catch(err => console.error('Failed to update approval in SQLite', err));
+
     setApprovals(prev =>
       prev.map(item => {
         if (item.id === id) {

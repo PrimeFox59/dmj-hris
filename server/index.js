@@ -44,7 +44,8 @@ import {
   deleteCasualAttendance,
   deleteAttendance,
   getAttendancePhoto,
-  getEmployeeByIdentifier
+  getEmployeeByIdentifier,
+  getEmployeeProjectSchedule
 } from './db.js';
 import {
   getGatewayStatus,
@@ -164,18 +165,22 @@ async function triggerAttendanceWaNotification(attendanceRecord) {
     const emp = getEmployeeByIdentifier(empId);
     if (!emp || !emp.phone) return;
 
+    const db = getDatabase();
     let salaryRules = null;
     try {
       const rulesRow = db.prepare("SELECT config_json FROM salary_rules WHERE id = 'default'").get();
       if (rulesRow) salaryRules = JSON.parse(rulesRow.config_json);
     } catch (e) {}
 
-    const waConfig = salaryRules?.whatsappConfig;
+    const waConfig = salaryRules?.waConfig || salaryRules?.whatsappConfig;
     if (waConfig && waConfig.enabled === false) return;
+
+    // Resolve employee's project-specific schedule
+    const projectSchedule = getEmployeeProjectSchedule(emp, salaryRules);
 
     const isLate = attendanceRecord.status === 'LATE' || (attendanceRecord.lateMinutes && attendanceRecord.lateMinutes > 0);
     if (isLate && (waConfig?.notifyAttendanceLate !== false)) {
-      await notifyAttendanceLate(emp, attendanceRecord, salaryRules);
+      await notifyAttendanceLate(emp, attendanceRecord, salaryRules, projectSchedule);
     } else if (!isLate && (waConfig?.notifyAttendanceSuccess !== false)) {
       await notifyAttendanceSuccess(emp, attendanceRecord);
     }
@@ -187,6 +192,7 @@ async function triggerAttendanceWaNotification(attendanceRecord) {
 async function triggerApprovalSubmitWaNotification(approvalItem) {
   try {
     if (!approvalItem) return;
+    const db = getDatabase();
     const emp = getEmployeeByIdentifier(approvalItem.employeeId || approvalItem.employeeNik);
     if (!emp) return;
 
@@ -231,7 +237,16 @@ async function triggerApprovalDecisionWaNotification(approvalId, status, reviewN
     if (!item) return;
 
     const emp = getEmployeeByIdentifier(item.employeeId || item.employeeNik);
-    if (!emp) return;
+    if (!emp || !emp.phone) return;
+
+    let salaryRules = null;
+    try {
+      const rulesRow = db.prepare("SELECT config_json FROM salary_rules WHERE id = 'default'").get();
+      if (rulesRow) salaryRules = JSON.parse(rulesRow.config_json);
+    } catch (e) {}
+
+    const waConfig = salaryRules?.waConfig || salaryRules?.whatsappConfig;
+    if (waConfig && (waConfig.enabled === false || waConfig.notifyApprovalUpdates === false)) return;
 
     const mergedItem = {
       ...item,
@@ -257,6 +272,7 @@ async function triggerAttendanceEmailNotification(attendanceRecord) {
     const emp = getEmployeeByIdentifier(empId);
     if (!emp || !emp.email) return;
 
+    const db = getDatabase();
     let salaryRules = null;
     try {
       const rulesRow = db.prepare("SELECT config_json FROM salary_rules WHERE id = 'default'").get();
@@ -266,9 +282,12 @@ async function triggerAttendanceEmailNotification(attendanceRecord) {
     const smtpConfig = salaryRules?.smtpConfig;
     if (!smtpConfig || smtpConfig.enabled === false) return;
 
+    // Resolve employee's project-specific schedule
+    const projectSchedule = getEmployeeProjectSchedule(emp, salaryRules);
+
     const isLate = attendanceRecord.status === 'LATE' || (attendanceRecord.lateMinutes && attendanceRecord.lateMinutes > 0);
     if (isLate && (smtpConfig.notifyAttendanceLate !== false)) {
-      await notifyAttendanceLateEmail(emp, attendanceRecord, salaryRules);
+      await notifyAttendanceLateEmail(emp, attendanceRecord, salaryRules, projectSchedule);
     } else if (!isLate && (smtpConfig.notifyAttendanceSuccess !== false)) {
       await notifyAttendanceSuccessEmail(emp, attendanceRecord);
     }
@@ -280,6 +299,7 @@ async function triggerAttendanceEmailNotification(attendanceRecord) {
 async function triggerApprovalSubmitEmailNotification(approvalItem) {
   try {
     if (!approvalItem) return;
+    const db = getDatabase();
     const emp = getEmployeeByIdentifier(approvalItem.employeeId || approvalItem.employeeNik);
     if (!emp) return;
 
@@ -333,7 +353,6 @@ async function triggerApprovalDecisionEmailNotification(approvalId, status, revi
     if (!item) return;
 
     const emp = getEmployeeByIdentifier(item.employeeId || item.employeeNik);
-    if (!emp) return;
     if (!emp || !emp.email) return;
 
     let salaryRules = null;
@@ -344,6 +363,7 @@ async function triggerApprovalDecisionEmailNotification(approvalId, status, revi
 
     const smtpConfig = salaryRules?.smtpConfig;
     if (!smtpConfig || smtpConfig.enabled === false) return;
+    if (smtpConfig.notifyApprovalUpdates === false) return;
 
     const mergedItem = {
       ...item,
@@ -357,6 +377,12 @@ async function triggerApprovalDecisionEmailNotification(approvalId, status, revi
     console.error('[Email Trigger Approval Decision Error]', err);
   }
 }
+
+// ==========================================
+// ENTERPRISE POLICY: ZERO PAYROLL / SLIP BROADCAST VIA WHATSAPP & EMAIL
+// Under direct executive instruction of Mr Prime, salary slip (slip gaji)
+// notifications MUST NEVER be dispatched via WhatsApp or Email.
+// ==========================================
 
 const server = http.createServer(async (req, res) => {
   const url = req.url || '';

@@ -1208,6 +1208,87 @@ export function getEmployeeByIdentifier(identifier) {
   return null;
 }
 
+/**
+ * Resolves project-specific work schedule for an employee (checkIn, checkOut, cutoffTime, lateGraceMinutes, projectName).
+ * Strictly guarantees that notifications and late thresholds follow the assigned project's unique rules.
+ */
+export function getEmployeeProjectSchedule(employeeOrId, fallbackRules = null) {
+  let emp = typeof employeeOrId === 'object' && employeeOrId !== null
+    ? employeeOrId
+    : getEmployeeByIdentifier(employeeOrId);
+
+  const fallbackCutoff = fallbackRules?.cutoffTime || '08:30';
+  const fallbackCheckIn = fallbackRules?.standardCheckInTime || '08:00';
+  const fallbackCheckOut = fallbackRules?.standardCheckOutTime || '17:00';
+  const fallbackGrace = Number(fallbackRules?.lateGracePeriodMinutes ?? 15);
+
+  if (!emp) {
+    return {
+      checkInTime: fallbackCheckIn,
+      checkOutTime: fallbackCheckOut,
+      cutoffTime: fallbackCutoff,
+      lateGraceMinutes: fallbackGrace,
+      projectName: 'Kantor Pusat / Operasional PRIME',
+      projectCode: 'PRJ-001',
+      projectId: 'PRJ-001',
+      isCustom: false
+    };
+  }
+
+  const assignedId = (emp.assignedProjectId || '').trim();
+  const db = getDatabase();
+  let matchedProject = null;
+
+  if (assignedId) {
+    const pRow = db.prepare('SELECT data_json FROM projects WHERE id = ? OR code = ? LIMIT 1;').get(assignedId, assignedId);
+    if (pRow) {
+      try { matchedProject = JSON.parse(pRow.data_json); } catch (e) {}
+    } else {
+      const altId = assignedId.startsWith('DMJ-') ? assignedId.replace(/^DMJ-/i, 'PRIME-') : assignedId.replace(/^PRIME-/i, 'DMJ-');
+      const altRow = db.prepare('SELECT data_json FROM projects WHERE id = ? OR code = ? LIMIT 1;').get(altId, altId);
+      if (altRow) {
+        try { matchedProject = JSON.parse(altRow.data_json); } catch (e) {}
+      }
+    }
+  }
+
+  const customSched = matchedProject?.customRules?.workSchedule;
+  if (customSched && customSched.enabled && customSched.checkInTime) {
+    const checkIn = customSched.checkInTime; // e.g. "08:00"
+    const checkOut = customSched.checkOutTime || '17:00';
+    const grace = typeof customSched.lateGraceMinutes === 'number' ? customSched.lateGraceMinutes : 15;
+    
+    // Calculate cutoffTime = checkIn + grace minutes
+    const [h, m] = checkIn.split(':').map(Number);
+    const totalMins = (h || 0) * 60 + (m || 0) + grace;
+    const newH = Math.floor(totalMins / 60) % 24;
+    const newM = totalMins % 60;
+    const cutoffTime = `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`;
+
+    return {
+      checkInTime: checkIn,
+      checkOutTime: checkOut,
+      cutoffTime,
+      lateGraceMinutes: grace,
+      projectName: matchedProject?.name || 'Proyek Lapangan Penugasan',
+      projectCode: matchedProject?.code || matchedProject?.id || assignedId,
+      projectId: matchedProject?.id || assignedId,
+      isCustom: true
+    };
+  }
+
+  return {
+    checkInTime: fallbackCheckIn,
+    checkOutTime: fallbackCheckOut,
+    cutoffTime: fallbackCutoff,
+    lateGraceMinutes: fallbackGrace,
+    projectName: matchedProject?.name || 'Kantor Pusat / Proyek Terkait',
+    projectCode: matchedProject?.code || matchedProject?.id || (assignedId || 'PRJ-001'),
+    projectId: matchedProject?.id || assignedId || 'PRJ-001',
+    isCustom: false
+  };
+}
+
 export function saveEmployee(emp) {
   const db = getDatabase();
   db.prepare(`

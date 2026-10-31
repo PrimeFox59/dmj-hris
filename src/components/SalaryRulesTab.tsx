@@ -994,7 +994,7 @@ export const SalaryRulesTab: React.FC<SalaryRulesTabProps> = ({
               <div>
                 <p className="font-bold text-amber-950">Aturan Mutlak Aktivasi Notifikasi WhatsApp:</p>
                 <p className="text-[11px] text-amber-900/90 mt-0.5">
-                  Setiap karyawan/user yang ingin menerima notifikasi otomatis (presensi, approval, slip gaji) <b>wajib mengetik minimal 1 pesan ke nomor bot di atas</b>. Pesan dapat berupa ID Karyawan (contoh: <code className="bg-amber-100/80 px-1 rounded font-mono text-[10px]">EMP-001</code>), NIK, atau sapaan apa pun. Sebelum ada 1 pesan masuk, sistem secara otomatis menahan pengiriman notifikasi (<code className="bg-amber-100/80 px-1 rounded font-mono text-[10px]">OPT_IN_REQUIRED</code>).
+                  Setiap karyawan/user yang ingin menerima notifikasi otomatis (presensi kehadiran, status persetujuan tiket / approval) <b>wajib mengetik minimal 1 pesan ke nomor bot di atas</b>. Pesan dapat berupa ID Karyawan (contoh: <code className="bg-amber-100/80 px-1 rounded font-mono text-[10px]">EMP-001</code>), NIK, atau sapaan apa pun. Sebelum ada 1 pesan masuk, sistem secara otomatis menahan pengiriman notifikasi (<code className="bg-amber-100/80 px-1 rounded font-mono text-[10px]">OPT_IN_REQUIRED</code>). Sesuai kebijakan manajemen, notifikasi slip gaji/payroll tidak dikirimkan otomatis melalui WA/Email.
                 </p>
               </div>
             </div>

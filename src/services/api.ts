@@ -262,7 +262,7 @@ export const api = {
   // 4. Update Approval in SQLite
   async updateApproval(
     id: string,
-    status: 'APPROVED' | 'REJECTED',
+    status: 'APPROVED' | 'REJECTED' | 'REVISION_REQUESTED',
     reviewNote?: string,
     reviewedBy: string = 'Direksi / HR Lead'
   ): Promise<{ success: boolean; item: ApprovalItem }> {

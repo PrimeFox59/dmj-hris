@@ -8,7 +8,8 @@ import {
   getDatabase,
   isWaOptedIn,
   recordWaOptIn,
-  getWaOptIns
+  getWaOptIns,
+  getEmployeeProjectSchedule
 } from './db.js';
 
 // Configuration: Dedicated PRIME HRIS WhatsApp Gateway (Port 9008)
@@ -276,37 +277,37 @@ _Sistem HRIS Otomatis PT Prime Infinity Systems_
 /**
  * 2. Notification: Late Clock-in Alert & Justification Form Prompt
  */
-export async function notifyAttendanceLate(employee, record, salaryRules = null) {
+export async function notifyAttendanceLate(employee, record, salaryRules = null, projectSchedule = null) {
   if (!employee || !employee.phone) return null;
 
+  const sched = projectSchedule || getEmployeeProjectSchedule(employee, salaryRules);
   const timeStr = record.checkInTime || '08:45:00';
-  const cutoffStr = salaryRules?.cutoffTime || '08:30';
+  const cutoffStr = sched.cutoffTime || salaryRules?.cutoffTime || '08:30';
   const lateMins = record.lateMinutes || 15;
   const dateStr = record.date || new Date().toISOString().substring(0, 10);
+  const projectName = sched.projectName ? (sched.projectName + ' (' + sched.projectCode + ')') : 'Site Operasional PRIME';
 
   const msg = 
-`⚠️ *PEMBERITAHUAN KETERLAMBATAN KERJA - PRIME HRIS*
-Halo *${employee.name}* (${employee.id}),
-
-Sistem mencatat presensi masuk Anda melebihi jam cutoff resmi:
-📅 *Tanggal:* ${dateStr}
-⏰ *Waktu Check-In:* ${timeStr} WIB (Cutoff: ${cutoffStr} WIB)
-⏳ *Keterlambatan:* *${lateMins} Menit*
-📉 *Status:* Terlambat Masuk Shift
-
-📌 *Tindakan Diperlukan:*
-Jika keterlambatan disebabkan kendala lalu lintas darurat, tugas operasional mendadak, atau kerusakan armada, Anda berhak mengajukan *Formulir Justifikasi Keterlambatan* pada menu Pengajuan:
-🌐 https://hris.primeprojectx.net
-
-Pengajuan yang disetujui Project Manager / HR Manager akan membebaskan Anda dari pemotongan tunjangan keterlambatan.
-
-_HR & Operational Control PT Prime Infinity Systems_`;
+'⚠️ *PEMBERITAHUAN KETERLAMBATAN KERJA - PRIME HRIS*\n' +
+'Halo *' + employee.name + '* (' + employee.id + '),\n\n' +
+'Sistem mencatat presensi masuk Anda melebihi batas cutoff jadwal proyek:\n' +
+'📅 *Tanggal:* ' + dateStr + '\n' +
+'🏢 *Proyek Penugasan:* ' + projectName + '\n' +
+'⏰ *Shift Kerja Proyek:* ' + sched.checkInTime + ' - ' + sched.checkOutTime + ' WIB\n' +
+'⏰ *Waktu Check-In:* ' + timeStr + ' WIB (Cutoff Proyek: ' + cutoffStr + ' WIB)\n' +
+'⏳ *Keterlambatan:* *' + lateMins + ' Menit*\n' +
+'📉 *Status:* Terlambat Masuk Shift\n\n' +
+'📌 *Tindakan Diperlukan:*\n' +
+'Jika keterlambatan disebabkan kendala lalu lintas darurat, tugas operasional mendadak di lapangan, atau kerusakan armada, Anda berhak mengajukan *Formulir Justifikasi Keterlambatan* pada menu Pengajuan:\n' +
+'🌐 https://hris.primeprojectx.net\n\n' +
+'Pengajuan yang disetujui Project Manager / HR Manager akan membebaskan Anda dari pemotongan tunjangan kedisiplinan.\n\n' +
+'_HR & Operational Control PT Prime Infinity Systems_';
 
   return sendWhatsAppMessage(employee.phone, msg, {
     recipientId: employee.id,
     recipientName: employee.name,
     eventType: 'ATTENDANCE_LATE',
-    title: `Peringatan Keterlambatan (${lateMins} Menit)`,
+    title: 'Peringatan Keterlambatan (' + lateMins + ' Menit) - ' + sched.projectCode,
     attendanceId: record.id,
     lateMinutes: lateMins
   });
@@ -315,30 +316,34 @@ _HR & Operational Control PT Prime Infinity Systems_`;
 /**
  * 3. Notification: Morning Shift Clock-In Reminder
  */
-export async function notifyMorningReminder(employee, schedule = null, dateStr = null) {
+export async function notifyMorningReminder(employee, projectScheduleOrRules = null, dateStr = null) {
   if (!employee || !employee.phone) return null;
 
+  const sched = projectScheduleOrRules && projectScheduleOrRules.checkInTime && projectScheduleOrRules.cutoffTime
+    ? projectScheduleOrRules
+    : getEmployeeProjectSchedule(employee, projectScheduleOrRules);
+
   const todayStr = dateStr || new Date().toISOString().substring(0, 10);
-  const cutoffStr = schedule?.cutoffTime || '08:30';
+  const cutoffStr = sched.cutoffTime || '08:30';
+  const projectName = sched.projectName ? (sched.projectName + ' (' + sched.projectCode + ')') : 'Site Penugasan Proyek';
 
   const msg = 
-`🌅 *PENGINGAT PRESENSI PAGI - PRIME HRIS*
-Selamat pagi, *${employee.name}* (${employee.id})!
-
-Mengingatkan untuk segera melakukan presensi kehadiran hari ini:
-📅 *Tanggal:* ${todayStr}
-⏰ *Batas Cutoff Masuk:* *${cutoffStr} WIB*
-📍 *Portal Presensi:* https://hris.primeprojectx.net
-
-Pastikan GPS perangkat Anda aktif dan Anda telah berada di dalam geofence site penugasan. Selamat bekerja dan semoga hari Anda produktif!
-
-_Departemen Sumber Daya Manusia PT Prime Infinity Systems_`;
+'🌅 *PENGINGAT PRESENSI PAGI - PRIME HRIS*\n' +
+'Selamat pagi, *' + employee.name + '* (' + employee.id + ')!\n\n' +
+'Mengingatkan untuk segera melakukan presensi kehadiran hari ini:\n' +
+'📅 *Tanggal:* ' + todayStr + '\n' +
+'🏢 *Proyek Penugasan:* ' + projectName + '\n' +
+'⏰ *Shift Kerja Proyek:* ' + sched.checkInTime + ' - ' + sched.checkOutTime + ' WIB\n' +
+'⏳ *Batas Cutoff Masuk:* *' + cutoffStr + ' WIB* (Toleransi: ' + sched.lateGraceMinutes + ' menit)\n' +
+'📍 *Portal Presensi:* https://hris.primeprojectx.net\n\n' +
+'Pastikan GPS perangkat Anda aktif dan Anda telah berada di dalam geofence site penugasan. Selamat bekerja dan semoga hari Anda produktif!\n\n' +
+'_Departemen Sumber Daya Manusia PT Prime Infinity Systems_';
 
   return sendWhatsAppMessage(employee.phone, msg, {
     recipientId: employee.id,
     recipientName: employee.name,
     eventType: 'MORNING_REMINDER',
-    title: 'Pengingat Presensi Pagi Hari',
+    title: 'Pengingat Presensi Pagi - ' + sched.projectCode,
     date: todayStr
   });
 }
@@ -346,31 +351,35 @@ _Departemen Sumber Daya Manusia PT Prime Infinity Systems_`;
 /**
  * 4. Notification: Urgent Warning - Approaching Cutoff & Not Clocked In Yet
  */
-export async function notifyApproachingCutoff(employee, cutoffTime = '08:30', dateStr = null) {
+export async function notifyApproachingCutoff(employee, projectScheduleOrCutoff = null, dateStr = null) {
   if (!employee || !employee.phone) return null;
+
+  const sched = typeof projectScheduleOrCutoff === 'object' && projectScheduleOrCutoff !== null
+    ? projectScheduleOrCutoff
+    : getEmployeeProjectSchedule(employee);
 
   const todayStr = dateStr || new Date().toISOString().substring(0, 10);
   const nowWib = new Date().toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hour12: false }).replace(/\./g, ':');
+  const cutoffStr = sched.cutoffTime || (typeof projectScheduleOrCutoff === 'string' ? projectScheduleOrCutoff : '08:30');
+  const projectName = sched.projectName ? (sched.projectName + ' (' + sched.projectCode + ')') : 'Site Penugasan Proyek';
 
   const msg = 
-`⏰ *PERINGATAN: ANDA BELUM MELAKUKAN PRESENSI HARI INI!*
-Halo *${employee.name}* (${employee.id}),
-
-Hingga pukul *${nowWib} WIB*, sistem mencatat Anda *BELUM* melakukan check-in presensi masuk hari ini (${todayStr}).
-
-⚠️ *Batas toleransi cutoff adalah pukul ${cutoffTime} WIB.*
-Segera buka portal presensi kamera sebelum terhitung terlambat atau mangkir (Alpha):
-🌐 https://hris.primeprojectx.net
-
-_Abaikan pesan ini jika Anda sedang dalam status Cuti Tahunan / Izin Sakit yang telah disetujui HRD._
-
-_Manajemen Operasional PT Prime Infinity Systems_`;
+'⏰ *PERINGATAN: ANDA BELUM MELAKUKAN PRESENSI HARI INI!*\n' +
+'Halo *' + employee.name + '* (' + employee.id + '),\n\n' +
+'Hingga pukul *' + nowWib + ' WIB*, sistem mencatat Anda *BELUM* melakukan check-in presensi masuk hari ini (' + todayStr + ').\n\n' +
+'🏢 *Proyek Penugasan:* ' + projectName + '\n' +
+'⏰ *Shift Kerja Proyek:* ' + sched.checkInTime + ' - ' + sched.checkOutTime + ' WIB\n' +
+'⚠️ *Batas toleransi cutoff jadwal proyek Anda adalah pukul ' + cutoffStr + ' WIB.*\n\n' +
+'Segera buka portal presensi kamera sebelum terhitung terlambat atau mangkir (Alpha):\n' +
+'🌐 https://hris.primeprojectx.net\n\n' +
+'_Abaikan pesan ini jika Anda sedang dalam status Cuti Tahunan / Izin Sakit yang telah disetujui HRD._\n\n' +
+'_Manajemen Operasional PT Prime Infinity Systems_';
 
   return sendWhatsAppMessage(employee.phone, msg, {
     recipientId: employee.id,
     recipientName: employee.name,
     eventType: 'CUTOFF_WARNING',
-    title: 'Peringatan Belum Presensi Masuk',
+    title: 'Peringatan Belum Presensi Masuk - ' + sched.projectCode,
     date: todayStr
   });
 }
@@ -455,28 +464,28 @@ export async function notifyApprovalDecision(approvalItem, employee) {
     REVISION_REQUESTED: '⚠️ *PERMINTAAN REVISI (REVISION REQUIRED)*'
   };
 
-  const statusBadge = statusIcons[approvalItem.status] || `*${approvalItem.status}*`;
+  const statusBadge = statusIcons[approvalItem.status] || ('*' + approvalItem.status + '*');
+  const title = approvalItem.title || approvalItem.type || 'Permohonan Kepegawaian';
+  const reviewer = approvalItem.reviewedBy || 'Direksi / HR Lead';
+  const note = approvalItem.reviewNote || (approvalItem.status === 'APPROVED' ? 'Disetujui.' : (approvalItem.status === 'REVISION_REQUESTED' ? 'Mohon melengkapi berkas pendukung.' : 'Ditolak.'));
 
   const msg = 
-`📢 *UPDATE STATUS PERMOHONAN - PRIME HRIS*
-Halo *${employee.name}*,
-
-Permohonan Anda telah selesai ditinjau oleh pimpinan:
-📌 *Judul:* ${approvalItem.title}
-📊 *Status Hasil:* ${statusBadge}
-👤 *Ditinjau Oleh:* ${approvalItem.reviewedBy || 'Manajemen'}
-💬 *Catatan Review:* "${approvalItem.reviewNote || 'Tidak ada catatan khusus.'}"
-
-Detail lengkap dapat dilihat pada Portal Kinerja & Approval:
-🌐 https://hris.primeprojectx.net
-
-_Departemen HRD PT Prime Infinity Systems_`;
+'📢 *UPDATE STATUS PERMOHONAN - PRIME HRIS*\n' +
+'Halo *' + employee.name + '*,\n\n' +
+'Permohonan Anda telah selesai ditinjau oleh pimpinan:\n' +
+'📌 *Judul:* ' + title + '\n' +
+'📊 *Status Hasil:* ' + statusBadge + '\n' +
+'👤 *Ditinjau Oleh:* ' + reviewer + '\n' +
+'💬 *Catatan Review:* "' + note + '"\n\n' +
+'Detail lengkap dapat dilihat pada Portal Kinerja & Approval:\n' +
+'🌐 https://hris.primeprojectx.net\n\n' +
+'_Departemen HRD PT Prime Infinity Systems_';
 
   return sendWhatsAppMessage(employee.phone, msg, {
     recipientId: employee.id,
     recipientName: employee.name,
-    eventType: `APPROVAL_${approvalItem.status}`,
-    title: `Keputusan Permohonan: ${approvalItem.status}`,
+    eventType: 'APPROVAL_' + approvalItem.status,
+    title: 'Keputusan Permohonan: ' + approvalItem.status,
     approvalId: approvalItem.id
   });
 }
@@ -539,36 +548,65 @@ async function evaluateScheduledReminders() {
     if (rulesRow) rulesConfig = JSON.parse(rulesRow.config_json);
   } catch (e) {}
 
-  const waConfig = rulesConfig?.whatsappConfig || {
+  const waConfig = rulesConfig?.waConfig || rulesConfig?.whatsappConfig || {
     enabled: true,
     notifyMorningReminder: true,
-    morningReminderTime: '07:30',
     notifyApproachingCutoff: true,
     approachingCutoffMinutesBefore: 15
   };
 
   if (waConfig.enabled === false) return;
 
-  const cutoffTime = rulesConfig?.cutoffTime || '08:30';
-  const morningTarget = waConfig.morningReminderTime || '07:30';
+  const employees = db.prepare("SELECT id, name, nik, data_json FROM employees;").all().map(r => {
+    try { return JSON.parse(r.data_json); } catch (e) { return r; }
+  });
 
-  // Calculate cutoff warning time (default: 15 mins before cutoffTime)
-  const [cutoffH, cutoffM] = cutoffTime.split(':').map(Number);
-  const cutoffDate = new Date();
-  cutoffDate.setHours(cutoffH, cutoffM, 0, 0);
-  const warningDate = new Date(cutoffDate.getTime() - (waConfig.approachingCutoffMinutesBefore || 15) * 60000);
-  const warningTarget = `${String(warningDate.getHours()).padStart(2, '0')}:${String(warningDate.getMinutes()).padStart(2, '0')}`;
+  const todayAttendances = db.prepare("SELECT employeeId FROM attendances WHERE date = ?;").all(todayStr).map(a => a.employeeId);
+  const attendedSet = new Set(todayAttendances);
 
-  // 1. Morning Reminder (Triggered when nowWib matches morningTarget)
-  if (waConfig.notifyMorningReminder !== false && nowWib === morningTarget) {
-    console.log(`[WA Scheduler] 🌅 Executing Morning Attendance Reminders at ${nowWib} WIB...`);
-    await dispatchMorningReminders(todayStr, rulesConfig);
-  }
+  // Check approved leaves today
+  const approvedLeaves = db.prepare(
+    "SELECT employeeId FROM approvals WHERE status = 'APPROVED' AND type = 'LEAVE' AND ? BETWEEN startDate AND endDate;"
+  ).all(todayStr).map(l => l.employeeId);
+  const leaveSet = new Set(approvedLeaves);
 
-  // 2. Approaching Cutoff Warning (Triggered when nowWib matches warningTarget)
-  if (waConfig.notifyApproachingCutoff !== false && nowWib === warningTarget) {
-    console.log(`[WA Scheduler] ⏰ Executing Approaching Cutoff Warnings at ${nowWib} WIB (Cutoff: ${cutoffTime})...`);
-    await dispatchCutoffWarnings(todayStr, cutoffTime);
+  // Helper to add or subtract minutes from an "HH:MM" string
+  const addMins = (timeStr, mins) => {
+    const parts = (timeStr || '08:00').split(':').map(Number);
+    const total = (parts[0] || 0) * 60 + (parts[1] || 0) + mins;
+    const nh = ((Math.floor(total / 60) % 24) + 24) % 24;
+    const nm = ((total % 60) + 60) % 60;
+    return String(nh).padStart(2, '0') + ':' + String(nm).padStart(2, '0');
+  };
+
+  for (const emp of employees) {
+    if (emp.status === 'INACTIVE') continue;
+    if (attendedSet.has(emp.id)) continue; // Already clocked in
+    if (!emp.phone) continue;
+
+    // Strictly resolve each employee's individual project schedule
+    const sched = getEmployeeProjectSchedule(emp, rulesConfig);
+
+    // 1. Morning Reminder: evaluated against the employee's project checkInTime (30 mins before project check-in)
+    if (waConfig.notifyMorningReminder !== false) {
+      const empMorningTarget = addMins(sched.checkInTime, -30);
+      if (nowWib === empMorningTarget && !hasSentTodayWaReminder(emp.id, 'MORNING_REMINDER', todayStr)) {
+        await notifyMorningReminder(emp, sched, todayStr);
+        await new Promise(r => setTimeout(r, 2000));
+        continue;
+      }
+    }
+
+    // 2. Approaching Cutoff Warning: evaluated against the employee's project cutoffTime
+    if (waConfig.notifyApproachingCutoff !== false) {
+      if (leaveSet.has(emp.id)) continue; // Legitimate approved leave
+      const warningMinutes = Number(waConfig.approachingCutoffMinutesBefore ?? 15);
+      const empWarningTarget = addMins(sched.cutoffTime, -warningMinutes);
+      if (nowWib === empWarningTarget && !hasSentTodayWaReminder(emp.id, 'CUTOFF_WARNING', todayStr)) {
+        await notifyApproachingCutoff(emp, sched, todayStr);
+        await new Promise(r => setTimeout(r, 2000));
+      }
+    }
   }
 }
 
