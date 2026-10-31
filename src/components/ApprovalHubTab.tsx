@@ -24,7 +24,12 @@ import {
   MapPin,
   Layers,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Check,
+  CheckCheck,
+  Eye,
+  Paperclip,
+  ExternalLink
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Employee, ApprovalItem, LeaveType, SystemRole, getEffectiveSystemRole, Project } from '../types';
@@ -148,12 +153,25 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
   } | null>(null);
   const [reviewerNote, setReviewerNote] = useState('');
 
+  // Batch Selection & Batch Review Modal State
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [batchModal, setBatchModal] = useState<{
+    isOpen: boolean;
+    action: 'APPROVE' | 'REJECT';
+    targetItems: ApprovalItem[];
+    title: string;
+    note: string;
+  } | null>(null);
+
+  // Detail Modal State (Untuk melihat rincian komprehensif baris)
+  const [detailModalItem, setDetailModalItem] = useState<ApprovalItem | null>(null);
+
   // Submit Leave Request Modal State
   const [showNewRequestModal, setShowNewRequestModal] = useState(initialOpenNewRequest || false);
 
   // Background Scroll Lock saat modal terbuka agar viewport tetap terkunci di layar aktif
   useEffect(() => {
-    if (showNewRequestModal || reviewModalItem) {
+    if (showNewRequestModal || reviewModalItem || batchModal || detailModalItem) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
@@ -161,7 +179,7 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
     return () => {
       document.body.style.overflow = '';
     };
-  }, [showNewRequestModal, reviewModalItem]);
+  }, [showNewRequestModal, reviewModalItem, batchModal, detailModalItem]);
 
   // Perhitungan Hak & Saldo Cuti Karyawan
   const annualLeaveQuota = typeof currentUser.leaveQuota === 'number' ? currentUser.leaveQuota : 12;
@@ -463,6 +481,105 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
     setApprovalDisplayLimit(10);
   }, [filterType, filterStatus, searchTerm, approvalStartDate, approvalEndDate]);
 
+  // Filtered pending items that the current user has permission to approve
+  const approvableFilteredPending = React.useMemo(() => {
+    return filteredApprovals.filter(item => item.status === 'PENDING' && canUserApproveItem(item));
+  }, [filteredApprovals, canUserApproveItem]);
+
+  // Visible pending items that the current user has permission to approve
+  const approvableVisiblePending = React.useMemo(() => {
+    return visibleApprovals.filter(item => item.status === 'PENDING' && canUserApproveItem(item));
+  }, [visibleApprovals, canUserApproveItem]);
+
+  const isAllVisibleSelected =
+    approvableVisiblePending.length > 0 &&
+    approvableVisiblePending.every(item => selectedIds.has(item.id));
+
+  const isSomeVisibleSelected =
+    approvableVisiblePending.some(item => selectedIds.has(item.id)) && !isAllVisibleSelected;
+
+  const handleToggleSelectAllVisible = () => {
+    if (isAllVisibleSelected) {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        approvableVisiblePending.forEach(i => next.delete(i.id));
+        return next;
+      });
+    } else {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        approvableVisiblePending.forEach(i => next.add(i.id));
+        return next;
+      });
+    }
+  };
+
+  const handleToggleRowSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleTriggerBatchSelected = (action: 'APPROVE' | 'REJECT') => {
+    const targets = filteredApprovals.filter(
+      item => selectedIds.has(item.id) && item.status === 'PENDING' && canUserApproveItem(item)
+    );
+    if (targets.length === 0) return;
+    setBatchModal({
+      isOpen: true,
+      action,
+      targetItems: targets,
+      title: `${action === 'APPROVE' ? 'Setujui' : 'Tolak'} ${targets.length} Pengajuan Terpilih`,
+      note: ''
+    });
+  };
+
+  const handleTriggerApproveAllFiltered = () => {
+    if (approvableFilteredPending.length === 0) return;
+    setBatchModal({
+      isOpen: true,
+      action: 'APPROVE',
+      targetItems: approvableFilteredPending,
+      title: `Setujui Seluruh ${approvableFilteredPending.length} Pengajuan Sesuai Filter`,
+      note: ''
+    });
+  };
+
+  const executeBatchAction = () => {
+    if (!batchModal) return;
+    const { action, targetItems, note } = batchModal;
+
+    targetItems.forEach(item => {
+      if (action === 'APPROVE') {
+        onApprove(item.id, note || 'Disetujui secara massal');
+      } else {
+        onReject(item.id, note || 'Ditolak secara massal');
+      }
+    });
+
+    if (action === 'APPROVE') {
+      confetti({
+        particleCount: 90,
+        spread: 75,
+        origin: { y: 0.6 }
+      });
+    }
+
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      targetItems.forEach(i => next.delete(i.id));
+      return next;
+    });
+
+    setBatchModal(null);
+  };
+
   const applyApprovalPreset = (preset: 'ALL' | 'TODAY' | 'LAST_7' | 'THIS_MONTH') => {
     setApprovalDatePreset(preset);
     const now = new Date();
@@ -691,8 +808,52 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
         </div>
       </div>
 
-      {/* Approval Cards List */}
-      <div className="space-y-4">
+      {/* Batch Action Toolbar & Table Container */}
+      <div className="space-y-3">
+        {/* Table Toolbar */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-1">
+          <div className="flex items-center gap-2 flex-wrap text-xs">
+            <span className="font-bold text-slate-800">
+              Daftar Baris Pengajuan ({filteredApprovals.length})
+            </span>
+            {selectedIds.size > 0 && (
+              <span className="px-2.5 py-0.5 rounded-full bg-orange-100 text-[#FF6B00] font-bold font-mono-code text-[11px] border border-orange-200">
+                {selectedIds.size} baris dipilih
+              </span>
+            )}
+            {approvableFilteredPending.length > 0 && (
+              <span className="px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 font-medium font-mono-code text-[11px] border border-amber-200">
+                {approvableFilteredPending.length} menunggu otorisasi Anda
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap self-end sm:self-auto">
+            {selectedIds.size > 0 && (
+              <button
+                type="button"
+                onClick={() => setSelectedIds(new Set())}
+                className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-all cursor-pointer"
+              >
+                Reset Pilihan
+              </button>
+            )}
+
+            {approvableFilteredPending.length > 0 && (isHrManager || isProjectManager || currentRole === 'superuser' || currentRole === 'admin') && (
+              <button
+                type="button"
+                onClick={handleTriggerApproveAllFiltered}
+                className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm hover:shadow transition-all cursor-pointer active:scale-95"
+                title="Langsung setujui semua pengajuan yang sedang tampil sesuai filter aktif saat ini"
+              >
+                <Zap className="w-3.5 h-3.5 text-amber-300" />
+                <span>Setujui Semua Hasil Filter ({approvableFilteredPending.length})</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Interactive Data Table */}
         {filteredApprovals.length === 0 ? (
           <div className="glass-card rounded-3xl p-12 text-center space-y-2">
             <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto" />
@@ -700,377 +861,258 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
             <p className="text-xs text-slate-500">Semua pengajuan cuti, izin, dan keterlambatan telah diproses.</p>
           </div>
         ) : (
-          visibleApprovals.map((item, idx) => {
-            const emp = employees.find(e => e.id === item.employeeId);
-            const isPending = item.status === 'PENDING';
+          <div className="overflow-x-auto rounded-2xl border border-slate-200/90 bg-white/95 shadow-sm motion-fade-in-up">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50/90 text-[11px] font-bold text-slate-600 uppercase tracking-wider font-mono-code select-none">
+                  <th className="py-3 px-3 text-center w-10">
+                    <input
+                      type="checkbox"
+                      checked={isAllVisibleSelected}
+                      ref={el => {
+                        if (el) el.indeterminate = isSomeVisibleSelected;
+                      }}
+                      onChange={handleToggleSelectAllVisible}
+                      disabled={approvableVisiblePending.length === 0}
+                      className="w-4 h-4 rounded border-slate-300 text-[#FF6B00] focus:ring-[#FF6B00] cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                      title={approvableVisiblePending.length === 0 ? "Tidak ada pengajuan yang dapat dipilih pada halaman ini" : "Pilih Semua yang Menunggu Otorisasi"}
+                    />
+                  </th>
+                  <th className="py-3 px-3 min-w-[210px]">Pemohon & Proyek</th>
+                  <th className="py-3 px-3 w-40">Tipe & Rute</th>
+                  <th className="py-3 px-3 min-w-[230px]">Detail Pengajuan</th>
+                  <th className="py-3 px-3 w-36">Tanggal & Durasi</th>
+                  <th className="py-3 px-3 text-center w-20">Lampiran</th>
+                  <th className="py-3 px-3 text-center w-28">Status</th>
+                  <th className="py-3 px-3 text-center w-36">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-xs">
+                {visibleApprovals.map((item, idx) => {
+                  const emp = employees.find(e => e.id === item.employeeId);
+                  const isPending = item.status === 'PENDING';
+                  const canApprove = canUserApproveItem(item);
+                  const isSelected = selectedIds.has(item.id);
 
-            return (
-              <div
-                key={item.id}
-                style={{ animationDelay: `${(idx + 1) * 60}ms` }}
-                className="glass-card rounded-3xl p-5 sm:p-6 transition-all hover:shadow-lg border border-white/90 space-y-4 motion-fade-in-up card-interactive"
-              >
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-sm overflow-hidden shrink-0">
-                      {emp?.avatar ? (
-                        <img src={emp.avatar} alt={item.employeeName} className="w-full h-full object-cover" />
-                      ) : (
-                        item.employeeName.charAt(0)
-                      )}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold text-slate-900">{item.employeeName}</span>
-                        <span className="text-[11px] font-mono-code text-slate-400">({item.employeeNik})</span>
-                      </div>
-                      <p className="text-xs text-slate-500">{item.department}  {emp?.position}</p>
-                    </div>
-                  </div>
+                  return (
+                    <tr
+                      key={item.id}
+                      className={`transition-colors hover:bg-slate-50/80 ${
+                        isSelected ? 'bg-orange-50/50' : idx % 2 === 1 ? 'bg-slate-50/30' : 'bg-white'
+                      }`}
+                    >
+                      {/* Checkbox Kolom */}
+                      <td className="py-3 px-3 text-center">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => handleToggleRowSelect(item.id)}
+                          disabled={!isPending || !canApprove}
+                          className={`w-4 h-4 rounded border-slate-300 text-[#FF6B00] focus:ring-[#FF6B00] ${
+                            isPending && canApprove
+                              ? 'cursor-pointer'
+                              : 'cursor-not-allowed opacity-20'
+                          }`}
+                          title={
+                            !isPending
+                              ? 'Pengajuan sudah diproses'
+                              : !canApprove
+                              ? 'Anda tidak memiliki hak otorisasi untuk pengajuan ini'
+                              : 'Pilih untuk batch otorisasi'
+                          }
+                        />
+                      </td>
 
-                  <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
-                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide uppercase font-mono-code ${
-                      item.type === 'OUT_OF_GEOFENCE'
-                        ? 'bg-orange-100 text-orange-800 border border-orange-300'
-                        : item.type === 'DINAS_LUAR'
-                        ? 'bg-amber-100 text-amber-800'
-                        : item.type === 'LATE_JUSTIFICATION'
-                        ? 'bg-rose-100 text-rose-800'
-                        : item.type === 'LEAVE'
-                        ? 'bg-blue-100 text-blue-800'
-                        : item.type === 'ATTENDANCE_CORRECTION'
-                        ? 'bg-teal-100 text-teal-800 border border-teal-300'
-                        : 'bg-emerald-100 text-emerald-800'
-                    }`}>
-                      {item.type === 'OUT_OF_GEOFENCE' ? 'LUAR GEOFENCE' : item.type === 'ATTENDANCE_CORRECTION' ? 'KOREKSI ABSENSI' : item.type.replace('_', ' ')}
-                    </span>
-
-                    {(item.type === 'ATTENDANCE_CORRECTION' || item.type === 'OUT_OF_GEOFENCE') && (
-                      item.targetApproverRole === 'PM' && item.projectManagerName ? (
-                        <span className="px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide uppercase font-mono-code bg-amber-50 text-amber-900 border border-amber-300 flex items-center gap-1 shadow-2xs">
-                          <Crown className="w-3 h-3 text-amber-600" />
-                          <span>PM: {item.projectManagerName} ({item.projectCode || 'SITE'})</span>
-                        </span>
-                      ) : (
-                        <span className="px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide uppercase font-mono-code bg-indigo-50 text-indigo-900 border border-indigo-200 flex items-center gap-1">
-                          <Building2 className="w-3 h-3 text-indigo-600" />
-                          <span>HR APPROVAL ONLY (TANPA PROYEK)</span>
-                        </span>
-                      )
-                    )}
-
-                    {item.leaveType === 'CUTI_ROSTER_NON_LOKAL' && (
-                      <span className="px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide uppercase font-mono-code bg-purple-100 text-purple-800 flex items-center gap-1">
-                        <Plane className="w-3 h-3 text-purple-600" />
-                        <span>ROSTER NON-LOKAL</span>
-                      </span>
-                    )}
-
-                    {(item.isOverQuota || (item.unpaidLeaveDays && item.unpaidLeaveDays > 0)) && (
-                      <span className="px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide uppercase font-mono-code bg-rose-100 text-rose-800 flex items-center gap-1 border border-rose-300 shadow-2xs">
-                        <AlertCircle className="w-3 h-3 text-rose-600" />
-                        <span>POTONG GAJI ({item.unpaidLeaveDays} HARI)</span>
-                      </span>
-                    )}
-
-                    {item.isOffSchedule && (
-                      <span className="px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide uppercase font-mono-code bg-amber-100 text-amber-800 flex items-center gap-1 border border-amber-300">
-                        <Calendar className="w-3 h-3 text-amber-600" />
-                        <span>DI LUAR JADWAL ROSTER</span>
-                      </span>
-                    )}
-
-                    {item.requiresHrApproval && (
-                      <span className="px-2 py-0.5 rounded-full text-[9px] font-bold font-mono-code bg-indigo-50 text-indigo-700 border border-indigo-200">
-                        HR APPROVAL
-                      </span>
-                    )}
-
-                    {item.isEarlySubmission && (
-                      <span className="px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide uppercase font-mono-code bg-amber-100 text-amber-800 flex items-center gap-1 border border-amber-300">
-                        <Zap className="w-3 h-3 text-amber-600" />
-                        <span>AJUKAN LEBIH AWAL</span>
-                      </span>
-                    )}
-
-                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                      item.status === 'PENDING'
-                        ? 'bg-orange-100 text-orange-800 animate-pulse'
-                        : item.status === 'APPROVED'
-                        ? 'bg-emerald-100 text-emerald-800'
-                        : item.status === 'REJECTED'
-                        ? 'bg-rose-100 text-rose-800'
-                        : 'bg-slate-100 text-slate-700'
-                    }`}>
-                      {item.status}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Content Details */}
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 text-xs">
-                  <div className="md:col-span-8 space-y-2">
-                    <h3 className="text-sm font-bold text-slate-900">{item.title}</h3>
-                    <p className="text-slate-600 leading-relaxed bg-slate-50/70 p-3 rounded-2xl border border-slate-100">
-                      {item.description}
-                    </p>
-
-                    {(item.type === 'ATTENDANCE_CORRECTION' || item.type === 'OUT_OF_GEOFENCE') && (
-                      <div className="p-3.5 rounded-2xl bg-teal-50/80 border border-teal-200 text-teal-950 space-y-2">
-                        <div className="flex items-center justify-between text-xs font-bold border-b border-teal-200/60 pb-1.5">
-                          <span className="flex items-center gap-1.5 text-teal-900 font-mono-code">
-                            <Clock className="w-3.5 h-3.5 text-teal-600" />
-                            Koreksi Presensi Tanggal: {formatIndonesianDateDisplay(item.startDate)}
-                          </span>
-                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-mono-code font-bold ${
-                            item.targetStatus === 'ON_TIME'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : item.targetStatus === 'LATE'
-                              ? 'bg-rose-100 text-rose-800'
-                              : 'bg-blue-100 text-blue-800'
-                          }`}>
-                            {item.targetStatus === 'ON_TIME' ? 'Tepat Waktu' : item.targetStatus === 'LATE' ? 'Terlambat' : 'Dinas Luar'}
-                          </span>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2 text-[11px] font-mono-code">
-                          <div className="p-2 rounded-xl bg-white border border-teal-100">
-                            <span className="text-[10px] text-slate-400 block uppercase">Jam Masuk (Check-In)</span>
-                            <b className="text-teal-900 text-xs">{item.targetCheckInTime || '-'} WIB</b>
-                          </div>
-                          <div className="p-2 rounded-xl bg-white border border-teal-100">
-                            <span className="text-[10px] text-slate-400 block uppercase">Jam Pulang (Check-Out)</span>
-                            <b className="text-teal-900 text-xs">{item.targetCheckOutTime ? `${item.targetCheckOutTime} WIB` : '-'}</b>
-                          </div>
-                        </div>
-                        <div className="text-[11px] pt-1 text-slate-700 flex items-center justify-between flex-wrap gap-1">
-                          {item.projectName ? (
-                            <span className="flex items-center gap-1 text-amber-900 font-medium">
-                              <Crown className="w-3.5 h-3.5 text-amber-600" />
-                              <span>Proyek: <b>{item.projectName}</b> ({item.projectCode}) • PM: <b>{item.projectManagerName || 'Belum Ditugaskan'}</b></span>
-                            </span>
-                          ) : (
-                            <span className="flex items-center gap-1 text-indigo-900 font-medium">
-                              <Building2 className="w-3.5 h-3.5 text-indigo-600" />
-                              <span>Staf Kantor Pusat (Tanpa Penugasan Proyek)</span>
-                            </span>
-                          )}
-                          <span className="text-[10px] font-mono-code text-slate-500 bg-white px-2 py-0.5 rounded border border-teal-100">
-                            Rute: <b>{item.targetApproverRole === 'PM' ? `PM (${item.projectManagerName || 'Site'}) / HR` : 'HR Manager Saja'}</b>
-                          </span>
-                        </div>
-                      </div>
-                    )}
-
-                    {item.earlyReason && (
-                      <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-950 flex items-start gap-2 shadow-2xs">
-                        <Zap className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                        <div>
-                          <b className="font-bold text-amber-900">Alasan Khusus Pengajuan Cuti Lebih Awal:</b>
-                          <p className="text-[11.5px] text-amber-800 mt-0.5">{item.earlyReason}</p>
-                        </div>
-                      </div>
-                    )}
-
-                    {item.offScheduleReason && (
-                      <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-950 flex items-start gap-2 shadow-2xs">
-                        <Calendar className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                        <div>
-                          <b className="font-bold text-amber-900">Alasan Pengajuan di Luar Jadwal Roster:</b>
-                          <p className="text-[11.5px] text-amber-800 mt-0.5">{item.offScheduleReason}</p>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="flex flex-wrap items-center gap-3 text-slate-500 text-[11px] pt-1">
-                      <span className="flex items-center gap-1">
-                        <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                        <span>Mulai: <b className="text-slate-800">{item.startDate}</b></span>
-                      </span>
-                      {item.endDate && (
-                        <span className="flex items-center gap-1">
-                          <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                          <span>Sampai: <b className="text-slate-800">{item.endDate}</b> ({item.daysCount} hari)</span>
-                        </span>
-                      )}
-                      {item.coveredByQuotaDays !== undefined && (
-                        <span className="font-mono-code text-[10px] px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
-                          Tertutup Kuota: <b>{item.coveredByQuotaDays} Hr</b>
-                          {item.unpaidLeaveDays ? <b className="text-rose-600"> • Potong Gaji: {item.unpaidLeaveDays} Hr</b> : null}
-                        </span>
-                      )}
-                      {item.lateMinutes && (
-                        <span className="flex items-center gap-1 text-rose-600 font-bold">
-                          <Clock className="w-3.5 h-3.5" />
-                          <span>Keterlambatan: {item.lateMinutes} Menit</span>
-                        </span>
-                      )}
-                      {item.leaveType && (
-                        <span className="font-mono-code font-bold text-slate-700">
-                          Tipe Cuti: {item.leaveType}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Quota & Review History */}
-                  <div className="md:col-span-4 p-3 rounded-2xl bg-slate-50/80 border border-slate-200/80 space-y-2 flex flex-col justify-between">
-                    <div>
-                      {item.type === 'ATTENDANCE_CORRECTION' ? (
-                        <div className="space-y-1.5">
-                          <p className="text-[10px] font-bold text-teal-800 uppercase font-mono-code flex items-center gap-1">
-                            <Clock className="w-3 h-3 text-teal-600" />
-                            Validasi Koreksi Absensi
-                          </p>
-                          <div className="text-xs space-y-1">
-                            <div className="flex justify-between text-slate-600">
-                              <span>Status Proyek:</span>
-                              <b className="text-slate-800">{item.projectName || 'Pusat / Non-Site'}</b>
-                            </div>
-                            <div className="flex justify-between text-slate-600">
-                              <span>Leader / PM:</span>
-                              <b className="text-slate-800">{item.projectManagerName || 'HR Manager'}</b>
-                            </div>
-                            <div className="flex justify-between text-slate-600">
-                              <span>Penegakan Hak:</span>
-                              <span className="text-[10.5px] font-bold text-teal-700">
-                                {item.targetApproverRole === 'PM' ? 'PM Proyek / HR' : 'HR Manager Saja'}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase">Status Saldo Cuti</p>
-                          {emp ? (
-                            <div className="mt-1 flex items-center justify-between text-xs">
-                              <span className="text-slate-600">Jatah Tahunan:</span>
-                              <span className="font-bold text-slate-900">{emp.leaveQuota} Hari</span>
-                            </div>
-                          ) : null}
-                          {emp ? (
-                            <div className="flex items-center justify-between text-xs">
-                              <span className="text-slate-600">Sisa Kuota:</span>
-                              <span className="font-black text-emerald-600">{emp.leaveQuota - emp.usedLeave} Hari</span>
-                            </div>
-                          ) : null}
-
-                          {emp?.workLocationType === 'NON_LOKAL' && emp.nonLokalLeaveConfig && (
-                            <div className="mt-2 pt-2 border-t border-purple-200/70 space-y-1">
-                              <p className="text-[10px] font-bold text-purple-800 uppercase flex items-center gap-1 font-mono-code">
-                                <Plane className="w-3 h-3 text-purple-600" />
-                                Cuti Roster Non-Lokal (3 Bln)
-                              </p>
-                              <div className="flex items-center justify-between text-xs">
-                                <span className="text-slate-600">Jatah Pokok / Periode:</span>
-                                <span className="font-bold text-purple-900">{emp.nonLokalLeaveConfig.leaveQuotaPerPeriod} Hari</span>
-                              </div>
-                              {emp.nonLokalLeaveConfig.accumulatedLeaveDays ? (
-                                <div className="flex items-center justify-between text-xs text-amber-800">
-                                <span>+ Akumulasi HR:</span>
-                                <span className="font-bold font-mono-code">+{emp.nonLokalLeaveConfig.accumulatedLeaveDays} Hari</span>
-                              </div>
-                            ) : null}
-                            <div className="flex items-center justify-between text-xs">
-                              <span className="text-slate-600">Terpakai Periode Ini:</span>
-                              <span className="font-bold text-slate-800">{emp.nonLokalLeaveConfig.usedPeriodLeave || 0} Hari</span>
-                            </div>
-                            <div className="flex items-center justify-between text-xs font-semibold text-purple-950">
-                              <span>Sisa Roster Sah:</span>
-                              <span className="font-bold font-mono-code">
-                                {Math.max(0, (emp.nonLokalLeaveConfig.leaveQuotaPerPeriod + (emp.nonLokalLeaveConfig.accumulatedLeaveDays || 0)) - (emp.nonLokalLeaveConfig.usedPeriodLeave || 0))} Hari
-                              </span>
-                            </div>
-                            {emp.nonLokalLeaveConfig.nextEligibleLeaveDate && (
-                              <div className="text-[10px] text-purple-700 font-mono-code">
-                                Jadwal Berikutnya: {emp.nonLokalLeaveConfig.nextEligibleLeaveDate}
-                              </div>
+                      {/* Karyawan & Proyek */}
+                      <td className="py-3 px-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-xs overflow-hidden shrink-0 shadow-2xs">
+                            {emp?.avatar ? (
+                              <img src={emp.avatar} alt={item.employeeName} className="w-full h-full object-cover" />
+                            ) : (
+                              item.employeeName.charAt(0)
                             )}
                           </div>
-                        )}
-
-                        {typeof emp?.unpaidLeaveDaysTotal === 'number' && emp.unpaidLeaveDaysTotal > 0 && (
-                          <div className="mt-2 pt-2 border-t border-rose-200 text-[10.5px] font-mono-code text-rose-700 flex items-center justify-between">
-                            <span>Akumulasi Potong Gaji:</span>
-                            <span className="font-bold bg-rose-100 text-rose-800 px-1.5 py-0.2 rounded">
-                              {emp.unpaidLeaveDaysTotal} Hari
-                            </span>
+                          <div className="min-w-0">
+                            <div className="font-bold text-slate-900 truncate flex items-center gap-1.5">
+                              <span>{item.employeeName}</span>
+                              <span className="text-[10px] font-mono-code text-slate-400 font-normal">({item.employeeNik})</span>
+                            </div>
+                            <p className="text-[11px] text-slate-500 truncate">{item.department} • {emp?.position || '-'}</p>
+                            {item.projectName ? (
+                              <div className="flex items-center gap-1 mt-0.5">
+                                <span className="text-[9.5px] font-mono-code bg-amber-50 text-amber-900 border border-amber-200/70 px-1.5 py-0.2 rounded font-semibold truncate max-w-[190px]" title={`${item.projectName} (${item.projectCode})`}>
+                                  🏗️ {item.projectName}
+                                </span>
+                              </div>
+                            ) : null}
                           </div>
-                        )}
-                        </>
-                      )}
-                    </div>
+                        </div>
+                      </td>
 
-                    {item.reviewedBy && (
-                      <div className="pt-2 border-t border-slate-200/70 text-[11px]">
-                        <p className="text-slate-500">Direview oleh: <b className="text-slate-800">{item.reviewedBy}</b></p>
-                        {item.reviewNote && (
-                          <p className="text-slate-600 italic mt-0.5">"{item.reviewNote}"</p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Actions Bar for Approver */}
-                {isPending && (
-                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">
-                    <div className="text-[11px] text-slate-500 flex items-center gap-1.5">
-                      {item.type === 'LEAVE' && (
-                        <span className="px-2.5 py-1 rounded-full text-[10px] font-bold font-mono-code bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3 text-indigo-600" />
-                          <span>{isHrManager ? 'Otorisasi HR Manager Aktif' : 'Otorisasi Persetujuan Cuti: HR Manager'}</span>
-                        </span>
-                      )}
-                      {(item.type === 'ATTENDANCE_CORRECTION' || item.type === 'OUT_OF_GEOFENCE') && (
-                        <span className="px-2.5 py-1 rounded-full text-[10px] font-bold font-mono-code bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1">
-                          <Crown className="w-3 h-3 text-amber-600" />
-                          <span>
-                            {item.targetApproverRole === 'PM' && item.projectManagerName
-                              ? `Persetujuan: PM ${item.projectManagerName} / HR Manager`
-                              : 'Persetujuan: HR Manager Saja (Staf Tanpa Proyek)'}
+                      {/* Tipe & Rute */}
+                      <td className="py-3 px-3">
+                        <div className="space-y-1">
+                          <span className={`inline-block px-2 py-0.5 rounded-md text-[10px] font-bold tracking-wide uppercase font-mono-code ${
+                            item.type === 'OUT_OF_GEOFENCE'
+                              ? 'bg-orange-100 text-orange-800 border border-orange-300'
+                              : item.type === 'DINAS_LUAR'
+                              ? 'bg-amber-100 text-amber-800'
+                              : item.type === 'LATE_JUSTIFICATION'
+                              ? 'bg-rose-100 text-rose-800'
+                              : item.type === 'LEAVE'
+                              ? 'bg-blue-100 text-blue-800'
+                              : item.type === 'ATTENDANCE_CORRECTION'
+                              ? 'bg-teal-100 text-teal-800 border border-teal-300'
+                              : 'bg-emerald-100 text-emerald-800'
+                          }`}>
+                            {item.type === 'OUT_OF_GEOFENCE' ? 'Luar Geofence' : item.type === 'ATTENDANCE_CORRECTION' ? 'Koreksi Absensi' : item.type.replace('_', ' ')}
                           </span>
-                        </span>
-                      )}
-                    </div>
-                    {canUserApproveItem(item) ? (
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleActionClick(item, 'REVISE')}
-                          className="px-3.5 py-1.5 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold cursor-pointer transition-colors"
-                        >
-                          Minta Revisi
-                        </button>
-                        <button
-                          onClick={() => handleActionClick(item, 'REJECT')}
-                          className="px-3.5 py-1.5 rounded-xl bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-700 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
-                        >
-                          <XCircle className="w-3.5 h-3.5" />
-                          <span>Tolak</span>
-                        </button>
-                        <button
-                          onClick={() => handleActionClick(item, 'APPROVE')}
-                          className="px-5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95 transition-all"
-                        >
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>Setujui (Approve)</span>
-                        </button>
-                      </div>
-                    ) : (
-                      <span className="text-xs text-amber-800 font-medium bg-amber-50 px-3 py-1.5 rounded-xl border border-amber-200">
-                        {item.type === 'ATTENDANCE_CORRECTION'
-                          ? (item.targetApproverRole === 'PM' && item.projectManagerName
-                              ? `Menunggu persetujuan PM (${item.projectManagerName}) / HR Manager`
-                              : 'Menunggu persetujuan HR Manager (Staf Tanpa Proyek)')
-                          : item.type === 'LEAVE'
-                          ? 'Permohonan Cuti sedang menunggu persetujuan HR Manager'
-                          : 'Menunggu review atasan berwenang'}
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })
+
+                          {item.leaveType === 'CUTI_ROSTER_NON_LOKAL' && (
+                            <span className="block text-[9px] font-mono-code font-bold text-purple-700">
+                              ✈️ Roster Non-Lokal
+                            </span>
+                          )}
+
+                          <div className="text-[10px] text-slate-500 font-mono-code">
+                            Rute: {item.targetApproverRole === 'PM' ? (item.projectManagerName ? `PM (${item.projectManagerName})` : 'PM Site / HR') : 'HR Manager Saja'}
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Detail Pengajuan */}
+                      <td className="py-3 px-3">
+                        <div className="space-y-0.5 max-w-[280px]">
+                          <div className="font-bold text-slate-900 text-xs truncate" title={item.title}>
+                            {item.title}
+                          </div>
+                          <p className="text-[11px] text-slate-500 line-clamp-1" title={item.description}>
+                            {item.description}
+                          </p>
+
+                          {item.type === 'ATTENDANCE_CORRECTION' && (
+                            <div className="text-[10px] font-mono-code text-teal-800 bg-teal-50 px-1.5 py-0.5 rounded w-fit border border-teal-200">
+                              Target: <b>{item.targetCheckInTime || '-'}</b> s/d <b>{item.targetCheckOutTime || '-'}</b> ({item.targetStatus === 'ON_TIME' ? 'Tepat Waktu' : item.targetStatus === 'LATE' ? 'Terlambat' : 'Dinas Luar'})
+                            </div>
+                          )}
+
+                          {item.lateMinutes ? (
+                            <span className="inline-block text-[10px] font-bold text-rose-600 font-mono-code">
+                              Terlambat: {item.lateMinutes} Menit
+                            </span>
+                          ) : null}
+
+                          {(item.isOverQuota || (item.unpaidLeaveDays && item.unpaidLeaveDays > 0)) && (
+                            <span className="inline-block text-[10px] font-bold text-rose-700 bg-rose-50 px-1.5 py-0.2 rounded border border-rose-200 font-mono-code">
+                              ⚠️ Potong Gaji ({item.unpaidLeaveDays} Hr)
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Tanggal & Durasi */}
+                      <td className="py-3 px-3">
+                        <div className="text-[11px] font-mono-code text-slate-700 space-y-0.5">
+                          <div className="font-semibold">{formatIndonesianDateDisplay(item.startDate)}</div>
+                          {item.endDate && item.endDate !== item.startDate && (
+                            <div className="text-slate-400 text-[10px]">s/d {formatIndonesianDateDisplay(item.endDate)}</div>
+                          )}
+                          {item.daysCount ? (
+                            <span className="inline-block px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 text-[10px] font-bold">
+                              {item.daysCount} Hari
+                            </span>
+                          ) : null}
+                        </div>
+                      </td>
+
+                      {/* Lampiran Dokumen */}
+                      <td className="py-3 px-3 text-center">
+                        {item.proofAttachment ? (
+                          <a
+                            href={item.proofAttachment}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[10.5px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded-lg border border-indigo-200 transition-colors cursor-pointer"
+                            title="Buka Dokumen Bukti Lampiran"
+                          >
+                            <Paperclip className="w-3 h-3" />
+                            <span>File</span>
+                          </a>
+                        ) : (
+                          <span className="text-slate-300 font-mono-code text-xs">-</span>
+                        )}
+                      </td>
+
+                      {/* Status Pengajuan */}
+                      <td className="py-3 px-3 text-center">
+                        <div className="space-y-0.5">
+                          <span className={`inline-block px-2.5 py-0.8 rounded-full text-[10.5px] font-bold ${
+                            item.status === 'PENDING'
+                              ? 'bg-orange-100 text-orange-800 animate-pulse'
+                              : item.status === 'APPROVED'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : item.status === 'REJECTED'
+                              ? 'bg-rose-100 text-rose-800'
+                              : 'bg-amber-100 text-amber-800'
+                          }`}>
+                            {item.status === 'PENDING' ? 'Menunggu' : item.status === 'APPROVED' ? 'Disetujui' : item.status === 'REJECTED' ? 'Ditolak' : 'Minta Revisi'}
+                          </span>
+                          {item.reviewedBy && (
+                            <div className="text-[9.5px] text-slate-400 font-mono-code truncate max-w-[110px] mx-auto" title={`Reviewer: ${item.reviewedBy}`}>
+                              by {item.reviewedBy}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Kolom Aksi */}
+                      <td className="py-3 px-3 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          {isPending && canApprove && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleActionClick(item, 'APPROVE')}
+                                title="Setujui (Approve)"
+                                className="w-7 h-7 rounded-lg bg-emerald-50 hover:bg-emerald-500 text-emerald-600 hover:text-white border border-emerald-200 flex items-center justify-center transition-all cursor-pointer shadow-2xs active:scale-95"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleActionClick(item, 'REJECT')}
+                                title="Tolak (Reject)"
+                                className="w-7 h-7 rounded-lg bg-rose-50 hover:bg-rose-500 text-rose-600 hover:text-white border border-rose-200 flex items-center justify-center transition-all cursor-pointer shadow-2xs active:scale-95"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleActionClick(item, 'REVISE')}
+                                title="Minta Revisi"
+                                className="w-7 h-7 rounded-lg bg-amber-50 hover:bg-amber-500 text-amber-600 hover:text-white border border-amber-200 flex items-center justify-center transition-all cursor-pointer shadow-2xs active:scale-95"
+                              >
+                                <AlertCircle className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setDetailModalItem(item)}
+                            title="Lihat Detail Lengkap"
+                            className="w-7 h-7 rounded-lg bg-slate-50 hover:bg-slate-800 text-slate-600 hover:text-white border border-slate-200 flex items-center justify-center transition-all cursor-pointer shadow-2xs active:scale-95"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
 
         {filteredApprovals.length > 10 && (
@@ -1773,6 +1815,348 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
         </div>,
         document.body
       )}
+
+      {/* Sticky Floating Action Bar untuk Multi-Select Approval (Portal to document.body) */}
+      {selectedIds.size > 0 && typeof document !== 'undefined' && createPortal(
+        <div className="fixed bottom-6 inset-x-0 z-50 flex justify-center px-4 pointer-events-none animate-in slide-in-from-bottom duration-300">
+          <div className="pointer-events-auto bg-slate-900/95 backdrop-blur-md text-white rounded-2xl px-5 py-3 shadow-2xl border border-slate-700/80 flex items-center gap-4 flex-wrap max-w-2xl">
+            <div className="flex items-center gap-2">
+              <span className="w-6 h-6 rounded-full bg-[#FF6B00] text-white flex items-center justify-center font-bold text-xs font-mono-code">
+                {selectedIds.size}
+              </span>
+              <span className="text-xs font-semibold">Pengajuan Terpilih</span>
+            </div>
+            <div className="h-4 w-px bg-slate-700 hidden sm:block" />
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => handleTriggerBatchSelected('APPROVE')}
+                className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95 transition-all"
+              >
+                <CheckCheck className="w-3.5 h-3.5" />
+                <span>Setujui Terpilih ({selectedIds.size})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleTriggerBatchSelected('REJECT')}
+                className="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95 transition-all"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>Tolak Terpilih ({selectedIds.size})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedIds(new Set())}
+                className="px-2.5 py-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 text-xs font-semibold transition-all cursor-pointer"
+              >
+                Batal
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Batch Action Confirmation Modal */}
+      {batchModal && batchModal.isOpen && typeof document !== 'undefined' && createPortal(
+        <div 
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4 overflow-y-auto animate-in fade-in"
+          onClick={() => setBatchModal(null)}
+        >
+          <div 
+            className="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-6 space-y-4 border border-slate-200 modal-dialog-animate my-auto"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className={`w-9 h-9 rounded-2xl flex items-center justify-center text-white ${
+                  batchModal.action === 'APPROVE' ? 'bg-emerald-600' : 'bg-rose-600'
+                }`}>
+                  {batchModal.action === 'APPROVE' ? <CheckCheck className="w-5 h-5" /> : <X className="w-5 h-5" />}
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">{batchModal.title}</h3>
+                  <p className="text-[11px] text-slate-500">Konfirmasi eksekusi batch approval untuk {batchModal.targetItems.length} permohonan</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setBatchModal(null)}
+                className="p-1 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="max-h-52 overflow-y-auto space-y-1.5 custom-scrollbar pr-1">
+              <span className="text-[11px] font-bold text-slate-600 block uppercase font-mono-code">Daftar Pengajuan:</span>
+              {batchModal.targetItems.map(item => (
+                <div key={item.id} className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/60 flex items-center justify-between text-xs">
+                  <div className="min-w-0 pr-2">
+                    <span className="font-bold text-slate-900 block truncate">{item.employeeName}</span>
+                    <span className="text-[11px] text-slate-500 block truncate">{item.title}</span>
+                  </div>
+                  <span className="text-[10px] font-mono-code font-bold px-2 py-0.5 rounded bg-white text-slate-700 border border-slate-200 shrink-0">
+                    {item.type}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-700">Catatan Reviewer Bersama (Opsional)</label>
+              <textarea
+                rows={2}
+                value={batchModal.note}
+                onChange={e => setBatchModal({ ...batchModal, note: e.target.value })}
+                placeholder="Tuliskan catatan otorisasi massal..."
+                className="w-full glass-input rounded-2xl p-3 text-xs text-slate-800"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setBatchModal(null)}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={executeBatchAction}
+                className={`px-5 py-2 rounded-xl text-white text-xs font-bold cursor-pointer transition-all active:scale-95 ${
+                  batchModal.action === 'APPROVE'
+                    ? 'bg-emerald-600 hover:bg-emerald-700'
+                    : 'bg-rose-600 hover:bg-rose-700'
+                }`}
+              >
+                {batchModal.action === 'APPROVE' ? `Setujui Semua (${batchModal.targetItems.length})` : `Tolak Semua (${batchModal.targetItems.length})`}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Detail Inspection Modal (Untuk tombol 'Eye' pada tabel) */}
+      {detailModalItem && typeof document !== 'undefined' && createPortal(
+        <div 
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4 overflow-y-auto animate-in fade-in"
+          onClick={() => setDetailModalItem(null)}
+        >
+          <div 
+            className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full p-6 space-y-4 border border-slate-200 modal-dialog-animate my-auto max-h-[92vh] overflow-y-auto custom-scrollbar"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header Modal */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-base overflow-hidden shrink-0 shadow-sm">
+                  {employees.find(e => e.id === detailModalItem.employeeId)?.avatar ? (
+                    <img src={employees.find(e => e.id === detailModalItem.employeeId)?.avatar} alt={detailModalItem.employeeName} className="w-full h-full object-cover" />
+                  ) : (
+                    detailModalItem.employeeName.charAt(0)
+                  )}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-slate-900 text-base">{detailModalItem.employeeName}</h3>
+                    <span className="text-[11px] font-mono-code text-slate-400">({detailModalItem.employeeNik})</span>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    {detailModalItem.department} • {employees.find(e => e.id === detailModalItem.employeeId)?.position || '-'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setDetailModalItem(null)}
+                className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Badges Bar */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide uppercase font-mono-code ${
+                detailModalItem.type === 'OUT_OF_GEOFENCE'
+                  ? 'bg-orange-100 text-orange-800 border border-orange-300'
+                  : detailModalItem.type === 'DINAS_LUAR'
+                  ? 'bg-amber-100 text-amber-800'
+                  : detailModalItem.type === 'LATE_JUSTIFICATION'
+                  ? 'bg-rose-100 text-rose-800'
+                  : detailModalItem.type === 'LEAVE'
+                  ? 'bg-blue-100 text-blue-800'
+                  : detailModalItem.type === 'ATTENDANCE_CORRECTION'
+                  ? 'bg-teal-100 text-teal-800 border border-teal-300'
+                  : 'bg-emerald-100 text-emerald-800'
+              }`}>
+                {detailModalItem.type.replace('_', ' ')}
+              </span>
+
+              {detailModalItem.leaveType === 'CUTI_ROSTER_NON_LOKAL' && (
+                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide uppercase font-mono-code bg-purple-100 text-purple-800 flex items-center gap-1">
+                  <Plane className="w-3 h-3 text-purple-600" />
+                  <span>ROSTER NON-LOKAL</span>
+                </span>
+              )}
+
+              {detailModalItem.projectName && (
+                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide uppercase font-mono-code bg-amber-50 text-amber-900 border border-amber-300 flex items-center gap-1">
+                  <Crown className="w-3 h-3 text-amber-600" />
+                  <span>Proyek: {detailModalItem.projectName} ({detailModalItem.projectCode || 'SITE'})</span>
+                </span>
+              )}
+
+              <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                detailModalItem.status === 'PENDING'
+                  ? 'bg-orange-100 text-orange-800 animate-pulse'
+                  : detailModalItem.status === 'APPROVED'
+                  ? 'bg-emerald-100 text-emerald-800'
+                  : detailModalItem.status === 'REJECTED'
+                  ? 'bg-rose-100 text-rose-800'
+                  : 'bg-slate-100 text-slate-700'
+              }`}>
+                STATUS: {detailModalItem.status}
+              </span>
+            </div>
+
+            {/* Description & Subject */}
+            <div className="space-y-1.5">
+              <h4 className="text-sm font-bold text-slate-900">{detailModalItem.title}</h4>
+              <p className="text-xs text-slate-600 leading-relaxed bg-slate-50/80 p-3.5 rounded-2xl border border-slate-100">
+                {detailModalItem.description}
+              </p>
+            </div>
+
+            {/* Detail Spesifik Koreksi Absensi Mandiri */}
+            {(detailModalItem.type === 'ATTENDANCE_CORRECTION' || detailModalItem.type === 'OUT_OF_GEOFENCE') && (
+              <div className="p-4 rounded-2xl bg-teal-50/80 border border-teal-200 text-teal-950 space-y-3">
+                <div className="flex items-center justify-between text-xs font-bold border-b border-teal-200/60 pb-2">
+                  <span className="flex items-center gap-1.5 text-teal-900 font-mono-code">
+                    <Clock className="w-4 h-4 text-teal-600" />
+                    Koreksi Presensi Tanggal: {formatIndonesianDateDisplay(detailModalItem.startDate)}
+                  </span>
+                  <span className={`px-2.5 py-0.5 rounded-md text-[10.5px] font-mono-code font-bold ${
+                    detailModalItem.targetStatus === 'ON_TIME'
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : detailModalItem.targetStatus === 'LATE'
+                      ? 'bg-rose-100 text-rose-800'
+                      : 'bg-blue-100 text-blue-800'
+                  }`}>
+                    {detailModalItem.targetStatus === 'ON_TIME' ? 'Tepat Waktu' : detailModalItem.targetStatus === 'LATE' ? 'Terlambat' : 'Dinas Luar'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-xs font-mono-code">
+                  <div className="p-2.5 rounded-xl bg-white border border-teal-100">
+                    <span className="text-[10px] text-slate-400 block uppercase">Jam Masuk (Check-In)</span>
+                    <b className="text-teal-900 text-sm">{detailModalItem.targetCheckInTime || '-'} WIB</b>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-white border border-teal-100">
+                    <span className="text-[10px] text-slate-400 block uppercase">Jam Pulang (Check-Out)</span>
+                    <b className="text-teal-900 text-sm">{detailModalItem.targetCheckOutTime ? `${detailModalItem.targetCheckOutTime} WIB` : '-'}</b>
+                  </div>
+                </div>
+                <div className="text-xs pt-1 text-slate-700 flex items-center justify-between flex-wrap gap-2">
+                  <span>
+                    Rute Otorisasi: <b>{detailModalItem.targetApproverRole === 'PM' ? `PM (${detailModalItem.projectManagerName || 'Site'}) / HR Manager` : 'HR Manager Saja'}</b>
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Durasi & Saldo Cuti */}
+            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/70 text-xs space-y-2">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <span className="flex items-center gap-1.5 text-slate-700">
+                  <Calendar className="w-4 h-4 text-[#FF6B00]" />
+                  <span>Periode: <b>{formatIndonesianDateDisplay(detailModalItem.startDate)}</b> {detailModalItem.endDate && detailModalItem.endDate !== detailModalItem.startDate ? `s/d ${formatIndonesianDateDisplay(detailModalItem.endDate)}` : ''}</span>
+                </span>
+                {detailModalItem.daysCount && (
+                  <span className="px-2 py-0.5 rounded-md bg-white border border-slate-200 font-bold font-mono-code text-slate-800">
+                    {detailModalItem.daysCount} Hari
+                  </span>
+                )}
+              </div>
+
+              {detailModalItem.proofAttachment && (
+                <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between">
+                  <span className="text-slate-600 font-medium">Dokumen Bukti Lampiran:</span>
+                  <a
+                    href={detailModalItem.proofAttachment}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-3 py-1 rounded-xl border border-indigo-200 cursor-pointer"
+                  >
+                    <Paperclip className="w-3.5 h-3.5" />
+                    <span>Lihat / Unduh Dokumen</span>
+                  </a>
+                </div>
+              )}
+
+              {detailModalItem.reviewedBy && (
+                <div className="pt-2 border-t border-slate-200/60 text-[11.5px] text-slate-600">
+                  <span>Direview oleh: <b className="text-slate-900">{detailModalItem.reviewedBy}</b></span>
+                  {detailModalItem.reviewNote && (
+                    <p className="italic text-slate-700 mt-0.5">"{detailModalItem.reviewNote}"</p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setDetailModalItem(null)}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer"
+              >
+                Tutup
+              </button>
+
+              {detailModalItem.status === 'PENDING' && canUserApproveItem(detailModalItem) && (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const itm = detailModalItem;
+                      setDetailModalItem(null);
+                      handleActionClick(itm, 'REVISE');
+                    }}
+                    className="px-3.5 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-bold border border-amber-200 cursor-pointer transition-colors"
+                  >
+                    Minta Revisi
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const itm = detailModalItem;
+                      setDetailModalItem(null);
+                      handleActionClick(itm, 'REJECT');
+                    }}
+                    className="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold border border-rose-200 cursor-pointer transition-colors"
+                  >
+                    Tolak
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const itm = detailModalItem;
+                      setDetailModalItem(null);
+                      handleActionClick(itm, 'APPROVE');
+                    }}
+                    className="px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 text-white text-xs font-bold cursor-pointer transition-all shadow-xs"
+                  >
+                    Setujui (Approve)
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
 
     </div>
   );
