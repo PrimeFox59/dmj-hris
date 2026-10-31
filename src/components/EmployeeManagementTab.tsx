@@ -690,30 +690,13 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
       {/* Employees Grid Table */}
       <div id="tour-employee-table" className="glass-card rounded-3xl p-5 sm:p-6 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs min-w-[840px]">
+          <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-slate-200/80 text-slate-500 uppercase tracking-wider text-[10px] font-mono-code">
                 <th className="py-2.5 px-3">Karyawan</th>
-                <th className="py-2.5 px-3">Posisi & Penugasan</th>
                 <th className="py-2.5 px-3">Role & Hak Akses</th>
                 <th className="py-2.5 px-3">Status</th>
-                <th className="py-2.5 px-3">
-                  <div className="flex items-center gap-1.5">
-                    <span>Gaji Pokok & Tunjangan</span>
-                    {isFinanceOrSuper && (
-                      <button
-                        onClick={() => setShowSalaryNominal(prev => !prev)}
-                        className="p-1 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-700 cursor-pointer"
-                        title={showSalaryNominal ? "Sensor Nominal" : "Buka Nominal"}
-                      >
-                        {showSalaryNominal ? <EyeOff className="w-3 h-3 text-slate-400" /> : <Eye className="w-3 h-3 text-[#FF6B00]" />}
-                      </button>
-                    )}
-                  </div>
-                </th>
                 <th className="py-2.5 px-3">Saldo Cuti</th>
-                <th className="py-2.5 px-3">Rekening Bank</th>
-                <th className="py-2.5 px-3">Status Biometrik</th>
                 {!isStaff && <th className="py-2.5 px-3 text-right">Aksi</th>}
               </tr>
             </thead>
@@ -740,6 +723,16 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                         />
                         <div className="min-w-0">
                           <div className="font-bold text-slate-900 leading-tight text-xs sm:text-[13px] truncate">{emp.name}</div>
+                          <div className="flex items-center gap-1.5 text-[11px] text-slate-500 mt-0.5">
+                            <span className="font-semibold text-slate-700">{emp.position}</span>
+                            <span>•</span>
+                            <span className="truncate text-slate-500">{emp.department}</span>
+                            {assignedProj && (
+                              <span className="shrink-0 text-[9px] font-mono-code font-bold text-orange-600 bg-orange-50 border border-orange-200 px-1 py-0.2 rounded">
+                                {assignedProj.code}
+                              </span>
+                            )}
+                          </div>
                           <div className="flex items-center gap-1.5 flex-wrap mt-1">
                             <span className="text-[10px] text-slate-500 font-mono-code font-medium">{emp.nik} • {emp.employmentType}</span>
                             <span
@@ -768,18 +761,6 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                             )}
                           </div>
                         </div>
-                      </div>
-                    </td>
-
-                    <td className="py-3 px-3">
-                      <div className="font-semibold text-slate-800 text-xs leading-tight">{emp.position}</div>
-                      <div className="flex items-center gap-1.5 mt-0.5 text-[10.5px] text-slate-500">
-                        <span className="truncate max-w-[160px]">{emp.department}</span>
-                        {assignedProj && (
-                          <span className="shrink-0 text-[9px] font-mono-code font-bold text-orange-600 bg-orange-50 border border-orange-200 px-1.5 py-0.2 rounded">
-                            {assignedProj.code}
-                          </span>
-                        )}
                       </div>
                     </td>
 
@@ -814,17 +795,17 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
 
                     <td className="py-3 px-3">
                       {emp.id === 'EMP-001' ? (
-                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-300 font-black text-[9.5px] uppercase font-mono-code shadow-2xs">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                          <span>AKTIF (MASTER)</span>
-                        </span>
+                        <div className="flex items-center gap-1.5" title="Akun Master Administrator">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-emerald-200" />
+                          <span className="text-[10px] font-bold font-mono-code text-slate-700">MASTER</span>
+                        </div>
                       ) : (
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
                           <button
                             type="button"
                             disabled={isStaff}
                             onClick={() => handleToggleEmployeeStatus(emp)}
-                            title={emp.status === 'INACTIVE' ? 'Klik untuk mengaktifkan kembali akun' : 'Klik untuk menonaktifkan akun (Resign/Keluar)'}
+                            title={emp.status === 'INACTIVE' ? 'Status: Non-Aktif (Klik untuk mengaktifkan kembali)' : 'Status: Aktif (Klik untuk menonaktifkan akun)'}
                             className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
                               emp.status === 'INACTIVE' ? 'bg-slate-300 hover:bg-slate-400' : 'bg-emerald-500 hover:bg-emerald-600'
                             } ${isStaff ? 'opacity-60 cursor-not-allowed' : ''}`}
@@ -835,32 +816,16 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                               }`}
                             />
                           </button>
-                          <span className={`text-[10px] font-bold font-mono-code uppercase px-1.5 py-0.2 rounded ${
-                            emp.status === 'INACTIVE' 
-                              ? 'bg-rose-50 text-rose-700 border border-rose-200' 
-                              : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                          }`}>
-                            {emp.status === 'INACTIVE' ? 'NON-AKTIF' : 'AKTIF'}
-                          </span>
+                          {emp.status === 'INACTIVE' && (
+                            <span className="text-[9.5px] font-bold font-mono-code uppercase px-1.5 py-0.2 rounded bg-rose-50 text-rose-700 border border-rose-200">
+                              NON-AKTIF
+                            </span>
+                          )}
                         </div>
                       )}
                     </td>
 
-                    <td className="py-3 px-3">
-                      {isFinanceOrSuper ? (
-                        <div>
-                          <div className="font-bold text-slate-900 font-mono-code text-xs leading-tight">{formatSalaryDisplay(emp.baseSalary, showSalaryNominal)}</div>
-                          <div className="text-[10px] text-slate-500 font-mono-code mt-0.5">
-                            + Tunj: {formatSalaryDisplay(emp.fixedAllowance, showSalaryNominal)}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-100/90 border border-slate-200 text-slate-500 text-[10px] font-mono-code select-none">
-                          <Lock className="w-3 h-3 text-slate-400" />
-                          <span>Terkunci (Finance)</span>
-                        </div>
-                      )}
-                    </td>
+
 
                     <td className="py-3 px-3">
                       <div className="space-y-1">
@@ -936,27 +901,7 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                       </div>
                     </td>
 
-                    <td className="py-3 px-3">
-                      <div className="font-semibold text-slate-800 text-xs leading-tight">{emp.bankAccount.bankName}</div>
-                      <div className="text-[10px] text-slate-500 font-mono-code mt-0.5">{emp.bankAccount.accountNumber}</div>
-                    </td>
 
-                    <td className="py-3 px-3">
-                      <div className="space-y-1">
-                        {emp.biometric?.isEnrolled ? (
-                          <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-semibold">
-                            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>4 Pose Aktif ({emp.biometric.qualityScore || 95}%)</span>
-                          </div>
-                        ) : (
-                          <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-200 text-xs font-semibold">
-                            <Shield className="w-3.5 h-3.5 text-amber-500" />
-                            <span>Belum Terdaftar</span>
-                          </div>
-                        )}
-                        <div className="text-[10px] text-slate-400 font-mono-code">Biometrik Wajah</div>
-                      </div>
-                    </td>
 
                     {!isStaff && (
                       <td className="py-3 px-3 text-right">
