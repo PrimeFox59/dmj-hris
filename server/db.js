@@ -681,7 +681,10 @@ export function saveAttendance(record) {
         lateMinutes: finalLateMinutes,
         lateReason: finalLateReason,
         approvalStatus: finalApprovalStatus,
-        checkOutPhotoUrl: record.photoUrl,
+        photoUrl: prevData.photoUrl || prevData.checkInPhotoUrl || record.photoUrl,
+        checkInPhotoUrl: prevData.photoUrl || prevData.checkInPhotoUrl,
+        photoOutUrl: record.photoOutUrl || record.photoUrl,
+        checkOutPhotoUrl: record.photoOutUrl || record.photoUrl,
         checkOutLocation: record.location,
         checkOutBiometric: record.biometricVerification
       };
@@ -706,7 +709,7 @@ export function saveAttendance(record) {
     finalCheckOut || null,
     record.mode || 'WFO',
     finalStatus || 'ON_TIME',
-    record.photoUrl || null,
+    mergedData.photoUrl || record.photoUrl || null,
     finalIsLate ? 1 : 0,
     finalLateMinutes || 0,
     finalLateReason || null,
@@ -722,6 +725,8 @@ export function saveAttendance(record) {
   record.isLate = Boolean(finalIsLate);
   record.lateMinutes = finalLateMinutes;
   record.approvalStatus = finalApprovalStatus;
+  record.photoUrl = mergedData.photoUrl || record.photoUrl;
+  record.photoOutUrl = mergedData.photoOutUrl || record.photoOutUrl;
 
   if (record.approvalStatus === 'PENDING') {
     const isDinasLuar = record.mode === 'DINAS_LUAR';

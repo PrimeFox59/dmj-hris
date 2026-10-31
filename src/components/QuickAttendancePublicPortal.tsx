@@ -622,7 +622,8 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
         status: isLate ? 'LATE' : 'ON_TIME',
         mode: (isInsideRadius ? 'WFO' : 'DINAS_LUAR') as any,
         department: emp.department || 'Operasional',
-        photoUrl: photoData,
+        photoUrl: isClockIn ? photoData : (existingToday?.photoUrl || photoData),
+        photoOutUrl: !isClockIn ? photoData : (existingToday?.photoOutUrl || undefined),
         location: {
           lat: gpsLocation.lat,
           lng: gpsLocation.lng,

@@ -678,94 +678,103 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
             </p>
           </div>
 
-          {/* Action Cluster in Header */}
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
+          {/* Action Cluster in Header (Button Icons Only, Clean & Tidy) */}
+          <div className="flex items-center gap-1.5 shrink-0">
             {/* Privacy Nominal Toggle Button */}
             <button
+              type="button"
               onClick={() => setShowPayrollNominal(prev => !prev)}
-              className={`px-3 py-2 rounded-xl text-xs font-bold border shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 ${
+              className={`w-9 h-9 rounded-xl border flex items-center justify-center transition-all cursor-pointer active:scale-95 shadow-2xs ${
                 showPayrollNominal
-                  ? 'bg-orange-50 text-[#FF6B00] border-orange-200'
-                  : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                  ? 'bg-orange-50 text-[#FF6B00] border-orange-200 hover:bg-orange-100'
+                  : 'bg-white hover:bg-slate-100 text-slate-600 border-slate-200'
               }`}
-              title="Toggle sensor angka nominal gaji staf (default: sensor)"
+              title={showPayrollNominal ? 'Sembunyikan Nominal (Sensor Aktif)' : 'Tampilkan Nominal Gaji'}
             >
-              {showPayrollNominal ? <EyeOff className="w-3.5 h-3.5 text-slate-400" /> : <Eye className="w-3.5 h-3.5 text-[#FF6B00]" />}
-              <span>{showPayrollNominal ? 'Sembunyikan Nominal' : 'Tampilkan Nominal'}</span>
+              {showPayrollNominal ? <EyeOff className="w-4 h-4 text-[#FF6B00]" /> : <Eye className="w-4 h-4 text-slate-500" />}
             </button>
 
+            {/* Export CSV Button */}
             {canManagePayroll && (
               <button
+                type="button"
                 onClick={exportCSV}
-                className="px-3.5 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold border border-slate-200 shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+                className="w-9 h-9 rounded-xl bg-white hover:bg-slate-100 text-slate-600 hover:text-slate-900 border border-slate-200 shadow-2xs flex items-center justify-center transition-all cursor-pointer active:scale-95"
+                title="Export Data Payroll ke CSV"
               >
-                <Download className="w-3.5 h-3.5 text-slate-500" />
-                Export CSV
+                <Download className="w-4 h-4" />
               </button>
             )}
+
+            {/* Print Laporan Button */}
             <button
+              type="button"
               onClick={handlePrint}
-              className="px-3.5 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold border border-slate-200 shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+              className="w-9 h-9 rounded-xl bg-white hover:bg-slate-100 text-slate-600 hover:text-slate-900 border border-slate-200 shadow-2xs flex items-center justify-center transition-all cursor-pointer active:scale-95"
+              title={`Cetak ${isSelfOnly ? 'Slip Gaji' : 'Laporan Rekapitulasi Payroll'}`}
             >
-              <Printer className="w-3.5 h-3.5 text-slate-500" />
-              Cetak {isSelfOnly ? 'Slip Gaji' : 'Laporan'}
+              <Printer className="w-4 h-4" />
             </button>
 
-            {/* Primary Workflow Execution CTA */}
+            {/* Workflow CTA Buttons (Icon Only) */}
             {canManagePayroll && batchStatus === 'DRAFT_HR' && (
               <button
+                type="button"
                 onClick={handleSubmitToFinance}
                 disabled={!isHRManagerOrSuper}
-                className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+                className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all cursor-pointer active:scale-95 shadow-2xs ${
                   isHRManagerOrSuper
-                    ? 'bg-gradient-to-r from-orange-500 to-[#FF6B00] hover:from-orange-600 hover:to-[#e56000] text-white shadow-md shadow-orange-500/20 active:scale-95'
-                    : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                    ? 'bg-gradient-to-r from-orange-500 to-[#FF6B00] hover:from-orange-600 hover:to-[#e56000] text-white shadow-orange-500/20'
+                    : 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
                 }`}
-                title={!isHRManagerOrSuper ? 'Hanya HR Manager / Superuser yang berwenang mengajukan' : ''}
+                title={isHRManagerOrSuper ? 'Ajukan Data ke Finance (Audit HR Selesai)' : 'Hanya HR Manager / Superuser yang berwenang mengajukan'}
               >
-                <Send className="w-3.5 h-3.5" />
-                Ajukan Data ke Finance
-                <ArrowRight className="w-3.5 h-3.5" />
+                <Send className="w-4 h-4" />
               </button>
             )}
 
             {canManagePayroll && batchStatus === 'SUBMITTED_TO_FINANCE' && (
               <div className="flex items-center gap-1.5">
                 <button
+                  type="button"
                   onClick={handleRevertToDraft}
-                  className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
+                  className="w-9 h-9 rounded-xl bg-white hover:bg-slate-100 text-slate-600 hover:text-slate-900 border border-slate-200 shadow-2xs flex items-center justify-center transition-all cursor-pointer active:scale-95"
+                  title="Koreksi HR (Kembalikan ke Status Draf)"
                 >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  Koreksi HR
+                  <RotateCcw className="w-4 h-4" />
                 </button>
                 <button
+                  type="button"
                   onClick={handleProcessByFinance}
                   disabled={!isFinanceOrSuper}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+                  className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all cursor-pointer active:scale-95 shadow-md ${
                     isFinanceOrSuper
-                      ? 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 text-white shadow-md shadow-blue-500/25 active:scale-95'
-                      : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                      ? 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 text-white shadow-blue-500/25'
+                      : 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
                   }`}
+                  title={isFinanceOrSuper ? 'Otorisasi Payroll (Finance Disbursement)' : 'Hanya Divisi Finance yang berwenang mengotorisasi'}
                 >
-                  <Calculator className="w-3.5 h-3.5" />
-                  Otorisasi Payroll
+                  <Calculator className="w-4 h-4" />
                 </button>
               </div>
             )}
 
             {canManagePayroll && batchStatus === 'PROCESSED_BY_FINANCE' && (
-              <div className="flex items-center gap-2">
-                <span className="px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5">
+                <div
+                  className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center justify-center shadow-2xs"
+                  title="Payroll Disbursed (Telah Diotorisasi Resmi oleh Finance)"
+                >
                   <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                  Payroll Disbursed
-                </span>
+                </div>
                 {isSuperuser && (
                   <button
+                    type="button"
                     onClick={handleRevertToDraft}
-                    className="p-1.5 rounded-xl bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 border border-slate-200 text-xs transition-all cursor-pointer"
+                    className="w-9 h-9 rounded-xl bg-white hover:bg-rose-50 text-slate-600 hover:text-rose-700 border border-slate-200 shadow-2xs flex items-center justify-center transition-all cursor-pointer active:scale-95"
                     title="Buka Ulang Audit (Superuser)"
                   >
-                    <RotateCcw className="w-3.5 h-3.5" />
+                    <RotateCcw className="w-4 h-4" />
                   </button>
                 )}
               </div>

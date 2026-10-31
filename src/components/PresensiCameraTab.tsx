@@ -309,6 +309,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
   const [realGeofenceDistance, setRealGeofenceDistance] = useState<number>(99999);
 
   const [selectedHistoryItem, setSelectedHistoryItem] = useState<AttendanceRecord | null>(null);
+  const [selectedPhotoType, setSelectedPhotoType] = useState<'CHECK_IN' | 'CHECK_OUT'>('CHECK_IN');
   const [successToast, setSuccessToast] = useState<string | null>(null);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [submittedRecord, setSubmittedRecord] = useState<AttendanceRecord | null>(null);
@@ -1236,7 +1237,8 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
         : effectiveIsLate
         ? 'LATE'
         : 'ON_TIME',
-      photoUrl: photoToUse,
+      photoUrl: isCheckIn ? photoToUse : (existingToday?.photoUrl || photoToUse),
+      photoOutUrl: !isCheckIn ? photoToUse : (existingToday?.photoOutUrl || undefined),
       location: {
         lat: coords.lat,
         lng: coords.lng,
@@ -1888,7 +1890,10 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                       {item.checkInTime ? (
                         <button
                           type="button"
-                          onClick={() => setSelectedHistoryItem(item)}
+                          onClick={() => {
+                            setSelectedHistoryItem(item);
+                            setSelectedPhotoType('CHECK_IN');
+                          }}
                           className="flex items-center gap-1.5 font-mono-code group cursor-pointer text-left focus:outline-none"
                           title="Klik untuk melihat bukti foto & watermark presensi masuk"
                         >
@@ -1905,7 +1910,10 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                       {item.checkOutTime ? (
                         <button
                           type="button"
-                          onClick={() => setSelectedHistoryItem(item)}
+                          onClick={() => {
+                            setSelectedHistoryItem(item);
+                            setSelectedPhotoType('CHECK_OUT');
+                          }}
                           className="flex items-center gap-1.5 font-mono-code group cursor-pointer text-left focus:outline-none"
                           title="Klik untuk melihat bukti foto & watermark presensi pulang"
                         >
@@ -1995,7 +2003,16 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
           >
             <div className="p-4 border-b border-slate-100 flex items-center justify-between">
               <div>
-                <h3 className="font-bold text-slate-900 text-sm">Bukti Foto & Watermark Presensi</h3>
+                <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                  <span>Bukti Foto & Watermark</span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold font-mono-code ${
+                    selectedPhotoType === 'CHECK_IN'
+                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                      : 'bg-blue-100 text-blue-800 border border-blue-300'
+                  }`}>
+                    {selectedPhotoType === 'CHECK_IN' ? 'FOTO MASUK' : 'FOTO PULANG'}
+                  </span>
+                </h3>
                 <p className="text-[10px] text-slate-500 font-mono-code">{selectedHistoryItem.id}</p>
               </div>
               <button
@@ -2005,14 +2022,62 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-4">
-              <img src={selectedHistoryItem.photoUrl} alt="Bukti Foto" className="w-full rounded-2xl border border-slate-200 object-cover shadow-sm" />
-              <div className="mt-3 p-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs space-y-1">
-                <p><span className="font-bold text-slate-700">Karyawan:</span> {selectedHistoryItem.employeeName} ({selectedHistoryItem.employeeNik})</p>
-                <p><span className="font-bold text-slate-700">Catatan:</span> {selectedHistoryItem.note}</p>
-                <p><span className="font-bold text-slate-700">Geofence:</span> <span className="font-mono-code font-semibold">{selectedHistoryItem.location.distanceMeters}m</span> • {selectedHistoryItem.location.inGeofence ? 'Dalam Area Geofence Resmi' : 'Luar Radius'}</p>
-                <p><span className="font-bold text-slate-700">Lokasi:</span> {selectedHistoryItem.location.address}</p>
+
+            {/* Toggle Switch between Foto Masuk & Foto Pulang */}
+            {selectedHistoryItem.checkOutTime && (
+              <div className="px-4 pt-3 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedPhotoType('CHECK_IN')}
+                  className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    selectedPhotoType === 'CHECK_IN'
+                      ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-300'
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                  <span>Foto Masuk ({selectedHistoryItem.checkInTime || '-'})</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedPhotoType('CHECK_OUT')}
+                  className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    selectedPhotoType === 'CHECK_OUT'
+                      ? 'bg-blue-600 text-white shadow-sm ring-2 ring-blue-300'
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full bg-blue-400" />
+                  <span>Foto Pulang ({selectedHistoryItem.checkOutTime || '-'})</span>
+                </button>
               </div>
+            )}
+
+            <div className="p-4">
+              {(() => {
+                const isMasuk = selectedPhotoType === 'CHECK_IN';
+                const activePhoto = isMasuk
+                  ? (selectedHistoryItem.photoUrl || (selectedHistoryItem as any).checkInPhotoUrl)
+                  : ((selectedHistoryItem as any).checkOutPhotoUrl || selectedHistoryItem.photoOutUrl || selectedHistoryItem.photoUrl);
+
+                return (
+                  <>
+                    <img
+                      src={activePhoto}
+                      alt={isMasuk ? "Bukti Foto Absen Masuk" : "Bukti Foto Absen Pulang"}
+                      className="w-full rounded-2xl border border-slate-200 object-cover shadow-sm max-h-[380px]"
+                    />
+                    <div className="mt-3 p-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs space-y-1">
+                      <p><span className="font-bold text-slate-700">Waktu & Tipe:</span> <span className="font-mono-code font-bold text-slate-900">{isMasuk ? `Absen Masuk (${selectedHistoryItem.checkInTime} WIB)` : `Absen Pulang (${selectedHistoryItem.checkOutTime || '-'} WIB)`}</span></p>
+                      <p><span className="font-bold text-slate-700">Karyawan:</span> {selectedHistoryItem.employeeName} ({selectedHistoryItem.employeeNik})</p>
+                      <p><span className="font-bold text-slate-700">Catatan:</span> {selectedHistoryItem.note}</p>
+                      <p><span className="font-bold text-slate-700">Geofence:</span> <span className="font-mono-code font-semibold">{selectedHistoryItem.location.distanceMeters}m</span> • {selectedHistoryItem.location.inGeofence ? 'Dalam Area Geofence Resmi' : 'Luar Radius'}</p>
+                      <p><span className="font-bold text-slate-700">Lokasi:</span> {selectedHistoryItem.location.address}</p>
+                    </div>
+                  </>
+                );
+              })()}
               {currentRole === 'superuser' && onDeleteAttendance && (
                 <div className="mt-4 pt-3 border-t border-slate-100 flex justify-end">
                   <button
