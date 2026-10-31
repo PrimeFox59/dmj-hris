@@ -29,7 +29,10 @@ import {
   CheckCheck,
   Eye,
   Paperclip,
-  ExternalLink
+  ExternalLink,
+  HardHat,
+  Shield,
+  ShieldCheck
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Employee, ApprovalItem, LeaveType, SystemRole, getEffectiveSystemRole, Project } from '../types';
@@ -864,8 +867,8 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
           <div className="overflow-x-auto rounded-2xl border border-slate-200/90 bg-white/95 shadow-sm motion-fade-in-up">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-slate-200 bg-slate-50/90 text-[11px] font-bold text-slate-600 uppercase tracking-wider font-mono-code select-none">
-                  <th className="py-3 px-3 text-center w-10">
+                <tr className="border-b border-slate-200 bg-slate-50/90 text-[10.5px] font-extrabold text-slate-600 uppercase tracking-wider font-mono-code select-none">
+                  <th className="py-3 px-3 text-center w-10 whitespace-nowrap">
                     <input
                       type="checkbox"
                       checked={isAllVisibleSelected}
@@ -878,13 +881,13 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                       title={approvableVisiblePending.length === 0 ? "Tidak ada pengajuan yang dapat dipilih pada halaman ini" : "Pilih Semua yang Menunggu Otorisasi"}
                     />
                   </th>
-                  <th className="py-3 px-3 min-w-[210px]">Pemohon & Proyek</th>
-                  <th className="py-3 px-3 w-40">Tipe & Rute</th>
-                  <th className="py-3 px-3 min-w-[230px]">Detail Pengajuan</th>
-                  <th className="py-3 px-3 w-36">Tanggal & Durasi</th>
-                  <th className="py-3 px-3 text-center w-20">Lampiran</th>
-                  <th className="py-3 px-3 text-center w-28">Status</th>
-                  <th className="py-3 px-3 text-center w-36">Aksi</th>
+                  <th className="py-3 px-3 min-w-[190px] max-w-[220px] whitespace-nowrap">Pemohon & Proyek</th>
+                  <th className="py-3 px-3 text-center w-24 whitespace-nowrap">Tipe & Rute</th>
+                  <th className="py-3 px-3 min-w-[200px] max-w-[240px] whitespace-nowrap">Detail Pengajuan</th>
+                  <th className="py-3 px-3 text-center w-28 whitespace-nowrap">Tanggal</th>
+                  <th className="py-3 px-3 text-center w-16 whitespace-nowrap">Lampiran</th>
+                  <th className="py-3 px-3 text-center w-24 whitespace-nowrap">Status</th>
+                  <th className="py-3 px-3 text-center w-36 whitespace-nowrap sticky right-0 bg-slate-50/95 shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.06)] z-10">Aksi Otorisasi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs">
@@ -925,7 +928,7 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
 
                       {/* Karyawan & Proyek */}
                       <td className="py-3 px-3">
-                        <div className="flex items-center gap-2.5">
+                        <div className="flex items-center gap-2.5 max-w-[210px]">
                           <div className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-xs overflow-hidden shrink-0 shadow-2xs">
                             {emp?.avatar ? (
                               <img src={emp.avatar} alt={item.employeeName} className="w-full h-full object-cover" />
@@ -933,15 +936,17 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                               item.employeeName.charAt(0)
                             )}
                           </div>
-                          <div className="min-w-0">
-                            <div className="font-bold text-slate-900 truncate flex items-center gap-1.5">
-                              <span>{item.employeeName}</span>
-                              <span className="text-[10px] font-mono-code text-slate-400 font-normal">({item.employeeNik})</span>
+                          <div className="min-w-0 flex-1">
+                            <div className="font-bold text-slate-900 truncate flex items-center gap-1.5" title={`${item.employeeName} (${item.employeeNik})`}>
+                              <span className="truncate">{item.employeeName}</span>
+                              <span className="text-[10px] font-mono-code text-slate-400 font-normal shrink-0">({item.employeeNik})</span>
                             </div>
-                            <p className="text-[11px] text-slate-500 truncate">{item.department} • {emp?.position || '-'}</p>
+                            <p className="text-[11px] text-slate-500 truncate" title={`${item.department} • ${emp?.position || '-'}`}>
+                              {item.department} • {emp?.position || '-'}
+                            </p>
                             {item.projectName ? (
                               <div className="flex items-center gap-1 mt-0.5">
-                                <span className="text-[9.5px] font-mono-code bg-amber-50 text-amber-900 border border-amber-200/70 px-1.5 py-0.2 rounded font-semibold truncate max-w-[190px]" title={`${item.projectName} (${item.projectCode})`}>
+                                <span className="text-[9.5px] font-mono-code bg-amber-50 text-amber-900 border border-amber-200/70 px-1.5 py-0.2 rounded font-semibold truncate max-w-[170px]" title={`${item.projectName} (${item.projectCode})`}>
                                   🏗️ {item.projectName}
                                 </span>
                               </div>
@@ -950,69 +955,117 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                         </div>
                       </td>
 
-                      {/* Tipe & Rute */}
-                      <td className="py-3 px-3">
-                        <div className="space-y-1">
-                          <span className={`inline-block px-2 py-0.5 rounded-md text-[10px] font-bold tracking-wide uppercase font-mono-code ${
-                            item.type === 'OUT_OF_GEOFENCE'
-                              ? 'bg-orange-100 text-orange-800 border border-orange-300'
-                              : item.type === 'DINAS_LUAR'
-                              ? 'bg-amber-100 text-amber-800'
-                              : item.type === 'LATE_JUSTIFICATION'
-                              ? 'bg-rose-100 text-rose-800'
-                              : item.type === 'LEAVE'
-                              ? 'bg-blue-100 text-blue-800'
-                              : item.type === 'ATTENDANCE_CORRECTION'
-                              ? 'bg-teal-100 text-teal-800 border border-teal-300'
-                              : 'bg-emerald-100 text-emerald-800'
-                          }`}>
-                            {item.type === 'OUT_OF_GEOFENCE' ? 'Luar Geofence' : item.type === 'ATTENDANCE_CORRECTION' ? 'Koreksi Absensi' : item.type.replace('_', ' ')}
-                          </span>
-
-                          {item.leaveType === 'CUTI_ROSTER_NON_LOKAL' && (
-                            <span className="block text-[9px] font-mono-code font-bold text-purple-700">
-                              ✈️ Roster Non-Lokal
-                            </span>
+                      {/* Tipe & Rute (Icon Only Sesuai Permintaan Mr Prime) */}
+                      <td className="py-3 px-3 text-center whitespace-nowrap">
+                        <div className="inline-flex items-center justify-center gap-1.5">
+                          {/* Type Icon Badge */}
+                          {item.type === 'OUT_OF_GEOFENCE' ? (
+                            <div
+                              title="Tipe: Luar Geofence (Presensi di luar radius site resmi)"
+                              className="w-7 h-7 rounded-lg bg-orange-100 text-orange-700 border border-orange-200/90 flex items-center justify-center shadow-2xs hover:scale-110 transition-transform cursor-help"
+                            >
+                              <MapPin className="w-3.5 h-3.5 text-orange-600" />
+                            </div>
+                          ) : item.type === 'LATE_JUSTIFICATION' ? (
+                            <div
+                              title={`Tipe: Justifikasi Keterlambatan (${item.lateMinutes || 0} Menit)`}
+                              className="w-7 h-7 rounded-lg bg-rose-100 text-rose-700 border border-rose-200/90 flex items-center justify-center shadow-2xs hover:scale-110 transition-transform cursor-help"
+                            >
+                              <Clock className="w-3.5 h-3.5 text-rose-600" />
+                            </div>
+                          ) : item.type === 'LEAVE' ? (
+                            <div
+                              title={`Tipe: Pengajuan Cuti / Izin (${item.daysCount || 1} Hari)`}
+                              className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 border border-blue-200/90 flex items-center justify-center shadow-2xs hover:scale-110 transition-transform cursor-help"
+                            >
+                              <Calendar className="w-3.5 h-3.5 text-blue-600" />
+                            </div>
+                          ) : item.type === 'DINAS_LUAR' ? (
+                            <div
+                              title="Tipe: Surat Perjalanan Dinas Luar (DL)"
+                              className="w-7 h-7 rounded-lg bg-amber-100 text-amber-800 border border-amber-200/90 flex items-center justify-center shadow-2xs hover:scale-110 transition-transform cursor-help"
+                            >
+                              <Briefcase className="w-3.5 h-3.5 text-amber-700" />
+                            </div>
+                          ) : item.type === 'ATTENDANCE_CORRECTION' ? (
+                            <div
+                              title="Tipe: Koreksi Manual Absensi Kepegawaian"
+                              className="w-7 h-7 rounded-lg bg-teal-100 text-teal-800 border border-teal-200/90 flex items-center justify-center shadow-2xs hover:scale-110 transition-transform cursor-help"
+                            >
+                              <ShieldCheck className="w-3.5 h-3.5 text-teal-700" />
+                            </div>
+                          ) : (
+                            <div
+                              title={`Tipe: ${item.type}`}
+                              className="w-7 h-7 rounded-lg bg-slate-100 text-slate-700 border border-slate-200 flex items-center justify-center shadow-2xs hover:scale-110 transition-transform cursor-help"
+                            >
+                              <FileText className="w-3.5 h-3.5 text-slate-600" />
+                            </div>
                           )}
 
-                          <div className="text-[10px] text-slate-500 font-mono-code">
-                            Rute: {item.targetApproverRole === 'PM' ? (item.projectManagerName ? `PM (${item.projectManagerName})` : 'PM Site / HR') : 'HR Manager Saja'}
-                          </div>
+                          {/* Route Icon Badge */}
+                          {item.targetApproverRole === 'PM' ? (
+                            <div
+                              title={item.projectManagerName ? `Rute Otorisasi: PM (${item.projectManagerName})` : 'Rute Otorisasi: Project Manager (PM Site)'}
+                              className="w-7 h-7 rounded-lg bg-amber-50 text-amber-800 border border-amber-300/90 flex items-center justify-center shadow-2xs hover:scale-110 transition-transform cursor-help"
+                            >
+                              <HardHat className="w-3.5 h-3.5 text-amber-700" />
+                            </div>
+                          ) : (
+                            <div
+                              title="Rute Otorisasi: HR Manager Saja"
+                              className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200/90 flex items-center justify-center shadow-2xs hover:scale-110 transition-transform cursor-help"
+                            >
+                              <Shield className="w-3.5 h-3.5 text-indigo-600" />
+                            </div>
+                          )}
+
+                          {/* Roster Non-Lokal Badge */}
+                          {item.leaveType === 'CUTI_ROSTER_NON_LOKAL' && (
+                            <div
+                              title="Kategori Khusus: Roster Non-Lokal (Tiket Pesawat)"
+                              className="w-6 h-6 rounded-md bg-purple-100 text-purple-700 border border-purple-200 flex items-center justify-center shadow-2xs text-[10px]"
+                            >
+                              ✈️
+                            </div>
+                          )}
                         </div>
                       </td>
 
-                      {/* Detail Pengajuan */}
+                      {/* Detail Pengajuan (Ringkas dengan ...) */}
                       <td className="py-3 px-3">
-                        <div className="space-y-0.5 max-w-[280px]">
+                        <div className="space-y-0.5 max-w-[230px]">
                           <div className="font-bold text-slate-900 text-xs truncate" title={item.title}>
                             {item.title}
                           </div>
-                          <p className="text-[11px] text-slate-500 line-clamp-1" title={item.description}>
+                          <p className="text-[11px] text-slate-500 truncate" title={item.description}>
                             {item.description}
                           </p>
 
                           {item.type === 'ATTENDANCE_CORRECTION' && (
-                            <div className="text-[10px] font-mono-code text-teal-800 bg-teal-50 px-1.5 py-0.5 rounded w-fit border border-teal-200">
-                              Target: <b>{item.targetCheckInTime || '-'}</b> s/d <b>{item.targetCheckOutTime || '-'}</b> ({item.targetStatus === 'ON_TIME' ? 'Tepat Waktu' : item.targetStatus === 'LATE' ? 'Terlambat' : 'Dinas Luar'})
+                            <div className="text-[10px] font-mono-code text-teal-800 bg-teal-50 px-1.5 py-0.5 rounded truncate max-w-[220px] border border-teal-200" title={`Target: ${item.targetCheckInTime || '-'} s/d ${item.targetCheckOutTime || '-'}`}>
+                              Target: <b>{item.targetCheckInTime || '-'}</b> s/d <b>{item.targetCheckOutTime || '-'}</b>
                             </div>
                           )}
 
-                          {item.lateMinutes ? (
-                            <span className="inline-block text-[10px] font-bold text-rose-600 font-mono-code">
-                              Terlambat: {item.lateMinutes} Menit
-                            </span>
-                          ) : null}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {item.lateMinutes ? (
+                              <span className="inline-block text-[10px] font-bold text-rose-600 font-mono-code">
+                                Terlambat: {item.lateMinutes} Menit
+                              </span>
+                            ) : null}
 
-                          {(item.isOverQuota || (item.unpaidLeaveDays && item.unpaidLeaveDays > 0)) && (
-                            <span className="inline-block text-[10px] font-bold text-rose-700 bg-rose-50 px-1.5 py-0.2 rounded border border-rose-200 font-mono-code">
-                              ⚠️ Potong Gaji ({item.unpaidLeaveDays} Hr)
-                            </span>
-                          )}
+                            {(item.isOverQuota || (item.unpaidLeaveDays && item.unpaidLeaveDays > 0)) && (
+                              <span className="inline-block text-[10px] font-bold text-rose-700 bg-rose-50 px-1.5 py-0.2 rounded border border-rose-200 font-mono-code">
+                                ⚠️ Potong Gaji ({item.unpaidLeaveDays} Hr)
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </td>
 
                       {/* Tanggal & Durasi */}
-                      <td className="py-3 px-3">
+                      <td className="py-3 px-3 text-center whitespace-nowrap">
                         <div className="text-[11px] font-mono-code text-slate-700 space-y-0.5">
                           <div className="font-semibold">{formatIndonesianDateDisplay(item.startDate)}</div>
                           {item.endDate && item.endDate !== item.startDate && (
@@ -1027,7 +1080,7 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                       </td>
 
                       {/* Lampiran Dokumen */}
-                      <td className="py-3 px-3 text-center">
+                      <td className="py-3 px-3 text-center whitespace-nowrap">
                         {item.proofAttachment ? (
                           <a
                             href={item.proofAttachment}
@@ -1045,7 +1098,7 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                       </td>
 
                       {/* Status Pengajuan */}
-                      <td className="py-3 px-3 text-center">
+                      <td className="py-3 px-3 text-center whitespace-nowrap">
                         <div className="space-y-0.5">
                           <span className={`inline-block px-2.5 py-0.8 rounded-full text-[10.5px] font-bold ${
                             item.status === 'PENDING'
@@ -1059,39 +1112,41 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                             {item.status === 'PENDING' ? 'Menunggu' : item.status === 'APPROVED' ? 'Disetujui' : item.status === 'REJECTED' ? 'Ditolak' : 'Minta Revisi'}
                           </span>
                           {item.reviewedBy && (
-                            <div className="text-[9.5px] text-slate-400 font-mono-code truncate max-w-[110px] mx-auto" title={`Reviewer: ${item.reviewedBy}`}>
+                            <div className="text-[9.5px] text-slate-400 font-mono-code truncate max-w-[100px] mx-auto" title={`Reviewer: ${item.reviewedBy}`}>
                               by {item.reviewedBy}
                             </div>
                           )}
                         </div>
                       </td>
 
-                      {/* Kolom Aksi */}
-                      <td className="py-3 px-3 text-center">
-                        <div className="flex items-center justify-center gap-1">
+                      {/* Kolom Aksi (Sticky Right Agar Selalu Terlihat Penuh Tanpa Terpotong) */}
+                      <td className={`py-3 px-3 text-center whitespace-nowrap sticky right-0 z-10 shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.06)] ${
+                        isSelected ? 'bg-orange-50/95' : idx % 2 === 1 ? 'bg-slate-50/95' : 'bg-white/95'
+                      }`}>
+                        <div className="flex items-center justify-center gap-1.5">
                           {isPending && canApprove && (
                             <>
                               <button
                                 type="button"
                                 onClick={() => handleActionClick(item, 'APPROVE')}
                                 title="Setujui (Approve)"
-                                className="w-7 h-7 rounded-lg bg-emerald-50 hover:bg-emerald-500 text-emerald-600 hover:text-white border border-emerald-200 flex items-center justify-center transition-all cursor-pointer shadow-2xs active:scale-95"
+                                className="w-7 h-7 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center transition-all cursor-pointer shadow-2xs hover:shadow active:scale-90 shrink-0"
                               >
-                                <Check className="w-3.5 h-3.5" />
+                                <Check className="w-3.5 h-3.5 stroke-[2.5]" />
                               </button>
                               <button
                                 type="button"
                                 onClick={() => handleActionClick(item, 'REJECT')}
                                 title="Tolak (Reject)"
-                                className="w-7 h-7 rounded-lg bg-rose-50 hover:bg-rose-500 text-rose-600 hover:text-white border border-rose-200 flex items-center justify-center transition-all cursor-pointer shadow-2xs active:scale-95"
+                                className="w-7 h-7 rounded-lg bg-rose-50 hover:bg-rose-500 text-rose-600 hover:text-white border border-rose-200 hover:border-rose-500 flex items-center justify-center transition-all cursor-pointer shadow-2xs active:scale-90 shrink-0"
                               >
-                                <X className="w-3.5 h-3.5" />
+                                <X className="w-3.5 h-3.5 stroke-[2.5]" />
                               </button>
                               <button
                                 type="button"
                                 onClick={() => handleActionClick(item, 'REVISE')}
                                 title="Minta Revisi"
-                                className="w-7 h-7 rounded-lg bg-amber-50 hover:bg-amber-500 text-amber-600 hover:text-white border border-amber-200 flex items-center justify-center transition-all cursor-pointer shadow-2xs active:scale-95"
+                                className="w-7 h-7 rounded-lg bg-amber-50 hover:bg-amber-500 text-amber-600 hover:text-white border border-amber-200 hover:border-amber-500 flex items-center justify-center transition-all cursor-pointer shadow-2xs active:scale-90 shrink-0"
                               >
                                 <AlertCircle className="w-3.5 h-3.5" />
                               </button>
@@ -1101,7 +1156,7 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                             type="button"
                             onClick={() => setDetailModalItem(item)}
                             title="Lihat Detail Lengkap"
-                            className="w-7 h-7 rounded-lg bg-slate-50 hover:bg-slate-800 text-slate-600 hover:text-white border border-slate-200 flex items-center justify-center transition-all cursor-pointer shadow-2xs active:scale-95"
+                            className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-800 text-slate-600 hover:text-white border border-slate-200 flex items-center justify-center transition-all cursor-pointer shadow-2xs active:scale-90 shrink-0"
                           >
                             <Eye className="w-3.5 h-3.5" />
                           </button>
