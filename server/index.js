@@ -609,7 +609,18 @@ const server = http.createServer(async (req, res) => {
               cosineSimilarity: data.cosine_similarity
             });
 
-            const finalEmployee = emp || authResult.employee || authResult.user?.employee;
+            if (!authResult.success || !authResult.token || !authResult.user) {
+              return sendJson(200, {
+                success: false,
+                matched: false,
+                status: 'AUTH_FAILED',
+                score: data.score,
+                message: authResult.error || 'Akun karyawan tidak aktif atau belum terdaftar di sistem',
+                proc_time_ms: data.proc_time_ms
+              });
+            }
+
+            const finalEmployee = authResult.user?.employee || emp || authResult.employee;
 
             return sendJson(200, {
               success: true,
@@ -620,8 +631,8 @@ const server = http.createServer(async (req, res) => {
               proc_time_ms: data.proc_time_ms,
               message: data.message,
               employee: finalEmployee,
-              user: authResult.user || null,
-              token: authResult.token || null
+              user: authResult.user,
+              token: authResult.token
             });
           } else {
             return sendJson(200, {

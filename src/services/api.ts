@@ -268,7 +268,7 @@ export const api = {
   ): Promise<{ success: boolean; item: ApprovalItem }> {
     const res = await fetch('/api/approval', {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: api.getAuthHeaders(),
       body: JSON.stringify({ id, status, reviewNote, reviewedBy })
     });
     if (!res.ok) {
@@ -281,7 +281,7 @@ export const api = {
   async submitApproval(item: ApprovalItem): Promise<{ success: boolean; item: ApprovalItem }> {
     const res = await fetch('/api/approval/submit', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: api.getAuthHeaders(),
       body: JSON.stringify(item)
     });
     if (!res.ok) {
@@ -294,7 +294,7 @@ export const api = {
   async saveEmployee(emp: Employee): Promise<{ success: boolean; employee: Employee }> {
     const res = await fetch('/api/employee', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: api.getAuthHeaders(),
       body: JSON.stringify(emp)
     });
     if (!res.ok) {
@@ -307,7 +307,7 @@ export const api = {
   async saveProject(project: Project): Promise<{ success: boolean; project: Project }> {
     const res = await fetch('/api/project', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: api.getAuthHeaders(),
       body: JSON.stringify(project)
     });
     if (!res.ok) {
@@ -321,7 +321,7 @@ export const api = {
   async saveSalaryRules(rules: SalaryRuleConfig): Promise<{ success: boolean; rules: SalaryRuleConfig }> {
     const res = await fetch('/api/salary-rules', {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: api.getAuthHeaders(),
       body: JSON.stringify(rules)
     });
     if (!res.ok) {
