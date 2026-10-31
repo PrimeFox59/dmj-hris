@@ -112,7 +112,7 @@ export const api = {
     return data;
   },
 
-  async getMe(): Promise<{ success: boolean; user: AuthUser; token?: string }> {
+  async getMe(): Promise<{ success: boolean; user: AuthUser; token?: string; offline?: boolean }> {
     if (!currentAuthToken) {
       throw new Error('No auth token');
     }
@@ -123,11 +123,14 @@ export const api = {
       // Hanya hapus token jika server eksplisit mengembalikan 401 Unauthorized
       if (res.status === 401) {
         api.setAuthToken(null);
-        throw new Error('Sesi telah berakhir atau tidak valid');
+        throw new Error('Sesi telah berakhir atau tidak valid (401)');
       }
       throw new Error(`HTTP error ${res.status}`);
     }
     const data = await res.json();
+    if (data.offline) {
+      return { success: true, user: null as any, offline: true };
+    }
     if (data.token) {
       api.setAuthToken(data.token);
     }

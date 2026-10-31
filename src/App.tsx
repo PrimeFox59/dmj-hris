@@ -83,10 +83,15 @@ export function App() {
       try {
         const savedAuth = localStorage.getItem('prime_hris_auth_user');
         const token = localStorage.getItem('prime_hris_token');
-        if (savedAuth && token) {
-          const savedAt = localStorage.getItem('prime_hris_session_saved_at');
-          // Validasi sesi 30 hari (30 * 24 * 60 * 60 * 1000)
-          if (!savedAt || (Date.now() - Number(savedAt) < 30 * 24 * 60 * 60 * 1000)) {
+        const savedAt = localStorage.getItem('prime_hris_session_saved_at');
+        const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // Sesi 30 hari penuh
+
+        if (savedAuth) {
+          const isFresh = !savedAt || (Date.now() - Number(savedAt) < SESSION_MAX_AGE_MS);
+          if (isFresh) {
+            if (token) {
+              api.setAuthToken(token);
+            }
             return JSON.parse(savedAuth);
           }
         }
@@ -285,8 +290,17 @@ export function App() {
       }
       try {
         const res = await api.getMe();
+        if (res.offline) {
+          // Mode offline / PWA background cache: Pertahankan sesi lokal 30 hari
+          console.info('[PRIME HRIS] Perangkat offline: mempertahankan sesi login 30 hari.');
+          return;
+        }
         if (res.success && res.user) {
           setAuthUser(res.user);
+          if (res.token) {
+            api.setAuthToken(res.token);
+            try { localStorage.setItem('prime_hris_token', res.token); } catch (e) {}
+          }
           try {
             localStorage.setItem('prime_hris_auth_user', JSON.stringify(res.user));
             localStorage.setItem('prime_hris_session_saved_at', String(Date.now()));
@@ -297,22 +311,29 @@ export function App() {
           if (res.user.employee) {
             setCurrentUser(res.user.employee);
           }
-        } else {
+        } else if ((res as any).status === 401 || (!res.success && !(res as any).offline)) {
+          // Hanya hapus jika server menolak token secara eksplisit (misal akun dinonaktifkan)
           api.setAuthToken(null);
           setAuthUser(null);
           try {
             localStorage.removeItem('prime_hris_auth_user');
+            localStorage.removeItem('prime_hris_token');
             localStorage.removeItem('prime_hris_current_user');
+            localStorage.removeItem('prime_hris_session_saved_at');
           } catch (e) {}
         }
       } catch (err: any) {
         console.warn('getMe network warning:', err);
+        // HANYA bersihkan sesi jika server eksplisit 401 Unauthorized
+        // Jika hanya kendala jaringan, offline, atau timeout, sesi 30 hari tetap utuh!
         if (err?.message && (err.message.includes('401') || err.message.includes('Unauthorized') || err.message.includes('Sesi telah berakhir'))) {
           api.setAuthToken(null);
           setAuthUser(null);
           try {
             localStorage.removeItem('prime_hris_auth_user');
+            localStorage.removeItem('prime_hris_token');
             localStorage.removeItem('prime_hris_current_user');
+            localStorage.removeItem('prime_hris_session_saved_at');
           } catch (e) {}
         }
       } finally {
@@ -323,8 +344,14 @@ export function App() {
   }, []);
 
   const handleLoginSuccess = (user: AuthUser, token: string) => {
+    if (token) {
+      api.setAuthToken(token);
+    }
     try {
       localStorage.setItem('prime_hris_auth_user', JSON.stringify(user));
+      if (token) {
+        localStorage.setItem('prime_hris_token', token);
+      }
       localStorage.setItem('prime_hris_session_saved_at', String(Date.now()));
       if (user.employee) {
         localStorage.setItem('prime_hris_current_user', JSON.stringify(user.employee));
@@ -360,6 +387,7 @@ export function App() {
   const handleLogout = async () => {
     try {
       localStorage.removeItem('prime_hris_auth_user');
+      localStorage.removeItem('prime_hris_token');
       localStorage.removeItem('prime_hris_current_user');
       localStorage.removeItem('prime_hris_session_saved_at');
     } catch (e) {}

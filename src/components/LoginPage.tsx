@@ -182,6 +182,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onOpenKios
       const { employee, score, matchedPose, verifiedUser, verifiedToken } = pendingLogin;
       setPendingLogin(null);
       if (verifiedUser && verifiedToken) {
+        api.setAuthToken(verifiedToken);
         playTone(1318.51, 'sine', 0.35);
         stopFaceCamera();
         onLoginSuccess(verifiedUser, verifiedToken);
@@ -212,6 +213,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onOpenKios
     const { employee, score, matchedPose, verifiedUser, verifiedToken } = pendingLogin;
     setPendingLogin(null);
     if (verifiedUser && verifiedToken) {
+      api.setAuthToken(verifiedToken);
       playTone(1318.51, 'sine', 0.35);
       stopFaceCamera();
       onLoginSuccess(verifiedUser, verifiedToken);
