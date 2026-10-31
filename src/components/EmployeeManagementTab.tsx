@@ -694,6 +694,8 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
             <thead>
               <tr className="border-b border-slate-200/80 text-slate-500 uppercase tracking-wider text-[10px] font-mono-code">
                 <th className="py-2.5 px-3">Karyawan</th>
+                <th className="py-2.5 px-3">ID Login Akun</th>
+                <th className="py-2.5 px-3">Status Lokal / Non-Lokal</th>
                 <th className="py-2.5 px-3">Role & Hak Akses</th>
                 <th className="py-2.5 px-3">Status</th>
                 <th className="py-2.5 px-3">Saldo Cuti</th>
@@ -723,45 +725,41 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                         />
                         <div className="min-w-0">
                           <div className="font-bold text-slate-900 leading-tight text-xs sm:text-[13px] truncate">{emp.name}</div>
-                          <div className="flex items-center gap-1.5 text-[11px] text-slate-500 mt-0.5">
-                            <span className="font-semibold text-slate-700">{emp.position}</span>
-                            <span>•</span>
-                            <span className="truncate text-slate-500">{emp.department}</span>
-                            {assignedProj && (
-                              <span className="shrink-0 text-[9px] font-mono-code font-bold text-orange-600 bg-orange-50 border border-orange-200 px-1 py-0.2 rounded">
-                                {assignedProj.code}
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-1.5 flex-wrap mt-1">
-                            <span className="text-[10px] text-slate-500 font-mono-code font-medium">{emp.nik} • {emp.employmentType}</span>
-                            <span
-                              className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 font-mono-code text-[9.5px] font-bold"
-                              title="ID Login Akun"
-                            >
-                              <KeyRound className="w-2.5 h-2.5 text-indigo-500" />
-                              {emp.loginId || (emp.id === 'EMP-001' ? 'admin' : `d${String(emp.id.replace(/\D/g, '')).padStart(3, '0')}`)}
-                            </span>
-                            {emp.workLocationType === 'NON_LOKAL' ? (
-                              <span
-                                className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-purple-50 text-purple-700 border border-purple-200 font-mono-code text-[9px] font-bold"
-                                title="Staff Non-Lokal (Roster Cuti)"
-                              >
-                                <Plane className="w-2.5 h-2.5 text-purple-600" />
-                                Non-Lokal
-                              </span>
-                            ) : (
-                              <span
-                                className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 font-mono-code text-[9px] font-bold"
-                                title="Staff Domisili Lokal"
-                              >
-                                <MapPin className="w-2.5 h-2.5 text-emerald-600" />
-                                Lokal
-                              </span>
-                            )}
+                          <div className="text-[10.5px] text-slate-500 font-mono-code mt-0.5">
+                            {emp.nik} • {emp.employmentType}
                           </div>
                         </div>
                       </div>
+                    </td>
+
+                    <td className="py-3 px-3 whitespace-nowrap">
+                      <span
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200/80 font-mono-code text-xs font-bold shadow-2xs"
+                        title="ID Kredensial Login Akun Sistem"
+                      >
+                        <KeyRound className="w-3.5 h-3.5 text-indigo-500" />
+                        <span>{emp.loginId || (emp.id === 'EMP-001' ? 'admin' : `d${String(emp.id.replace(/\D/g, '')).padStart(3, '0')}`)}</span>
+                      </span>
+                    </td>
+
+                    <td className="py-3 px-3 whitespace-nowrap">
+                      {emp.workLocationType === 'NON_LOKAL' ? (
+                        <span
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-purple-50 text-purple-700 border border-purple-200/80 font-mono-code text-xs font-bold shadow-2xs"
+                          title="Staf Non-Lokal / Site Luar (Siklus Roster Cuti Berkala)"
+                        >
+                          <Plane className="w-3.5 h-3.5 text-purple-600" />
+                          <span>Non-Lokal</span>
+                        </span>
+                      ) : (
+                        <span
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200/80 font-mono-code text-xs font-bold shadow-2xs"
+                          title="Staf Domisili Lokal (Kantor Pusat / Surabaya Sekitarnya)"
+                        >
+                          <MapPin className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Lokal</span>
+                        </span>
+                      )}
                     </td>
 
                     <td className="py-3 px-3">
