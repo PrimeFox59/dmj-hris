@@ -1192,34 +1192,20 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
                 </div>
               </div>
 
-              {/* Note Textarea Input */}
+              {/* Note Input: 1 Baris & Tanpa Preset */}
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-700 block">
-                  Alasan / Catatan Presensi (Wajib):
+                  Alasan / Catatan Presensi (Wajib Diisi Mandiri):
                 </label>
-                <textarea
-                  rows={3}
+                <input
+                  type="text"
+                  required
                   value={notesInput}
                   onChange={e => setNotesInput(e.target.value)}
-                  placeholder="Contoh: Bekerja dari rumah (WFH) / Tugas survei site proyek / Meeting bersama mitra..."
-                  className="w-full rounded-xl border border-slate-300 p-2.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#FF6B00] placeholder:text-slate-400"
+                  placeholder="Tuliskan alasan / catatan presensi Anda secara mandiri..."
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#FF6B00] placeholder:text-slate-400 bg-white shadow-2xs font-medium"
                   autoFocus
                 />
-
-                {/* Quick note presets */}
-                <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                  <span className="text-[10px] text-slate-400 font-mono-code uppercase mr-1">Opsi Cepat:</span>
-                  {['Dinas Luar / Site Proyek', 'Koordinasi Vendor', 'WFH / Remote', 'Lupa Absen di Lokasi'].map(quick => (
-                    <button
-                      key={quick}
-                      type="button"
-                      onClick={() => setNotesInput(quick)}
-                      className="px-2 py-0.5 rounded-lg text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-colors cursor-pointer"
-                    >
-                      {quick}
-                    </button>
-                  ))}
-                </div>
               </div>
 
               {/* Action Buttons */}

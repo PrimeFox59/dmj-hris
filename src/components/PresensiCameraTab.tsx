@@ -1687,8 +1687,8 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                   {!isGpsLocked
                     ? 'Mencari Lokasi...'
                     : isWithinAnyAuthorizedGeofence
-                    ? `${effectiveTargetDistance}m • Masuk Area Kerja (Valid)`
-                    : `${effectiveTargetDistance}m • Luar Area`}
+                    ? `${formatDistanceKm(effectiveTargetDistance)} • Masuk Area Kerja (Valid)`
+                    : `${formatDistanceKm(effectiveTargetDistance)} • Luar Area`}
                 </span>
                 <button
                   type="button"
@@ -1701,90 +1701,49 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
               </div>
             </div>
 
-            {/* Status Keterlambatan: Jika Terlambat (CHECK_IN & isLate), Wajib Isi Catatan Alasan Terlambat */}
+            {/* Status Keterlambatan: 1 Baris Input & Tanpa Preset */}
             {attendanceAction === 'CHECK_IN' && isLate && (
-              <div className="p-3.5 rounded-2xl bg-rose-50/90 border border-rose-300 shadow-xs space-y-2 motion-fade-in-up">
+              <div className="p-3 rounded-2xl bg-rose-50/90 border border-rose-300 shadow-xs space-y-1.5 motion-fade-in-up">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5 text-rose-900 font-bold text-xs">
                     <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 animate-pulse" />
-                    <span>Terdeteksi Keterlambatan ({lateMinutes} Menit Melewati Jam Masuk)</span>
+                    <span>Terdeteksi Keterlambatan ({lateMinutes} Menit Lewat {userSchedule.cutoffTime} WIB)</span>
                   </div>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-rose-200 text-rose-900 font-mono-code uppercase tracking-wider shrink-0">
+                  <span className="px-2 py-0.5 rounded-full text-[9.5px] font-black bg-rose-200 text-rose-900 font-mono-code uppercase tracking-wider shrink-0">
                     Wajib Isi Alasan
                   </span>
                 </div>
-                <p className="text-[11px] text-rose-800 leading-relaxed">
-                  Waktu presensi telah melewati jam batas masuk ({userSchedule.cutoffTime} WIB). Harap tuliskan catatan alasan kenapa Anda terlambat:
-                </p>
-                <textarea
-                  rows={2}
+                <input
+                  type="text"
                   required
                   value={lateReason}
                   onChange={e => setLateReason(e.target.value)}
-                  placeholder="Tuliskan catatan alasan kenapa Anda terlambat (wajib diisi)..."
-                  className="w-full glass-input rounded-xl p-2.5 text-xs text-slate-800 placeholder-slate-400 resize-none border border-rose-300 focus:ring-2 focus:ring-rose-500/30 bg-white"
+                  placeholder="Tuliskan catatan alasan kenapa Anda terlambat (wajib diisi mandiri)..."
+                  className="w-full glass-input rounded-xl px-3 py-2 text-xs text-slate-800 placeholder-slate-400 border border-rose-300 focus:ring-2 focus:ring-rose-500/30 bg-white shadow-2xs font-medium"
                 />
-                <div className="flex flex-wrap gap-1.5">
-                  {[
-                    'Kendala Kemacetan Arus Lalu Lintas',
-                    'Kendaraan Mengalami Kerusakan / Ban Bocor',
-                    'Kondisi Cuaca Buruk / Hujan Lebat',
-                    'Urusan Keluarga Mendesak',
-                    'Penugasan Khusus Operasional Lapangan'
-                  ].map(preset => (
-                    <button
-                      key={preset}
-                      type="button"
-                      onClick={() => setLateReason(preset)}
-                      className="text-[10px] px-2 py-0.5 rounded-lg bg-white border border-rose-200 hover:border-rose-400 text-rose-800 font-medium transition-colors cursor-pointer"
-                    >
-                      + {preset}
-                    </button>
-                  ))}
-                </div>
               </div>
             )}
 
-            {/* Status Masuk Area Kerja: Jika Luar Geofence, Otomatis Muncul Input Wajib Catatan */}
+            {/* Status Masuk Area Kerja: 1 Baris Input & Tanpa Preset */}
             {!isWithinAnyAuthorizedGeofence && (
-              <div className="p-3.5 rounded-2xl bg-amber-50/90 border border-amber-300 shadow-xs space-y-2 motion-fade-in-up">
+              <div className="p-3 rounded-2xl bg-amber-50/90 border border-amber-300 shadow-xs space-y-1.5 motion-fade-in-up">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5 text-amber-900 font-bold text-xs">
                     <MapPin className="w-4 h-4 text-amber-600 shrink-0" />
-                    <span>Presensi di Luar Radius Area Kerja ({effectiveTargetDistance}m)</span>
+                    <span>Presensi di Luar Radius Area Kerja ({formatDistanceKm(effectiveTargetDistance)})</span>
                   </div>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-200 text-amber-900 font-mono-code uppercase tracking-wider shrink-0">
+                  <span className="px-2 py-0.5 rounded-full text-[9.5px] font-black bg-amber-200 text-amber-900 font-mono-code uppercase tracking-wider shrink-0">
                     Wajib Isi Catatan
                   </span>
                 </div>
-                <p className="text-[11px] text-amber-800 leading-relaxed">
-                  GPS perangkat terdeteksi di luar area kerja resmi. Harap tuliskan catatan / alasan presensi di lokasi ini:
-                </p>
-                <textarea
-                  rows={2}
+                <input
+                  type="text"
                   required
                   value={outOfRangeReason}
                   onChange={e => setOutOfRangeReason(e.target.value)}
-                  placeholder="Tuliskan catatan / alasan presensi di luar radius (wajib diisi)..."
-                  className="w-full glass-input rounded-xl p-2.5 text-xs text-slate-800 placeholder-slate-400 resize-none border border-amber-300 focus:ring-2 focus:ring-amber-500/30 bg-white"
+                  placeholder="Tuliskan catatan / alasan presensi di luar radius (wajib diisi mandiri)..."
+                  className="w-full glass-input rounded-xl px-3 py-2 text-xs text-slate-800 placeholder-slate-400 border border-amber-300 focus:ring-2 focus:ring-amber-500/30 bg-white shadow-2xs font-medium"
                 />
-                <div className="flex flex-wrap gap-1.5">
-                  {[
-                    'Supervisi Vendor di Luar Site',
-                    'Mobilisasi Perjalanan Dinas Lapangan',
-                    'Tugas Mendadak Luar Workshop',
-                    'Deviasi Akurasi GPS Perangkat'
-                  ].map(preset => (
-                    <button
-                      key={preset}
-                      type="button"
-                      onClick={() => setOutOfRangeReason(preset)}
-                      className="text-[10px] px-2 py-0.5 rounded-lg bg-white border border-amber-200 hover:border-amber-400 text-amber-800 font-medium transition-colors cursor-pointer"
-                    >
-                      + {preset}
-                    </button>
-                  ))}
-                </div>
               </div>
             )}
 
