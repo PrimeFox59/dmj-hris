@@ -7,6 +7,7 @@ import {
   saveAttendance,
   updateApproval,
   saveEmployee,
+  deleteEmployee,
   saveProject,
   saveSalaryRules,
   resetDatabase,
@@ -95,6 +96,15 @@ export function sqliteApiPlugin(): Plugin {
             const body = await readBody();
             const result = saveEmployee(body);
             return sendJson(200, result);
+          }
+
+          // 5a. Delete Employee
+          const empDeleteMatch = cleanUrl.match(/^\/api\/employee\/([^\/]+)$/);
+          if ((empDeleteMatch && method === 'DELETE') || (cleanUrl === '/api/employee/delete' && method === 'POST')) {
+            let id = empDeleteMatch ? decodeURIComponent(empDeleteMatch[1]) : (await readBody())?.id;
+            if (!id) return sendJson(400, { success: false, error: 'ID karyawan tidak valid' });
+            const result = deleteEmployee(id);
+            return sendJson(result.success ? 200 : 400, result);
           }
 
           // 5b. Save Project

@@ -303,6 +303,26 @@ export const api = {
     return res.json();
   },
 
+  // 5a. Delete Employee from SQLite
+  async deleteEmployee(id: string): Promise<{ success: boolean; id?: string }> {
+    let res = await fetch(`/api/employee/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: api.getAuthHeaders()
+    });
+    if (!res.ok) {
+      // Fallback via POST /api/employee/delete
+      res = await fetch('/api/employee/delete', {
+        method: 'POST',
+        headers: api.getAuthHeaders(),
+        body: JSON.stringify({ id })
+      });
+    }
+    if (!res.ok) {
+      throw new Error(`Gagal menghapus data karyawan dari SQLite: ${res.statusText}`);
+    }
+    return res.json();
+  },
+
   // 5b. Save/Update Project in SQLite
   async saveProject(project: Project): Promise<{ success: boolean; project: Project }> {
     const res = await fetch('/api/project', {

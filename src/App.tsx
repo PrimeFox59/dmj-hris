@@ -566,6 +566,21 @@ export function App() {
             return prev;
           });
         }
+      } else if (packet.type === 'EMPLOYEE_DELETED') {
+        const deletedId = packet.payload?.id || packet.payload;
+        if (deletedId) {
+          setEmployees(prev => prev.filter(e => e.id !== deletedId));
+          try {
+            const cachedBoot = localStorage.getItem('prime_hris_bootstrap_cache');
+            if (cachedBoot) {
+              const parsed = JSON.parse(cachedBoot);
+              if (parsed.employees) {
+                parsed.employees = parsed.employees.filter((e: Employee) => e.id !== deletedId);
+                localStorage.setItem('prime_hris_bootstrap_cache', JSON.stringify(parsed));
+              }
+            }
+          } catch (e) {}
+        }
       } else if (packet.type === 'PROJECT_SAVED') {
         const newProj: Project = packet.payload;
         if (newProj && newProj.id) {
@@ -1203,8 +1218,30 @@ export function App() {
     api.saveEmployee(emp).catch(err => console.error('Failed to update employee in SQLite', err));
   };
 
-  const handleDeleteEmployee = (id: string) => {
+  const handleDeleteEmployee = async (id: string) => {
+    // 1. Optimistic UI update
     setEmployees(prev => prev.filter(e => e.id !== id));
+
+    // 2. Synchronize localStorage bootstrap cache
+    try {
+      const cachedBoot = localStorage.getItem('prime_hris_bootstrap_cache');
+      if (cachedBoot) {
+        const parsed = JSON.parse(cachedBoot);
+        if (parsed.employees) {
+          parsed.employees = parsed.employees.filter((e: Employee) => e.id !== id);
+          localStorage.setItem('prime_hris_bootstrap_cache', JSON.stringify(parsed));
+        }
+      }
+    } catch (e) {}
+
+    // 3. Persist deletion in SQLite database
+    try {
+      await api.deleteEmployee(id);
+      showLiveToast('Karyawan berhasil dihapus permanen dari sistem', 'success');
+    } catch (err: any) {
+      console.error('Failed to delete employee in SQLite backend:', err);
+      showLiveToast(`Gagal menghapus karyawan dari database: ${err.message || 'Error'}`, 'warn');
+    }
   };
 
   const handleUpdateSalaryRules = (newRules: SalaryRuleConfig) => {

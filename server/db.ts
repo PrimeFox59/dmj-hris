@@ -647,6 +647,36 @@ export function saveEmployee(emp: Employee) {
   return { success: true, employee: emp };
 }
 
+export function deleteEmployee(employeeId: string) {
+  const db = getDatabase();
+  const cleanId = String(employeeId || '').trim();
+  if (!cleanId) return { success: false, error: 'Employee ID is required' };
+
+  const empRow = (db.prepare('SELECT id, nik, name FROM employees WHERE id = ? OR nik = ? LIMIT 1;').get(cleanId, cleanId) as any);
+  const targetId = empRow?.id || cleanId;
+  const targetNik = empRow?.nik || cleanId;
+  const targetName = empRow?.name || cleanId;
+
+  try {
+    db.prepare('DELETE FROM user_accounts WHERE employee_id = ? OR id = ? OR username = ?;').run(targetId, `USR-${targetId}`, targetNik);
+  } catch (err) {}
+
+  try {
+    db.prepare('DELETE FROM wa_opt_ins WHERE employee_id = ?;').run(targetId);
+  } catch (err) {}
+
+  const res = db.prepare('DELETE FROM employees WHERE id = ? OR nik = ?;').run(targetId, targetNik);
+
+  try {
+    db.prepare(`
+      INSERT INTO audit_logs (action, entity, entityId, details)
+      VALUES (?, ?, ?, ?);
+    `).run('DELETE_EMPLOYEE', 'employees', targetId, `Data karyawan ${targetName} (${targetNik}) dihapus dari SQLite`);
+  } catch (e) {}
+
+  return { success: (res as any).changes > 0, id: targetId, name: targetName };
+}
+
 export function saveProject(proj: Project) {
   const db = getDatabase();
   const insert = db.prepare(`

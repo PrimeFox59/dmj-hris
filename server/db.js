@@ -1364,6 +1364,63 @@ export function saveEmployee(emp) {
   return { success: true, employee: emp };
 }
 
+export function deleteEmployee(employeeId, operatorUser = null) {
+  const db = getDatabase();
+  const cleanId = String(employeeId || '').trim();
+  if (!cleanId) return { success: false, error: 'Employee ID is required' };
+
+  const empRow = db.prepare('SELECT id, nik, name FROM employees WHERE id = ? OR nik = ? LIMIT 1;').get(cleanId, cleanId);
+  const targetId = empRow?.id || cleanId;
+  const targetNik = empRow?.nik || cleanId;
+  const targetName = empRow?.name || cleanId;
+
+  // 1. Delete from user_accounts
+  try {
+    db.prepare('DELETE FROM user_accounts WHERE employee_id = ? OR id = ? OR username = ?;').run(targetId, `USR-${targetId}`, targetNik);
+  } catch (err) {
+    console.error('[SQLite] Failed to delete user_accounts for employee', cleanId, err);
+  }
+
+  // 2. Delete from wa_opt_ins
+  try {
+    db.prepare('DELETE FROM wa_opt_ins WHERE employee_id = ?;').run(targetId);
+  } catch (err) {}
+
+  // 3. Remove from assignedPersonnelIds in projects data_json if present
+  try {
+    const projRows = db.prepare('SELECT id, data_json FROM projects;').all();
+    const updateProjStmt = db.prepare('UPDATE projects SET data_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?;');
+    for (const pRow of projRows) {
+      if (!pRow.data_json) continue;
+      try {
+        const pObj = JSON.parse(pRow.data_json);
+        if (Array.isArray(pObj.assignedPersonnelIds) && pObj.assignedPersonnelIds.includes(targetId)) {
+          pObj.assignedPersonnelIds = pObj.assignedPersonnelIds.filter(id => id !== targetId);
+          updateProjStmt.run(JSON.stringify(pObj), pRow.id);
+        }
+      } catch (pe) {}
+    }
+  } catch (err) {
+    console.warn('[SQLite] Warning cleaning up project assigned personnel for employee', cleanId, err);
+  }
+
+  // 4. Delete from employees
+  const res = db.prepare('DELETE FROM employees WHERE id = ? OR nik = ?;').run(targetId, targetNik);
+
+  addAuditLog({
+    action: 'DELETE_EMPLOYEE',
+    entity: 'employees',
+    entityId: targetId,
+    userName: operatorUser?.name || 'Admin HR',
+    userRole: operatorUser?.role || 'admin',
+    module: 'EMPLOYEES',
+    status: 'SUCCESS',
+    details: `Data master karyawan ${targetName} (${targetNik}) berhasil dihapus permanen oleh ${operatorUser?.name || 'Admin'}.`
+  });
+
+  return { success: res.changes > 0, id: targetId, name: targetName };
+}
+
 /**
  * Public Kiosk Safe Directory
  * Returns minimal employee data needed for quick attendance kiosk without exposing salary or bank data.

@@ -11,6 +11,7 @@ import {
   updateApproval,
   saveApproval,
   saveEmployee,
+  deleteEmployee,
   saveProject,
   saveSalaryRules,
   resetDatabase,
@@ -1102,6 +1103,30 @@ const server = http.createServer(async (req, res) => {
         const result = saveEmployee(body);
         broadcastRealtimeEvent('EMPLOYEE_SAVED', result.employee || body);
         return sendJson(200, result);
+      }
+
+      // 8a. Delete Employee with Broadcast
+      const empDeleteMatch = cleanUrl.match(/^\/api\/employee\/([^\/]+)$/);
+      if ((empDeleteMatch && method === 'DELETE') || (cleanUrl === '/api/employee/delete' && method === 'POST')) {
+        let id;
+        if (empDeleteMatch) {
+          id = decodeURIComponent(empDeleteMatch[1]);
+        } else {
+          const body = await readBody();
+          id = body?.id;
+        }
+        if (!id) return sendJson(400, { success: false, error: 'ID karyawan tidak valid' });
+
+        try {
+          const result = deleteEmployee(id, user);
+          if (result.success) {
+            broadcastRealtimeEvent('EMPLOYEE_DELETED', { id: result.id || id });
+          }
+          return sendJson(result.success ? 200 : 400, result);
+        } catch (err) {
+          console.error('[DELETE_EMPLOYEE_ERROR]', err);
+          return sendJson(500, { success: false, error: err.message || 'Gagal memproses penghapusan karyawan' });
+        }
       }
 
       // 8b. Save Project with Broadcast
