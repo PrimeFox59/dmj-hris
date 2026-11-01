@@ -118,9 +118,20 @@ export function isProjectManager(
   return false;
 }
 
+export function isProjectAdmin(
+  emp?: { id?: string; name?: string } | null,
+  projects?: Array<{ projectAdminIds?: string[]; projectAdminNames?: string[] }>
+): boolean {
+  if (!emp || !projects || !Array.isArray(projects)) return false;
+  return projects.some(p =>
+    (emp.id && p.projectAdminIds?.includes(emp.id)) ||
+    (emp.name && p.projectAdminNames?.some(n => n.toLowerCase().trim() === emp.name?.toLowerCase().trim()))
+  );
+}
+
 export function canAccessProjectModule(
   emp?: { role?: UserRole | string; systemRole?: SystemRole | string; position?: string; department?: string; id?: string; name?: string } | null,
-  projects?: Array<{ projectManagerId?: string; projectManagerName?: string }>
+  projects?: Array<{ projectManagerId?: string; projectManagerName?: string; projectAdminIds?: string[]; projectAdminNames?: string[] }>
 ): boolean {
   if (!emp) return false;
   const sysRole = getEffectiveSystemRole(emp);
@@ -128,8 +139,9 @@ export function canAccessProjectModule(
   const isFinance = sysRole === 'finance' || emp.role === 'Finance';
   const isSuper = sysRole === 'superuser' || emp.role === 'Director';
   const isPM = isProjectManager(emp, projects);
-  // Akses modul proyek terbuka untuk Finance, HR, Superuser, dan Project Manager (PM)
-  return isFinance || isHR || isSuper || isPM;
+  const isPAdmin = isProjectAdmin(emp, projects);
+  // Akses modul proyek terbuka untuk Finance, HR, Superuser, Project Manager (PM), dan Admin Proyek
+  return isFinance || isHR || isSuper || isPM || isPAdmin;
 }
 
 export type AttendanceMode = 'WFO' | 'DINAS_LUAR' | 'WFH';
@@ -317,6 +329,8 @@ export interface ApprovalItem {
   projectName?: string;
   projectManagerId?: string;
   projectManagerName?: string;
+  projectAdminIds?: string[];
+  projectAdminNames?: string[];
   targetApproverRole?: 'PM' | 'HR';
   stage?: 'PM' | 'HR' | 'FINAL';
   pmApprovedBy?: string;
@@ -390,6 +404,8 @@ export interface Project {
   description?: string;
   projectManagerId?: string;
   projectManagerName?: string;
+  projectAdminIds?: string[];
+  projectAdminNames?: string[];
   assignedEmployeeIds?: string[];
   customRules?: ProjectCustomRules;
   isHeadOffice?: boolean;

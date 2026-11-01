@@ -17,3 +17,4 @@ for (const r of rows) {
 }
 
 console.log('[DELETE_TEST_USER] Completed cleanup.');
+

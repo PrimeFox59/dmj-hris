@@ -990,14 +990,27 @@ export function App() {
   // Approval actions
   const handleApprove = (id: string, reviewerNote?: string) => {
     const targetItem = approvals.find(a => a.id === id);
+    const applicantProj = (projects || []).find(p => 
+      p.id === targetItem?.projectId || 
+      p.code === targetItem?.projectCode ||
+      p.id === employees.find(e => e.id === targetItem?.employeeId)?.assignedProjectId
+    );
+    const projectAdminIds = targetItem?.projectAdminIds || applicantProj?.projectAdminIds || [];
+    const isUserProjectAdmin = projectAdminIds.includes(currentUser.id);
+    const isPm = targetItem?.projectManagerId === currentUser.id || applicantProj?.projectManagerId === currentUser.id;
+
     const isPmStage = Boolean(
       targetItem &&
-      (targetItem.targetApproverRole === 'PM' || targetItem.stage === 'PM') &&
+      (targetItem.targetApproverRole === 'PM' || targetItem.stage === 'PM' || !targetItem.stage) &&
       !targetItem.pmApprovedBy &&
-      targetItem.projectManagerId
+      (targetItem.projectManagerId || applicantProj?.projectManagerId || projectAdminIds.length > 0)
     );
 
-    api.updateApproval(id, 'APPROVED', reviewerNote, `${currentUser.name} (${currentUser.role})`)
+    const approverTitle = isUserProjectAdmin && !isPm
+      ? `${currentUser.name} (Admin Proyek)`
+      : `${currentUser.name} (${currentUser.role})`;
+
+    api.updateApproval(id, 'APPROVED', reviewerNote, approverTitle)
       .then(res => {
         if (res.item) {
           setApprovals(prev => prev.map(a => a.id === id ? res.item : a));
@@ -1011,7 +1024,7 @@ export function App() {
           if (item.id === id) {
             return {
               ...item,
-              pmApprovedBy: currentUser.name,
+              pmApprovedBy: approverTitle,
               pmApprovedAt: new Date().toISOString().replace('T', ' ').substring(0, 19),
               pmReviewNote: reviewerNote,
               targetApproverRole: 'HR',
@@ -1023,7 +1036,7 @@ export function App() {
           return item;
         })
       );
-      showLiveToast('Persetujuan Tahap 1 (PM) Berhasil. Pengajuan diteruskan ke HR Manager untuk otorisasi akhir.', 'success');
+      showLiveToast(`Persetujuan Tahap 1 (${isUserProjectAdmin && !isPm ? 'Admin Proyek' : 'PM'}) Berhasil. Pengajuan diteruskan ke HR Manager untuk otorisasi akhir.`, 'success');
       return;
     }
 

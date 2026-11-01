@@ -141,6 +141,8 @@ try {
   db.exec('PRAGMA journal_mode = WAL;');
   db.exec('PRAGMA synchronous = NORMAL;');
   db.exec('PRAGMA foreign_keys = ON;');
+  db.exec('PRAGMA temp_store = MEMORY;');
+  db.exec('PRAGMA cache_size = -32000;');
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS employees (
@@ -660,13 +662,19 @@ export function resolveEmployeeProjectAndPm(employeeId) {
     if (pmEmp) pmName = pmEmp.name;
   }
 
+  const projectAdminIds = Array.isArray(projData.projectAdminIds) ? projData.projectAdminIds : [];
+  const projectAdminNames = Array.isArray(projData.projectAdminNames) ? projData.projectAdminNames : [];
+
   return {
     projectId: projRow.id,
     projectCode: projRow.code,
     projectName: projRow.name,
     projectManagerId: pmId || null,
     projectManagerName: pmName || null,
-    isEmployeeThePm: Boolean(pmId && (pmId === empRow.id || pmId === employeeId))
+    projectAdminIds,
+    projectAdminNames,
+    isEmployeeThePm: Boolean(pmId && (pmId === empRow.id || pmId === employeeId)),
+    isEmployeeProjectAdmin: projectAdminIds.includes(empRow.id) || projectAdminIds.includes(employeeId)
   };
 }
 
@@ -810,6 +818,7 @@ export function saveAttendance(record) {
 
     const projInfo = resolveEmployeeProjectAndPm(record.employeeId);
     const hasPm = Boolean(projInfo?.projectManagerId && !projInfo.isEmployeeThePm);
+    const hasAdmin = Boolean(projInfo?.projectAdminIds && projInfo.projectAdminIds.length > 0);
 
     const approvalItem = {
       id: approvalId,
@@ -831,8 +840,10 @@ export function saveAttendance(record) {
       projectName: projInfo?.projectName || record.projectName || null,
       projectManagerId: projInfo?.projectManagerId || null,
       projectManagerName: projInfo?.projectManagerName || null,
-      targetApproverRole: hasPm ? 'PM' : 'HR',
-      stage: hasPm ? 'PM' : 'HR',
+      projectAdminIds: projInfo?.projectAdminIds || [],
+      projectAdminNames: projInfo?.projectAdminNames || [],
+      targetApproverRole: (hasPm || hasAdmin) ? 'PM' : 'HR',
+      stage: (hasPm || hasAdmin) ? 'PM' : 'HR',
       requiresHrApproval: true
     };
 
@@ -947,9 +958,9 @@ export function updateApproval(id, status, reviewNote, reviewedBy = 'Direksi / H
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
 
   // 2-STAGE APPROVAL WORKFLOW GATEKEEPER:
-  // If item is currently at Stage 1 (PM review) and action is 'APPROVED':
-  // Record PM recommendation/approval and shift to Stage 2 (HR Manager)
-  const isPmStage = (item.targetApproverRole === 'PM' || item.stage === 'PM') && !item.pmApprovedBy && Boolean(item.projectManagerId);
+  // If item is currently at Stage 1 (PM / Admin Proyek review) and action is 'APPROVED':
+  // Record PM / Admin recommendation/approval and shift to Stage 2 (HR Manager)
+  const isPmStage = (item.targetApproverRole === 'PM' || item.stage === 'PM' || !item.stage) && !item.pmApprovedBy && (Boolean(item.projectManagerId) || Boolean(item.projectAdminIds && item.projectAdminIds.length > 0));
 
   if (status === 'APPROVED' && isPmStage) {
     item.pmApprovedBy = reviewedBy;
@@ -1206,21 +1217,24 @@ export function saveApproval(item) {
     }
   }
 
-  // Multi-Stage Project & PM Routing Gatekeeper for ALL approval types (Late, Leave, Permit, Correction, Geofence)
+  // Multi-Stage Project & PM / Admin Routing Gatekeeper for ALL approval types (Late, Leave, Permit, Correction, Geofence)
   const projInfo = resolveEmployeeProjectAndPm(item.employeeId);
   const hasPm = Boolean(projInfo?.projectManagerId && !projInfo.isEmployeeThePm);
+  const hasAdmin = Boolean(projInfo?.projectAdminIds && projInfo.projectAdminIds.length > 0);
 
   if (!item.projectId && projInfo?.projectId) item.projectId = projInfo.projectId;
   if (!item.projectCode && projInfo?.projectCode) item.projectCode = projInfo.projectCode;
   if (!item.projectName && projInfo?.projectName) item.projectName = projInfo.projectName;
   if (!item.projectManagerId && projInfo?.projectManagerId) item.projectManagerId = projInfo.projectManagerId;
   if (!item.projectManagerName && projInfo?.projectManagerName) item.projectManagerName = projInfo.projectManagerName;
+  if (!item.projectAdminIds && projInfo?.projectAdminIds) item.projectAdminIds = projInfo.projectAdminIds;
+  if (!item.projectAdminNames && projInfo?.projectAdminNames) item.projectAdminNames = projInfo.projectAdminNames;
 
   if (!item.targetApproverRole) {
-    item.targetApproverRole = hasPm ? 'PM' : 'HR';
+    item.targetApproverRole = (hasPm || hasAdmin) ? 'PM' : 'HR';
   }
   if (!item.stage) {
-    item.stage = hasPm ? 'PM' : 'HR';
+    item.stage = (hasPm || hasAdmin) ? 'PM' : 'HR';
   }
   item.requiresHrApproval = true;
 

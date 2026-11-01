@@ -73,14 +73,23 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
     return (projects || []).filter(p => p.projectManagerId === currentUser.id);
   }, [projects, currentUser.id]);
 
+  const adminProjects = React.useMemo(() => {
+    return (projects || []).filter(p => p.projectAdminIds?.includes(currentUser.id));
+  }, [projects, currentUser.id]);
+
   const isProjectManager = managedProjects.length > 0 || currentUser.role === 'Project_Manager';
+  const isProjectAdmin = adminProjects.length > 0;
 
   const managedProjectIds = React.useMemo(() => {
     return new Set(managedProjects.map(p => p.id));
   }, [managedProjects]);
 
-  const isStaff = currentRole === 'staff' && !isHrManager && !isProjectManager;
-  const isApprover = (currentRole === 'superuser' || currentRole === 'admin' || currentRole === 'hr' || isHrManager || isProjectManager) && !isStaff;
+  const adminProjectIds = React.useMemo(() => {
+    return new Set(adminProjects.map(p => p.id));
+  }, [adminProjects]);
+
+  const isStaff = currentRole === 'staff' && !isHrManager && !isProjectManager && !isProjectAdmin;
+  const isApprover = (currentRole === 'superuser' || currentRole === 'admin' || currentRole === 'hr' || isHrManager || isProjectManager || isProjectAdmin) && !isStaff;
 
   const canUserApproveItem = React.useCallback((item: ApprovalItem): boolean => {
     if (item.employeeId === currentUser.id) return false;
@@ -96,10 +105,14 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
     const isApplicantThePm = Boolean(pmId && pmId === item.employeeId);
     const hasProjectPm = Boolean(pmId && !isApplicantThePm);
 
-    const isWaitingForPm = hasProjectPm && !item.pmApprovedBy && (item.targetApproverRole === 'PM' || item.stage === 'PM' || !item.stage);
+    const projectAdminIds = item.projectAdminIds || applicantProj?.projectAdminIds || [];
+    const isUserProjectAdmin = projectAdminIds.includes(currentUser.id);
+    const hasProjectAdmins = projectAdminIds.filter(id => id !== item.employeeId).length > 0;
 
-    if (isWaitingForPm) {
-      if (pmId === currentUser.id || applicantProj?.projectManagerId === currentUser.id) {
+    const isWaitingForPmOrAdmin = (hasProjectPm || hasProjectAdmins) && !item.pmApprovedBy && (item.targetApproverRole === 'PM' || item.stage === 'PM' || !item.stage);
+
+    if (isWaitingForPmOrAdmin) {
+      if (pmId === currentUser.id || applicantProj?.projectManagerId === currentUser.id || isUserProjectAdmin) {
         return true;
       }
       return false;
@@ -291,23 +304,24 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
 
   // Filtered approvals based on role (Must be called unconditionally to obey React Rules of Hooks):
   // - HR / Superuser / Admin: Melihat seluruh pengajuan
-  // - PM: Melihat pengajuan miliknya + pengajuan staf dari proyek yang dipimpinnya
+  // - PM / Admin Proyek: Melihat pengajuan miliknya + pengajuan staf dari proyek yang dikelolanya
   // - Staff: Melihat HANYA pengajuan miliknya sendiri
   const relevantApprovals = React.useMemo(() => {
     if (currentRole === 'superuser' || currentRole === 'admin' || isHrManager) {
       return approvals || [];
     }
-    if (isProjectManager) {
+    if (isProjectManager || isProjectAdmin) {
       return (approvals || []).filter(item => {
         if (item.employeeId === currentUser.id) return true;
-        if (item.projectId && managedProjectIds.has(item.projectId)) return true;
+        if (item.projectId && (managedProjectIds.has(item.projectId) || adminProjectIds.has(item.projectId))) return true;
+        if (item.projectAdminIds && item.projectAdminIds.includes(currentUser.id)) return true;
         const applicantEmp = (employees || []).find(e => e.id === item.employeeId);
-        if (applicantEmp?.assignedProjectId && managedProjectIds.has(applicantEmp.assignedProjectId)) return true;
+        if (applicantEmp?.assignedProjectId && (managedProjectIds.has(applicantEmp.assignedProjectId) || adminProjectIds.has(applicantEmp.assignedProjectId))) return true;
         return false;
       });
     }
     return (approvals || []).filter(item => item.employeeId === currentUser.id);
-  }, [approvals, currentRole, isHrManager, isProjectManager, currentUser.id, managedProjectIds, employees]);
+  }, [approvals, currentRole, isHrManager, isProjectManager, isProjectAdmin, currentUser.id, managedProjectIds, adminProjectIds, employees]);
 
   const pendingApprovals = relevantApprovals.filter(a => a.status === 'PENDING');
   const historyApprovals = relevantApprovals.filter(a => a.status !== 'PENDING');
@@ -886,7 +900,7 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
                               className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-95"
                             >
                               <Check className="w-3.5 h-3.5" />
-                              <span>{item.targetApproverRole === 'PM' || (!item.pmApprovedBy && item.projectManagerId) ? 'Setujui (Rekomendasi PM)' : 'Setujui Akhir (HR)'}</span>
+                              <span>{item.targetApproverRole === 'PM' || (!item.pmApprovedBy && (item.projectManagerId || (item.projectAdminIds && item.projectAdminIds.length > 0))) ? 'Setujui (Rekomendasi PM / Admin Proyek)' : 'Setujui Akhir (HR)'}</span>
                             </button>
                           </div>
                         ) : isApprover && !canUserApproveItem(item) ? (
@@ -895,8 +909,8 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
                               <Shield className="w-3.5 h-3.5" />
                               {item.pmApprovedBy
                                 ? `Disetujui PM (${item.pmApprovedBy}) • Menunggu Otorisasi Akhir HR Manager`
-                                : item.targetApproverRole === 'PM' || item.projectManagerId
-                                ? `Menunggu Rekomendasi PM Terkait: ${item.projectManagerName || 'Project Manager'} (Tahap 1)`
+                                : item.targetApproverRole === 'PM' || item.projectManagerId || (item.projectAdminIds && item.projectAdminIds.length > 0)
+                                ? `Menunggu Rekomendasi PM Terkait: ${item.projectManagerName || 'Project Manager'} / Admin Proyek (Tahap 1)`
                                 : 'Menunggu Persetujuan Eksklusif HR Manager'}
                             </span>
                           </div>

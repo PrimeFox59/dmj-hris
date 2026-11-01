@@ -59,6 +59,8 @@ function initializeSchema(db: DatabaseSync) {
   db.exec('PRAGMA journal_mode = WAL;');
   db.exec('PRAGMA synchronous = NORMAL;');
   db.exec('PRAGMA foreign_keys = ON;');
+  db.exec('PRAGMA temp_store = MEMORY;');
+  db.exec('PRAGMA cache_size = -32000;');
 
   // 1. Employees Table
   db.exec(`
@@ -490,13 +492,19 @@ export function resolveEmployeeProjectAndPm(employeeId: string) {
     if (pmEmp) pmName = pmEmp.name;
   }
 
+  const projectAdminIds = Array.isArray(projData.projectAdminIds) ? projData.projectAdminIds : [];
+  const projectAdminNames = Array.isArray(projData.projectAdminNames) ? projData.projectAdminNames : [];
+
   return {
     projectId: projRow.id,
     projectCode: projRow.code,
     projectName: projRow.name,
     projectManagerId: pmId || null,
     projectManagerName: pmName || null,
-    isEmployeeThePm: Boolean(pmId && (pmId === empRow.id || pmId === employeeId))
+    projectAdminIds,
+    projectAdminNames,
+    isEmployeeThePm: Boolean(pmId && (pmId === empRow.id || pmId === employeeId)),
+    isEmployeeProjectAdmin: projectAdminIds.includes(empRow.id) || projectAdminIds.includes(employeeId)
   };
 }
 
@@ -566,8 +574,10 @@ export function saveAttendance(record: AttendanceRecord): { success: boolean; re
       projectName: projInfo?.projectName || record.projectName,
       projectManagerId: projInfo?.projectManagerId,
       projectManagerName: projInfo?.projectManagerName,
-      targetApproverRole: hasPm ? 'PM' : 'HR',
-      stage: hasPm ? 'PM' : 'HR',
+      projectAdminIds: projInfo?.projectAdminIds || [],
+      projectAdminNames: projInfo?.projectAdminNames || [],
+      targetApproverRole: (hasPm || (projInfo?.projectAdminIds && projInfo.projectAdminIds.length > 0)) ? 'PM' : 'HR',
+      stage: (hasPm || (projInfo?.projectAdminIds && projInfo.projectAdminIds.length > 0)) ? 'PM' : 'HR',
       requiresHrApproval: true
     };
 
@@ -625,7 +635,7 @@ export function updateApproval(
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
 
   // 2-STAGE APPROVAL WORKFLOW GATEKEEPER:
-  const isPmStage = (item.targetApproverRole === 'PM' || item.stage === 'PM') && !item.pmApprovedBy && Boolean(item.projectManagerId);
+  const isPmStage = (item.targetApproverRole === 'PM' || item.stage === 'PM' || !item.stage) && !item.pmApprovedBy && (Boolean(item.projectManagerId) || Boolean(item.projectAdminIds && item.projectAdminIds.length > 0));
 
   if (status === 'APPROVED' && isPmStage) {
     item.pmApprovedBy = reviewedBy;

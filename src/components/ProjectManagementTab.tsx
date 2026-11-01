@@ -167,6 +167,8 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
       hourlyRateMultiplier: 1.25,
       description: '',
       projectManagerId: undefined,
+      projectAdminIds: [],
+      projectAdminNames: [],
       assignedEmployeeIds: [],
       customRules: {
         workSchedule: {
@@ -247,6 +249,37 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
   // Remove employee from project in modal state
   const handleUnassignEmployee = (empId: string) => {
     setStagedAssignedEmployeeIds(prev => prev.filter(id => id !== empId));
+    if (editingProject) {
+      const nextAdmins = (editingProject.projectAdminIds || []).filter(id => id !== empId);
+      const nextAdminNames = nextAdmins
+        .map(id => employees.find(e => e.id === id)?.name)
+        .filter(Boolean) as string[];
+      setEditingProject({
+        ...editingProject,
+        projectAdminIds: nextAdmins,
+        projectAdminNames: nextAdminNames
+      });
+    }
+  };
+
+  // Toggle Project Admin status for an assigned personnel
+  const handleToggleProjectAdmin = (empId: string) => {
+    if (!editingProject) return;
+    const currentAdmins = editingProject.projectAdminIds || [];
+    const isAlreadyAdmin = currentAdmins.includes(empId);
+    const nextAdmins = isAlreadyAdmin
+      ? currentAdmins.filter(id => id !== empId)
+      : [...currentAdmins, empId];
+
+    const nextAdminNames = nextAdmins
+      .map(id => employees.find(e => e.id === id)?.name)
+      .filter(Boolean) as string[];
+
+    setEditingProject({
+      ...editingProject,
+      projectAdminIds: nextAdmins,
+      projectAdminNames: nextAdminNames
+    });
   };
 
   // Save Modal Project & Employee Reassignments
@@ -258,9 +291,16 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
     }
 
     const pmPerson = editingProject.projectManagerId ? employees.find(e => e.id === editingProject.projectManagerId) : null;
+    const currentAdminIds = (editingProject.projectAdminIds || []).filter(id => stagedAssignedEmployeeIds.includes(id));
+    const currentAdminNames = currentAdminIds
+      .map(id => employees.find(e => e.id === id)?.name)
+      .filter(Boolean) as string[];
+
     const updatedProject: Project = {
       ...editingProject,
       projectManagerName: pmPerson ? pmPerson.name : editingProject.projectManagerName,
+      projectAdminIds: currentAdminIds,
+      projectAdminNames: currentAdminNames,
       assignedEmployeeIds: stagedAssignedEmployeeIds
     };
 
@@ -714,6 +754,20 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
                         )}
                       </span>
                     </div>
+                    {proj.projectAdminNames && proj.projectAdminNames.length > 0 && (
+                      <div className="flex items-center gap-1.5 pt-0.5">
+                        <ShieldCheck className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                        <span className="text-slate-700">
+                          Admin Proyek:{' '}
+                          <strong className="text-slate-800 font-semibold">{proj.projectAdminNames.join(', ')}</strong>
+                          {proj.projectAdminIds?.includes(currentUser.id) && (
+                            <span className="ml-1.5 text-blue-700 font-extrabold text-[11px]">
+                              (Anda)
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Budget & Cost Progress Bar (Visible to managers / finance / PM of project) */}
@@ -1294,6 +1348,41 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
                       )}
                     </div>
 
+                    {/* Admin Proyek (Site Admin) Quick Highlight Card */}
+                    <div className="mb-3.5 p-3.5 rounded-2xl bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-slate-800 dark:to-slate-800 border border-blue-200 dark:border-blue-700/60 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5">
+                        <ShieldCheck className="w-5 h-5 text-blue-600 shrink-0" />
+                        <div>
+                          <p className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
+                            <span>Admin Proyek (Site Admin):</span>
+                            {editingProject.projectAdminIds && editingProject.projectAdminIds.length > 0 ? (
+                              <span className="text-blue-800 dark:text-blue-300 font-extrabold">
+                                {editingProject.projectAdminIds
+                                  .map(id => employees.find(e => e.id === id)?.name)
+                                  .filter(Boolean)
+                                  .join(', ')}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 font-normal italic">Belum Ditentukan</span>
+                            )}
+                          </p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                            Admin Proyek berwenang membantu PM melakukan review & approval tiket staf (keterlambatan, presensi luar geofence, cuti, dll).
+                          </p>
+                        </div>
+                      </div>
+                      {editingProject.projectAdminIds && editingProject.projectAdminIds.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setEditingProject({ ...editingProject, projectAdminIds: [], projectAdminNames: [] })}
+                          className="px-2.5 py-1 rounded-xl bg-white dark:bg-slate-700 hover:bg-rose-50 text-slate-600 hover:text-rose-600 text-[11px] font-bold border border-slate-200 dark:border-slate-600 transition-colors cursor-pointer shrink-0"
+                          title="Hapus semua penunjukan Admin Proyek"
+                        >
+                          Reset Admin
+                        </button>
+                      )}
+                    </div>
+
                     <div className="flex items-center justify-between mb-3">
                       <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
                         Daftar Personel Bertugas ({stagedAssignedEmployeeIds.length} Karyawan):
@@ -1327,12 +1416,15 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
                           })
                           .map(emp => {
                             const isEmpPm = editingProject.projectManagerId === emp!.id;
+                            const isEmpAdmin = (editingProject.projectAdminIds || []).includes(emp!.id);
                             return (
                               <div
                                 key={emp!.id}
                                 className={`flex items-center justify-between p-3 rounded-2xl border transition-colors ${
                                   isEmpPm 
                                     ? 'bg-amber-50/70 dark:bg-amber-950/30 border-amber-300 dark:border-amber-700/80' 
+                                    : isEmpAdmin
+                                    ? 'bg-blue-50/60 dark:bg-blue-950/25 border-blue-300 dark:border-blue-700/70'
                                     : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700/80 hover:border-orange-300 dark:hover:border-orange-700/60'
                                 }`}
                               >
@@ -1340,7 +1432,13 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
                                   <img
                                     src={emp!.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(emp!.name)}&background=random`}
                                     alt={emp!.name}
-                                    className={`w-9 h-9 rounded-xl object-cover border ${isEmpPm ? 'border-amber-400 ring-2 ring-amber-300/50' : 'border-slate-200 dark:border-slate-700'}`}
+                                    className={`w-9 h-9 rounded-xl object-cover border ${
+                                      isEmpPm 
+                                        ? 'border-amber-400 ring-2 ring-amber-300/50' 
+                                        : isEmpAdmin
+                                        ? 'border-blue-400 ring-2 ring-blue-300/50'
+                                        : 'border-slate-200 dark:border-slate-700'
+                                    }`}
                                   />
                                   <div>
                                     <div className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2 flex-wrap">
@@ -1352,6 +1450,12 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
                                         <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-black flex items-center gap-1 font-mono-code">
                                           <Crown className="w-3 h-3 text-amber-600" />
                                           <span>PM / LEADER</span>
+                                        </span>
+                                      )}
+                                      {isEmpAdmin && (
+                                        <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-900 border border-blue-300 text-[10px] font-black flex items-center gap-1 font-mono-code">
+                                          <ShieldCheck className="w-3 h-3 text-blue-600" />
+                                          <span>ADMIN PROYEK</span>
                                         </span>
                                       )}
                                     </div>
@@ -1376,6 +1480,22 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
                                     <span className="px-2.5 py-1 rounded-xl bg-amber-200/60 text-amber-900 text-[11px] font-black font-mono-code hidden sm:inline">
                                       LEADER
                                     </span>
+                                  )}
+
+                                  {!isEmpPm && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleToggleProjectAdmin(emp!.id)}
+                                      className={`px-2.5 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1 transition-colors cursor-pointer ${
+                                        isEmpAdmin
+                                          ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700 shadow-xs'
+                                          : 'bg-blue-50 dark:bg-blue-950/40 text-blue-800 dark:text-blue-200 hover:bg-blue-100 border-blue-200/80'
+                                      }`}
+                                      title={isEmpAdmin ? 'Cabut penunjukan Admin Proyek' : 'Tetapkan sebagai Admin Proyek pendamping PM untuk review & approval'}
+                                    >
+                                      <ShieldCheck className="w-3.5 h-3.5" />
+                                      <span>{isEmpAdmin ? 'Batal Admin' : 'Set Admin'}</span>
+                                    </button>
                                   )}
 
                                   <button
