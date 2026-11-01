@@ -37,7 +37,7 @@ import {
 import { Employee, PayrollRecord, Project, SalaryRuleConfig, AttendanceRecord, SystemRole, getEffectiveSystemRole, AnnualWorkCalendarConfig, WorkPeriodItem } from '../types';
 import { api } from '../services/api';
 import { rtcService } from '../services/rtcService';
-import { formatSalaryDisplay, calculateEmployeePayroll, EmployeeAuditOverride } from '../utils/payrollCalculator';
+import { formatSalaryDisplay, calculateEmployeePayroll, EmployeeAuditOverride, isEmployeeInOffice } from '../utils/payrollCalculator';
 import { EmployeeTimesheetDetailModal } from './EmployeeTimesheetDetailModal';
 
 interface PayrollTabProps {
@@ -1894,7 +1894,9 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                 <p className="text-[10px] text-slate-500">
                   {auditFormWaiveLate
                     ? '✓ HR Manager menyetujui dispensasi tugas luar / izin khusus: Denda keterlambatan diset Rp 0.'
-                    : `Denda dihitung per kelipatan 15 menit melewati grace period 15 menit (${formatSalaryDisplay(salaryRules.latePenaltyPerBlock, showPayrollNominal)}/blok).`}
+                    : auditingEmployee && isEmployeeInOffice(auditingEmployee.employee, projects)
+                    ? `🏢 Karyawan Kantor Pusat: Denda keterlambatan Rp 50.000 / jam (melewati grace period ${salaryRules.lateGracePeriodMinutes || 15} menit).`
+                    : '🏗️ Karyawan Site Proyek: Bebas potongan keterlambatan (Aturan DMJ: selain office tidak ada potongan jika terlambat).'}
                 </p>
               </div>
 
@@ -2098,8 +2100,17 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                   <span className="font-mono-code text-rose-600">-{formatSalaryDisplay(selectedSlip.pph21, showPayrollNominal)}</span>
                 </div>
                 <div className="flex justify-between py-0.5">
-                  <span className="text-slate-600">Potongan Keterlambatan:</span>
-                  <span className="font-mono-code text-rose-600">-{formatSalaryDisplay(selectedSlip.unapprovedLateDeduction, showPayrollNominal)}</span>
+                  <span className="text-slate-600">
+                    Potongan Keterlambatan:
+                    {selectedSlip.unapprovedLateDeduction === 0 && (
+                      <span className="text-[10px] text-emerald-600 font-normal ml-1">
+                        (Bebas Denda Site / Nihil)
+                      </span>
+                    )}
+                  </span>
+                  <span className={`font-mono-code ${selectedSlip.unapprovedLateDeduction > 0 ? 'text-rose-600' : 'text-slate-500'}`}>
+                    {selectedSlip.unapprovedLateDeduction > 0 ? `-${formatSalaryDisplay(selectedSlip.unapprovedLateDeduction, showPayrollNominal)}` : 'Rp 0'}
+                  </span>
                 </div>
                 <div className="flex justify-between pt-1.5 border-t border-slate-200 font-bold text-slate-900">
                   <span>Total Potongan:</span>

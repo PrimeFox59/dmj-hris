@@ -369,9 +369,18 @@ export async function notifyAttendanceLateEmail(employee, record, salaryRules = 
   const cutoffStr = sched.cutoffTime || salaryRules?.cutoffTime || '08:30';
   const lateMins = record.lateMinutes || 15;
   const dateStr = record.date || new Date().toISOString().substring(0, 10);
-  const penaltyPerBlock = salaryRules?.latePenaltyPerBlock || 25000;
-  const estimatedPenalty = Math.ceil(lateMins / 15) * penaltyPerBlock;
-  const projectName = sched.projectName ? (sched.projectName + ' (' + sched.projectCode + ')') : 'Site Operasional PRIME';
+  const isOffice = Boolean(
+    sched.projectCode === 'PRJ-001' ||
+    (sched.projectName && sched.projectName.toUpperCase().includes('KANTOR PUSAT')) ||
+    employee.assignedProjectId === 'PRJ-001' ||
+    (employee.department && employee.department.toUpperCase().includes('HEAD OFFICE'))
+  );
+  const officeHourlyPenalty = salaryRules?.officeLatePenaltyPerHour || 50000;
+  const gracePeriod = salaryRules?.lateGracePeriodMinutes || 15;
+  const estimatedPenalty = isOffice 
+    ? Math.ceil(Math.max(0, lateMins - gracePeriod) / 60) * officeHourlyPenalty 
+    : 0;
+  const projectName = sched.projectName ? (sched.projectName + ' (' + sched.projectCode + ')') : 'Site Operasional PT Dwi Martha Jaya';
 
   const subject = '[DMJ HRIS Peringatan] Keterlambatan Presensi (' + lateMins + ' Menit) - ' + sched.projectCode + ' - ' + dateStr + ' - ' + employee.name;
 
@@ -411,7 +420,11 @@ export async function notifyAttendanceLateEmail(employee, record, salaryRules = 
       '</tr>' +
       '<tr>' +
         '<td style="color: #92400e;">Estimasi Penalti Disiplin</td>' +
-        '<td style="font-weight: 600; color: #b91c1c;">Rp ' + estimatedPenalty.toLocaleString('id-ID') + ' (sebelum justifikasi disetujui)</td>' +
+        '<td style="font-weight: 600; color: ' + (isOffice ? '#b91c1c' : '#059669') + ';">' + 
+          (isOffice 
+            ? 'Rp ' + estimatedPenalty.toLocaleString('id-ID') + ' (Tarif Office Rp 50.000 / jam)' 
+            : 'Rp 0 (Bebas Potongan Keterlambatan Site Proyek)') + 
+        '</td>' +
       '</tr>' +
     '</table>' +
 

@@ -445,6 +445,7 @@ export interface SalaryRuleConfig {
   cutoffTime: string; // e.g. "08:30"
   lateGracePeriodMinutes: number; // e.g. 15 mins
   latePenaltyPerBlock: number; // IDR per 15 min if unapproved
+  officeLatePenaltyPerHour?: number; // Rp 50.000 / jam (khusus Office / Kantor Pusat)
   overtimeFormula: {
     firstHourRateMultiplier: number; // e.g. 1.5
     subsequentHourRateMultiplier: number; // e.g. 2.0

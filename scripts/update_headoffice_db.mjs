@@ -13,3 +13,12 @@ if (p) {
 } else {
   console.warn(`[WARN] PRJ-001 not found in ${targetDb}`);
 }
+
+const r = db.prepare('SELECT config_json FROM salary_rules WHERE id = ?').get('default');
+if (r) {
+  const json = JSON.parse(r.config_json);
+  json.officeLatePenaltyPerHour = 50000;
+  db.prepare('UPDATE salary_rules SET config_json = ? WHERE id = ?').run(JSON.stringify(json), 'default');
+  console.log(`[SUCCESS] Updated ${targetDb}: salary_rules officeLatePenaltyPerHour = 50000`);
+}
+

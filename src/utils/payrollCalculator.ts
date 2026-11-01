@@ -33,6 +33,48 @@ export interface EmployeeAuditOverride {
   notes?: string;
 }
 
+/**
+ * Cek apakah karyawan bertugas di Kantor Pusat (Office).
+ * Sesuai aturan:
+ * - Karyawan Office: Denda keterlambatan Rp 50.000 / jam
+ * - Selain Office (Site Proyek Lapangan): Bebas denda keterlambatan (Rp 0)
+ */
+export function isEmployeeInOffice(employee: Employee, projects: Project[] = []): boolean {
+  if (!employee) return false;
+
+  const assignedProj = projects?.find(p => p.id === employee.assignedProjectId || p.code === employee.assignedProjectId);
+  if (assignedProj) {
+    if (
+      assignedProj.isHeadOffice ||
+      assignedProj.code === 'PRJ-001' ||
+      assignedProj.id === 'PRJ-001' ||
+      (assignedProj.name && assignedProj.name.toUpperCase().includes('KANTOR PUSAT'))
+    ) {
+      return true;
+    }
+    return false;
+  }
+
+  const pid = String(employee.assignedProjectId || '').toUpperCase();
+  if (pid === 'PRJ-001' || pid.includes('HEAD_OFFICE') || pid === 'OFFICE') {
+    return true;
+  }
+
+  const dept = String(employee.department || '').toUpperCase();
+  if (
+    dept.includes('HEAD OFFICE') || 
+    dept.includes('MANAGEMENT SUPPORT') ||
+    dept.includes('DIREKSI') ||
+    dept.includes('FINANCE') ||
+    dept.includes('ACCOUNTING') ||
+    dept.includes('HR')
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 export function calculateEmployeePayroll(
   employee: Employee,
   attendances: AttendanceRecord[],
@@ -92,20 +134,34 @@ export function calculateEmployeePayroll(
   const unapprovedLates = empAttendances.filter(a => a.isLate && a.approvalStatus !== 'APPROVED');
   const lateDays = auditOverride?.lateDays !== undefined ? auditOverride.lateDays : unapprovedLates.length;
 
+  // Aturan Pemotongan Keterlambatan DMJ HRIS:
+  // - Karyawan di Office / Kantor Pusat: Denda keterlambatan Rp 50.000 / jam
+  // - Selain Office (Site Proyek Lapangan): Bebas potongan jika terlambat (Rp 0)
+  const isOffice = isEmployeeInOffice(employee, projects);
+  const officeHourlyPenalty = rules.officeLatePenaltyPerHour || 50000;
+
   let unapprovedLateDeduction = 0;
-  if (!auditOverride?.isLatePenaltyWaived) {
+  if (isOffice && !auditOverride?.isLatePenaltyWaived) {
     if (auditOverride?.customLatePenaltyAmount !== undefined) {
       unapprovedLateDeduction = Math.max(0, auditOverride.customLatePenaltyAmount);
-    } else 
-    if (auditOverride?.lateMinutes !== undefined) {
-      const blocks = Math.ceil(Math.max(0, auditOverride.lateMinutes - rules.lateGracePeriodMinutes) / 15);
-      unapprovedLateDeduction = blocks * rules.latePenaltyPerBlock;
+    } else if (auditOverride?.lateMinutes !== undefined) {
+      const gracePeriod = rules.lateGracePeriodMinutes ?? 15;
+      const effectiveMinutes = Math.max(0, auditOverride.lateMinutes - gracePeriod);
+      const lateHours = Math.ceil(effectiveMinutes / 60);
+      unapprovedLateDeduction = lateHours * officeHourlyPenalty;
     } else {
       unapprovedLates.forEach(late => {
-        const blocks = Math.ceil(Math.max(0, late.lateMinutes - rules.lateGracePeriodMinutes) / 15);
-        unapprovedLateDeduction += blocks * rules.latePenaltyPerBlock;
+        const gracePeriod = rules.lateGracePeriodMinutes ?? 15;
+        const effectiveMinutes = Math.max(0, (late.lateMinutes || 0) - gracePeriod);
+        if (effectiveMinutes > 0) {
+          const lateHours = Math.ceil(effectiveMinutes / 60);
+          unapprovedLateDeduction += lateHours * officeHourlyPenalty;
+        }
       });
     }
+  } else {
+    // Selain office bebas potongan keterlambatan
+    unapprovedLateDeduction = 0;
   }
 
   // Calculate Overtime: STRICTLY 0 UNLESS AUDITED/APPROVED (NO DUMMY 16 HOURS!)
