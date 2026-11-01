@@ -1342,9 +1342,6 @@ export const UserPerformanceTab: React.FC<UserPerformanceTabProps> = ({
                       </p>
                     </div>
                   </div>
-                  <p className="text-[9px] text-slate-400 mt-1 font-mono-code">
-                    NPWP: 01.892.411.2-054.000  Komp. Perkantoran & Innovation Hub  Email: payroll@primeprojectx.net
-                  </p>
                 </div>
 
                 <div className="text-right flex flex-col items-end gap-1">
