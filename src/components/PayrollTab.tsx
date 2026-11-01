@@ -32,6 +32,7 @@ import {
   MoreVertical,
   Lock,
   Unlock,
+  Bell,
   FileText
 } from 'lucide-react';
 import { Employee, PayrollRecord, Project, SalaryRuleConfig, AttendanceRecord, SystemRole, getEffectiveSystemRole, AnnualWorkCalendarConfig, WorkPeriodItem, getEmployeeAssignedProjects, KasbonRecord, KasbonRepaymentType, KasbonStatus, KasbonInstallmentSchedule, ApprovalItem } from '../types';
@@ -239,6 +240,144 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
   const [editingSalaryEmp, setEditingSalaryEmp] = useState<Employee | null>(null);
   const [auditingEmployee, setAuditingEmployee] = useState<{ employee: Employee; record: PayrollRecord } | null>(null);
   const [viewingTimesheetEmp, setViewingTimesheetEmp] = useState<Employee | null>(null);
+
+  // Slip Access 10-Minute Window State (Finance Approval System)
+  const canViewSlipFreely = isFinanceOrSuper;
+  const [currentTimeMs, setCurrentTimeMs] = useState<number>(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTimeMs(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const formatCountdown = (seconds: number): string => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
+
+  const getEmployeeSlipAccess = useCallback((empId: string, periodName?: string) => {
+    if (canViewSlipFreely) {
+      return { isAllowed: true, remainingSeconds: 600, status: 'UNRESTRICTED' as const, approvalItem: null, approverName: 'Finance' };
+    }
+
+    const targetPeriod = (periodName || selectedPeriod).toLowerCase().trim();
+    const matchingApprovals = approvals.filter(a => 
+      a.type === 'SLIP_ACCESS' && 
+      a.employeeId === empId &&
+      (!a.slipPeriod || a.slipPeriod.toLowerCase().trim() === targetPeriod)
+    ).sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
+
+    const latest = matchingApprovals[0];
+    if (!latest) {
+      return { isAllowed: false, remainingSeconds: 0, status: 'NONE' as const, approvalItem: null, approverName: '' };
+    }
+
+    if (latest.status === 'PENDING') {
+      return { isAllowed: false, remainingSeconds: 0, status: 'PENDING' as const, approvalItem: latest, approverName: '' };
+    }
+
+    if (latest.status === 'REJECTED') {
+      return { isAllowed: false, remainingSeconds: 0, status: 'REJECTED' as const, approvalItem: latest, approverName: '' };
+    }
+
+    if (latest.status === 'APPROVED' && latest.slipAccessExpiresAt) {
+      const expiresAt = new Date(latest.slipAccessExpiresAt).getTime();
+      const remainingMs = expiresAt - currentTimeMs;
+      const remainingSec = Math.max(0, Math.floor(remainingMs / 1000));
+
+      if (remainingSec > 0) {
+        return {
+          isAllowed: true,
+          remainingSeconds: remainingSec,
+          status: 'ACTIVE' as const,
+          approvalItem: latest,
+          expiresAt: latest.slipAccessExpiresAt,
+          approverName: latest.financeApprovedBy || latest.reviewedBy || 'Finance'
+        };
+      } else {
+        return {
+          isAllowed: false,
+          remainingSeconds: 0,
+          status: 'EXPIRED' as const,
+          approvalItem: latest,
+          approverName: latest.financeApprovedBy || latest.reviewedBy || 'Finance'
+        };
+      }
+    }
+
+    return { isAllowed: false, remainingSeconds: 0, status: 'NONE' as const, approvalItem: null, approverName: '' };
+  }, [canViewSlipFreely, approvals, selectedPeriod, currentTimeMs]);
+
+  // Request Slip Access Modal State & Handlers
+  const [isRequestSlipModalOpen, setIsRequestSlipModalOpen] = useState<boolean>(false);
+  const [targetSlipRecordForRequest, setTargetSlipRecordForRequest] = useState<PayrollRecord | null>(null);
+  const [slipRequestReason, setSlipRequestReason] = useState<string>('Pengecekan rincian upah, tunjangan, dan potongan gaji bulanan');
+  const [slipRequestSuccessMsg, setSlipRequestSuccessMsg] = useState<string | null>(null);
+
+  const handleOpenSlipRequestModal = (record: PayrollRecord) => {
+    setTargetSlipRecordForRequest(record);
+    setSlipRequestReason('Pengecekan rincian upah, tunjangan, dan potongan gaji bulanan');
+    setIsRequestSlipModalOpen(true);
+  };
+
+  const handleSubmitSlipAccessRequest = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!targetSlipRecordForRequest) return;
+
+    const targetEmp = employees.find(emp => emp.id === targetSlipRecordForRequest.employeeId) || currentUser || employees[0];
+    const nowIso = new Date().toISOString();
+    const period = targetSlipRecordForRequest.period || selectedPeriod;
+
+    const newApprovalItem: ApprovalItem = {
+      id: `SLIP-${Date.now()}`,
+      type: 'SLIP_ACCESS',
+      employeeId: targetEmp.id,
+      employeeName: targetEmp.name,
+      employeeNik: targetEmp.nik || '',
+      department: targetEmp.department || 'Operasional',
+      title: `Permohonan Izin Buka Slip Gaji (${period})`,
+      description: `Keperluan: ${slipRequestReason.trim()} • Periode: ${period}. Akses otomatis terbuka selama 10 menit setelah disetujui Finance.`,
+      startDate: nowIso.split('T')[0],
+      status: 'PENDING',
+      submittedAt: nowIso,
+      slipPeriod: period,
+      targetApproverRole: 'FINANCE',
+      stage: 'FINANCE'
+    };
+
+    if (onSubmitApproval) {
+      onSubmitApproval(newApprovalItem);
+    }
+
+    setIsRequestSlipModalOpen(false);
+    setSlipRequestSuccessMsg(`Permohonan buka slip gaji periode ${period} berhasil dikirim ke Finance! Harap tunggu persetujuan.`);
+    setTimeout(() => setSlipRequestSuccessMsg(null), 6000);
+  };
+
+  const handleQuickApproveSlipAccess = (approvalId: string, employeeName: string) => {
+    if (onUpdateApproval) {
+      onUpdateApproval(approvalId, `Disetujui oleh ${currentUser?.name || 'Finance'} (Akses Terbuka 10 Menit)`);
+      setSlipRequestSuccessMsg(`Akses slip gaji untuk ${employeeName} berhasil disetujui selama 10 menit!`);
+      setTimeout(() => setSlipRequestSuccessMsg(null), 5000);
+    }
+  };
+
+  const pendingSlipRequests = useMemo(() => {
+    return approvals.filter(a => a.type === 'SLIP_ACCESS' && a.status === 'PENDING');
+  }, [approvals]);
+
+  // Auto-close open slip modal if 10-minute access window expires
+  useEffect(() => {
+    if (selectedSlip && !canViewSlipFreely) {
+      const access = getEmployeeSlipAccess(selectedSlip.employeeId, selectedSlip.period);
+      if (!access.isAllowed) {
+        setSelectedSlip(null);
+        alert('Sesi akses slip gaji (10 menit) telah berakhir. Dokumen slip gaji telah dikunci kembali secara otomatis demi privasi dan keamanan data finansial.');
+      }
+    }
+  }, [selectedSlip, canViewSlipFreely, getEmployeeSlipAccess]);
 
   // Re-active attendance state synced with prop
   const [localAttendances, setLocalAttendances] = useState<AttendanceRecord[]>(attendances);
@@ -1263,6 +1402,56 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
           )}
         </div>
 
+        {/* Slip Request Success Toast Banner */}
+        {slipRequestSuccessMsg && (
+          <div className="p-3 mx-4 sm:mx-5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-medium flex items-center justify-between shadow-xs animate-fadeIn">
+            <span className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              {slipRequestSuccessMsg}
+            </span>
+            <button onClick={() => setSlipRequestSuccessMsg(null)} className="text-emerald-600 hover:text-emerald-900 cursor-pointer">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
+        {/* Finance Pending Slip Requests Notification Banner */}
+        {canManagePayroll && pendingSlipRequests.length > 0 && (
+          <div className="p-3.5 mx-4 sm:mx-5 rounded-2xl bg-amber-50 border border-amber-300 text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold shrink-0 shadow-xs">
+                <Bell className="w-4 h-4 animate-bounce" />
+              </div>
+              <div>
+                <span className="font-bold text-xs text-amber-950 block leading-tight">
+                  Permohonan Akses Slip Gaji Menunggu Persetujuan Finance ({pendingSlipRequests.length})
+                </span>
+                <span className="text-[10.5px] text-amber-800">
+                  Karyawan meminta izin membuka slip gaji resmi (akses terbuka 10 menit setelah disetujui).
+                </span>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+              {pendingSlipRequests.slice(0, 3).map(req => (
+                <button
+                  key={req.id}
+                  type="button"
+                  onClick={() => handleQuickApproveSlipAccess(req.id, req.employeeName)}
+                  className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] flex items-center gap-1 shadow-xs transition-all cursor-pointer active:scale-95"
+                >
+                  <Check className="w-3 h-3" />
+                  <span>Setujui: {req.employeeName} (10 Mnt)</span>
+                </button>
+              ))}
+              {pendingSlipRequests.length > 3 && (
+                <span className="text-[11px] font-bold text-amber-700 px-1">
+                  +{pendingSlipRequests.length - 3} lainnya
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* ========================================================================= */}
         {/* SUBVIEW 1: REKAP GAJI & SLIP GAJI TABLE                                   */}
         {/* ========================================================================= */}
@@ -1430,15 +1619,77 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                               </button>
                             )}
 
-                            {/* Cetak Slip Gaji Resmi (Icon Only, Tanpa Teks) */}
-                            <button
-                              type="button"
-                              onClick={() => setSelectedSlip(item)}
-                              className="p-1.5 rounded-lg bg-[#FF6B00] hover:bg-[#e56000] text-white transition-all cursor-pointer shadow-2xs active:scale-95 flex items-center justify-center shrink-0"
-                              title="Cetak Slip Gaji Resmi"
-                            >
-                              <Eye className="w-3.5 h-3.5" />
-                            </button>
+                            {/* Otorisasi Akses Slip Gaji: Wajib Approval Finance, Visible 10 Menit */}
+                            {(() => {
+                              const slipAccess = getEmployeeSlipAccess(item.employeeId, item.period);
+
+                              if (canViewSlipFreely) {
+                                return (
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedSlip(item)}
+                                    className="p-1.5 rounded-lg bg-[#FF6B00] hover:bg-[#e56000] text-white transition-all cursor-pointer shadow-2xs active:scale-95 flex items-center justify-center shrink-0"
+                                    title="Buka / Cetak Slip Gaji Resmi (Akses Finance/Superuser)"
+                                  >
+                                    <Eye className="w-3.5 h-3.5" />
+                                  </button>
+                                );
+                              }
+
+                              if (slipAccess.status === 'ACTIVE') {
+                                return (
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedSlip(item)}
+                                    className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 animate-pulse shrink-0"
+                                    title={`Akses Terbuka: ${formatCountdown(slipAccess.remainingSeconds)} Tersisa (Diotorisasi Finance)`}
+                                  >
+                                    <Unlock className="w-3.5 h-3.5 text-white" />
+                                    <span className="font-mono-code font-bold text-[11px]">{formatCountdown(slipAccess.remainingSeconds)}</span>
+                                  </button>
+                                );
+                              }
+
+                              if (slipAccess.status === 'PENDING') {
+                                return (
+                                  <button
+                                    type="button"
+                                    onClick={() => alert(`Permohonan buka slip gaji periode ${item.period} sedang menunggu persetujuan Divisi Finance.`)}
+                                    className="px-2.5 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 font-bold text-[10.5px] flex items-center gap-1 transition-all cursor-pointer shrink-0"
+                                    title="Menunggu Persetujuan Divisi Finance"
+                                  >
+                                    <Clock className="w-3 h-3 text-amber-700 animate-spin" />
+                                    <span>Menunggu Finance</span>
+                                  </button>
+                                );
+                              }
+
+                              if (slipAccess.status === 'REJECTED') {
+                                return (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenSlipRequestModal(item)}
+                                    className="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 font-bold text-[10.5px] flex items-center gap-1 transition-all cursor-pointer shrink-0"
+                                    title="Izin Ditolak Finance. Klik untuk ajukan kembali."
+                                  >
+                                    <Lock className="w-3.5 h-3.5 text-rose-600" />
+                                    <span>Ditolak (Ajukan Lagi)</span>
+                                  </button>
+                                );
+                              }
+
+                              return (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenSlipRequestModal(item)}
+                                  className="px-2.5 py-1 rounded-lg bg-gradient-to-r from-orange-500 to-[#FF6B00] hover:from-orange-600 hover:to-[#e56000] text-white font-bold text-[10.5px] shadow-2xs flex items-center gap-1 transition-all cursor-pointer active:scale-95 shrink-0"
+                                  title="Minta Izin Buka Slip Gaji (Approval Finance, Akses 10 Menit)"
+                                >
+                                  <Lock className="w-3.5 h-3.5" />
+                                  <span>{slipAccess.status === 'EXPIRED' ? 'Buka Lagi (Expired)' : 'Minta Izin Buka Slip'}</span>
+                                </button>
+                              );
+                            })()}
                           </div>
                         </td>
                       </tr>
@@ -2108,6 +2359,31 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
             >
               <X className="w-4 h-4" />
             </button>
+
+            {/* Security & 10-Minute Finance Access Banner */}
+            {!canViewSlipFreely && (
+              <div className="p-3 mb-4 rounded-2xl bg-emerald-50 border border-emerald-300 text-emerald-950 flex items-center justify-between shadow-2xs no-print">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold shrink-0">
+                    <Clock className="w-4 h-4 animate-spin" />
+                  </div>
+                  <div>
+                    <span className="font-bold text-xs text-emerald-950 block leading-tight">
+                      SESI AKSES SLIP RESMI DIAWASI SISTEM
+                    </span>
+                    <span className="text-[10.5px] text-emerald-800">
+                      Diotorisasi oleh Divisi Finance • Dokumen otomatis terkunci kembali saat waktu habis (10 Menit)
+                    </span>
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <span className="text-[9.5px] uppercase font-bold text-emerald-700 block">Sisa Waktu Sesi</span>
+                  <span className="text-sm font-black font-mono-code text-emerald-900 bg-white px-2.5 py-0.5 rounded-lg border border-emerald-300 shadow-2xs inline-block">
+                    ⏱️ {formatCountdown(getEmployeeSlipAccess(selectedSlip.employeeId, selectedSlip.period).remainingSeconds)}
+                  </span>
+                </div>
+              </div>
+            )}
 
             {/* Official Letterhead - DMJ HRIS Enterprise */}
             <div className="border-b-2 border-slate-900 pb-4 mb-4">

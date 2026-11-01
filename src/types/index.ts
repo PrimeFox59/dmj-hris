@@ -379,7 +379,7 @@ export interface KasbonRecord {
 
 export interface ApprovalItem {
   id: string;
-  type: 'LEAVE' | 'PERMIT' | 'LATE_JUSTIFICATION' | 'DINAS_LUAR' | 'ATTENDANCE_CORRECTION' | 'OUT_OF_GEOFENCE' | 'KASBON';
+  type: 'LEAVE' | 'PERMIT' | 'LATE_JUSTIFICATION' | 'DINAS_LUAR' | 'ATTENDANCE_CORRECTION' | 'OUT_OF_GEOFENCE' | 'KASBON' | 'SLIP_ACCESS';
   employeeId: string;
   employeeName: string;
   employeeNik: string;
@@ -419,8 +419,8 @@ export interface ApprovalItem {
   projectManagerName?: string;
   projectAdminIds?: string[];
   projectAdminNames?: string[];
-  targetApproverRole?: 'PM' | 'HR';
-  stage?: 'PM' | 'HR' | 'FINAL';
+  targetApproverRole?: 'PM' | 'HR' | 'FINANCE';
+  stage?: 'PM' | 'HR' | 'FINANCE' | 'FINAL';
   pmApprovedBy?: string;
   pmApprovedAt?: string;
   pmReviewNote?: string;
@@ -428,6 +428,11 @@ export interface ApprovalItem {
   hrApprovedAt?: string;
   hrReviewNote?: string;
   kasbonData?: KasbonRecord;
+  // Metadata Request Buka Slip Gaji (Visible 10 Menit by Finance Approval)
+  slipPeriod?: string;
+  slipAccessExpiresAt?: string;
+  financeApprovedBy?: string;
+  financeApprovedAt?: string;
 }
 
 export interface ProjectWorkSchedule {

@@ -960,7 +960,8 @@ export function updateApproval(id, status, reviewNote, reviewedBy = 'Direksi / H
   // 2-STAGE APPROVAL WORKFLOW GATEKEEPER:
   // If item is currently at Stage 1 (PM / Admin Proyek review) and action is 'APPROVED':
   // Record PM / Admin recommendation/approval and shift to Stage 2 (HR Manager)
-  const isPmStage = (item.targetApproverRole === 'PM' || item.stage === 'PM' || !item.stage) && !item.pmApprovedBy && (Boolean(item.projectManagerId) || Boolean(item.projectAdminIds && item.projectAdminIds.length > 0));
+  // Note: SLIP_ACCESS and KASBON are handled by Finance directly.
+  const isPmStage = item.type !== 'SLIP_ACCESS' && item.type !== 'KASBON' && (item.targetApproverRole === 'PM' || item.stage === 'PM' || !item.stage) && !item.pmApprovedBy && (Boolean(item.projectManagerId) || Boolean(item.projectAdminIds && item.projectAdminIds.length > 0));
 
   if (status === 'APPROVED' && isPmStage) {
     item.pmApprovedBy = reviewedBy;
@@ -1008,6 +1009,14 @@ export function updateApproval(id, status, reviewNote, reviewedBy = 'Direksi / H
     item.hrApprovedAt = now;
     item.hrReviewNote = reviewNote || null;
     item.stage = 'FINAL';
+
+    // If SLIP_ACCESS: calculate exact 10 minutes (600s) active window
+    if (item.type === 'SLIP_ACCESS') {
+      item.slipAccessExpiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+      item.financeApprovedBy = reviewedBy;
+      item.financeApprovedAt = now;
+      item.targetApproverRole = 'FINANCE';
+    }
   } else {
     if (isPmStage) {
       item.pmReviewNote = reviewNote || null;

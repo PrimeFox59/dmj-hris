@@ -33,7 +33,8 @@ import {
   HardHat,
   Shield,
   ShieldCheck,
-  CreditCard
+  CreditCard,
+  Lock
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Employee, ApprovalItem, LeaveType, SystemRole, getEffectiveSystemRole, Project } from '../types';
@@ -120,6 +121,12 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
 
     // 3. Superuser memegang hak override darurat
     if (currentRole === 'superuser') return true;
+
+    // 3b. Khusus Izin Akses Buka Slip Gaji: Wajib Otorisasi dari Divisi Finance
+    if (item.type === 'SLIP_ACCESS') {
+      const isFinance = currentRole === 'finance';
+      return isFinance;
+    }
 
     // 4. Cari proyek pengaju, PM proyek terkait, dan Admin Proyek
     const applicantProj = (projects || []).find(p => 
@@ -462,7 +469,8 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
   // - PM: Melihat pengajuan miliknya + pengajuan staf dari proyek yang dipimpinnya
   // - Staff: Melihat HANYA pengajuan miliknya sendiri
   const baseApprovals = React.useMemo(() => {
-    if (currentRole === 'superuser' || currentRole === 'admin' || isHrManager) {
+    const isFinance = currentRole === 'finance';
+    if (currentRole === 'superuser' || currentRole === 'admin' || isHrManager || isFinance) {
       return approvals;
     }
 
@@ -730,7 +738,8 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
             { id: 'LATE_JUSTIFICATION', label: 'Keterlambatan' },
             { id: 'OUT_OF_GEOFENCE', label: 'Presensi Luar Area' },
             { id: 'DINAS_LUAR', label: 'Dinas Luar Mendadak' },
-            { id: 'KASBON', label: 'Kasbon Pribadi' }
+            { id: 'KASBON', label: 'Kasbon Pribadi' },
+            { id: 'SLIP_ACCESS', label: 'Izin Buka Slip (10 Mnt)' }
           ].map(tab => (
             <button
               key={tab.id}
@@ -1026,6 +1035,13 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                               className="w-7 h-7 rounded-lg bg-purple-100 text-purple-800 border border-purple-200/90 flex items-center justify-center shadow-2xs hover:scale-110 transition-transform cursor-help"
                             >
                               <CreditCard className="w-3.5 h-3.5 text-purple-700" />
+                            </div>
+                          ) : item.type === 'SLIP_ACCESS' ? (
+                            <div
+                              title={`Tipe: Izin Buka Slip Gaji (10 Menit) • ${item.title}`}
+                              className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center justify-center shadow-2xs hover:scale-110 transition-transform cursor-help"
+                            >
+                              <Lock className="w-3.5 h-3.5 text-emerald-700" />
                             </div>
                           ) : (
                             <div
@@ -2171,6 +2187,29 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                     Rute Otorisasi: <b>{detailModalItem.targetApproverRole === 'PM' ? `PM (${detailModalItem.projectManagerName || 'Site'}) / HR Manager` : 'HR Manager Saja'}</b>
                   </span>
                 </div>
+              </div>
+            )}
+
+            {/* Detail Spesifik Izin Akses Buka Slip Gaji */}
+            {detailModalItem.type === 'SLIP_ACCESS' && (
+              <div className="p-4 rounded-2xl bg-emerald-50/80 border border-emerald-200 text-emerald-950 space-y-2">
+                <div className="flex items-center justify-between text-xs font-bold border-b border-emerald-200/60 pb-2">
+                  <span className="flex items-center gap-1.5 text-emerald-900 font-mono-code">
+                    <Lock className="w-4 h-4 text-emerald-600" />
+                    Permohonan Buka Slip Gaji: {detailModalItem.slipPeriod || 'Periode Terpilih'}
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded-md text-[10.5px] font-mono-code font-bold bg-emerald-100 text-emerald-800">
+                    Akses 10 Menit
+                  </span>
+                </div>
+                <p className="text-xs text-emerald-800">
+                  Setelah disetujui Finance, rincian slip gaji karyawan akan terbuka otomatis selama 10 menit dan terkunci kembali setelah waktu berakhir.
+                </p>
+                {detailModalItem.slipAccessExpiresAt && (
+                  <div className="text-xs font-mono-code pt-1 text-slate-700">
+                    Batas Waktu Akses: <b>{new Date(detailModalItem.slipAccessExpiresAt).toLocaleTimeString('id-ID')} WIB</b>
+                  </div>
+                )}
               </div>
             )}
 

@@ -1001,6 +1001,8 @@ export function App() {
 
     const isPmStage = Boolean(
       targetItem &&
+      targetItem.type !== 'SLIP_ACCESS' &&
+      targetItem.type !== 'KASBON' &&
       (targetItem.targetApproverRole === 'PM' || targetItem.stage === 'PM' || !targetItem.stage) &&
       !targetItem.pmApprovedBy &&
       (targetItem.projectManagerId || applicantProj?.projectManagerId || projectAdminIds.length > 0)
@@ -1159,6 +1161,22 @@ export function App() {
                 return a;
               })
             );
+          }
+
+          // If this is SLIP_ACCESS, calculate 10 minutes (600s) active window
+          if (item.type === 'SLIP_ACCESS') {
+            const expiryIso = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+            return {
+              ...item,
+              status: 'APPROVED',
+              stage: 'FINAL',
+              slipAccessExpiresAt: expiryIso,
+              financeApprovedBy: `${currentUser.name} (${currentUser.role})`,
+              financeApprovedAt: new Date().toISOString().replace('T', ' ').substring(0, 19),
+              reviewedBy: `${currentUser.name} (${currentUser.role})`,
+              reviewedAt: new Date().toISOString().replace('T', ' ').substring(0, 19),
+              reviewNote: reviewerNote || 'Disetujui oleh Finance (Akses Terbuka 10 Menit)'
+            };
           }
 
           return {
