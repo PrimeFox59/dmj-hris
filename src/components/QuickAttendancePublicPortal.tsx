@@ -12,7 +12,6 @@ import {
   X,
   ScanFace,
   FlipHorizontal,
-  Upload,
   Send,
   LogIn,
   LogOut,
@@ -73,19 +72,20 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
   const [pendingPhoto, setPendingPhoto] = useState<string | null>(null);
   const [pendingScore, setPendingScore] = useState<number>(0);
 
-  // Geolocation States (Async in background - never blocks face detection)
+  // Geolocation States: GPS WAJIB AKTIF (Kiosk menuntut koordinat riil perangkat)
   const [gpsLocation, setGpsLocation] = useState<{
     lat: number;
     lng: number;
     accuracy: number;
     address: string;
   }>({
-    lat: -7.293144,
-    lng: 112.775337,
-    accuracy: 15,
-    address: 'Jl. Klampis Anom No. 35 D-11, Sukolilo, Surabaya'
+    lat: 0,
+    lng: 0,
+    accuracy: 0,
+    address: ''
   });
   const [isGpsLocked, setIsGpsLocked] = useState<boolean>(false);
+  const [isGpsLoading, setIsGpsLoading] = useState<boolean>(true);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [notesInput, setNotesInput] = useState<string>('');
 
@@ -98,7 +98,6 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
   const streamRef = useRef<MediaStream | null>(null);
   const isEvaluatingRef = useRef<boolean>(false);
   const isAutoRecordingRef = useRef<boolean>(false);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const resetTimerRef = useRef<any>(null);
 
   // Audio Chime Helper
@@ -171,52 +170,96 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
     loadDirectory();
   }, []);
 
-  // 2. Geolocation Listener (Continuous background sync)
-  useEffect(() => {
+  // Geolocation Handler: GPS Wajib Aktif (Mandatory Real Device Coordinates)
+  const fetchKioskGps = () => {
     if (!navigator.geolocation) {
-      setGpsError('Geolocation tidak didukung pada browser ini');
-      setIsGpsLocked(true);
+      setGpsError('Browser atau perangkat ini tidak mendukung akses GPS Geolocation.');
+      setIsGpsLocked(false);
+      setIsGpsLoading(false);
       return;
     }
 
-    // Fresh GPS query on mount (tanpa cache lama)
+    setIsGpsLoading(true);
+    setGpsError(null);
+
     navigator.geolocation.getCurrentPosition(
       pos => {
+        const lat = Number(pos.coords.latitude.toFixed(6));
+        const lng = Number(pos.coords.longitude.toFixed(6));
+        const accuracy = Math.round(pos.coords.accuracy) || 5;
+
         setGpsLocation({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          accuracy: Math.round(pos.coords.accuracy),
-          address: 'Area Terdeteksi GPS Perangkat'
+          lat,
+          lng,
+          accuracy,
+          address: 'Lokasi Terdeteksi GPS Perangkat'
         });
         setIsGpsLocked(true);
+        setIsGpsLoading(false);
         setGpsError(null);
       },
       err => {
-        console.warn('[Kiosk GPS Initial]', err.message);
+        setIsGpsLocked(false);
+        setIsGpsLoading(false);
+        let msg = 'GPS perangkat belum aktif atau izin lokasi ditolak.';
+        if (err.code === 1) {
+          msg = 'Izin lokasi GPS ditolak oleh browser. Wajib izinkan akses Lokasi (Allow Location) agar dapat presensi kiosk.';
+        } else if (err.code === 2) {
+          msg = 'Sinyal GPS tidak aktif. Pastikan fitur Lokasi (GPS) pada smartphone/tablet sudah diaktifkan (ON).';
+        } else if (err.code === 3) {
+          msg = 'Waktu pencarian GPS habis (Timeout). Pastikan GPS aktif dan berada di area terbuka.';
+        }
+        setGpsError(msg);
       },
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
+  };
 
-    const watchId = navigator.geolocation.watchPosition(
-      pos => {
-        setGpsLocation({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          accuracy: Math.round(pos.coords.accuracy),
-          address: 'Area Terdeteksi GPS Perangkat'
-        });
-        setIsGpsLocked(true);
-        setGpsError(null);
-      },
-      err => {
-        console.warn('[Kiosk GPS]', err.message);
-        setGpsError('Mencari sinyal GPS...');
-        setIsGpsLocked(true);
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 15000 }
-    );
+  // 2. Geolocation Listener (Continuous background sync)
+  useEffect(() => {
+    fetchKioskGps();
 
-    return () => navigator.geolocation.clearWatch(watchId);
+    if (!navigator.geolocation) return;
+
+    let watchId: number | null = null;
+    try {
+      watchId = navigator.geolocation.watchPosition(
+        pos => {
+          const lat = Number(pos.coords.latitude.toFixed(6));
+          const lng = Number(pos.coords.longitude.toFixed(6));
+          const accuracy = Math.round(pos.coords.accuracy) || 5;
+
+          setGpsLocation({
+            lat,
+            lng,
+            accuracy,
+            address: 'Lokasi Terdeteksi GPS Perangkat'
+          });
+          setIsGpsLocked(true);
+          setIsGpsLoading(false);
+          setGpsError(null);
+        },
+        err => {
+          console.warn('[Kiosk GPS Watch Error]', err.message);
+          if (!isGpsLocked) {
+            setIsGpsLocked(false);
+            let msg = 'Menunggu sinyal GPS perangkat...';
+            if (err.code === 1) msg = 'Izin lokasi GPS ditolak browser. Izinkan akses Lokasi agar dapat presensi.';
+            else if (err.code === 2) msg = 'Sinyal GPS perangkat mati. Aktifkan GPS pada perangkat.';
+            setGpsError(msg);
+          }
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
+      );
+    } catch (e) {
+      console.warn('[Kiosk GPS Watch Exception]', e);
+    }
+
+    return () => {
+      if (watchId !== null && navigator.geolocation) {
+        navigator.geolocation.clearWatch(watchId);
+      }
+    };
   }, []);
 
   // 3. Camera lifecycle controls
@@ -317,15 +360,16 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
   }, [detectedEmployee, pendingEmployee, projects, officeGeofence]);
 
   const currentDistanceMeters = useMemo(() => {
+    if (!isGpsLocked || !gpsLocation.lat || !gpsLocation.lng) return 0;
     return calculateDistanceMeters(
       gpsLocation.lat,
       gpsLocation.lng,
       targetGeofence.lat,
       targetGeofence.lng
     );
-  }, [gpsLocation, targetGeofence]);
+  }, [gpsLocation, targetGeofence, isGpsLocked]);
 
-  const isInsideRadius = currentDistanceMeters <= (targetGeofence.radiusMeters || 500);
+  const isInsideRadius = isGpsLocked && currentDistanceMeters <= (targetGeofence.radiusMeters || 500);
 
   // Dynamic Shift Schedule Helper
   const activeSchedule = useMemo(() => {
@@ -505,7 +549,7 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
 
         if (resp.status === 'NO_FACE') {
           setIsFaceDetected(false);
-          setFaceFeedback('Posisikan wajah di dalam bingkai');
+          setFaceFeedback(!isGpsLocked ? '⚠️ Aktifkan GPS perangkat terlebih dahulu' : 'Posisikan wajah di dalam bingkai');
           return;
         }
 
@@ -521,6 +565,13 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
           setIsFaceDetected(true);
           setDetectedEmployee(emp);
           setDetectionScore(resp.score);
+
+          // WAJIB GPS AKTIF: Cegah auto-recording jika GPS belum terkunci dengan koordinat valid
+          if (!isGpsLocked || !gpsLocation.lat || !gpsLocation.lng) {
+            setFaceFeedback(`Teridentifikasi: ${emp.name} — ⚠️ Wajib Aktifkan GPS untuk Absen!`);
+            return;
+          }
+
           setFaceFeedback(`Teridentifikasi: ${emp.name} (${resp.score}%)`);
 
           // Execute immediate snapshot and lock
@@ -577,7 +628,7 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
       isSubscribed = false;
       clearInterval(interval);
     };
-  }, [kioskStep, cameraActive, capturedPhoto, submittedRecord, isSubmitting, employees, isInsideRadius, attendanceAction, facingMode, gpsLocation]);
+  }, [kioskStep, cameraActive, capturedPhoto, submittedRecord, isSubmitting, employees, isInsideRadius, attendanceAction, facingMode, gpsLocation, isGpsLocked]);
 
   // 5. Submit Attendance Record to SQLite Backend
   const executeAttendanceSubmit = async (
@@ -587,6 +638,10 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
     customNote: string = ''
   ) => {
     try {
+      if (!isGpsLocked || !gpsLocation.lat || !gpsLocation.lng) {
+        console.warn('[Kiosk Submit Blocked] GPS belum aktif atau terkunci.');
+        return;
+      }
       setIsSubmitting(true);
       const now = new Date();
       const dateStr = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
@@ -709,76 +764,6 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
     setCapturedPhoto(null);
     startCamera(facingMode);
     playTone(action === 'CHECK_IN' ? 523.25 : 659.25, 'sine', 0.12);
-  };
-
-  // Manual Shutter Button Handler
-  const handleManualShutter = () => {
-    if (!videoRef.current) return;
-    const emp = detectedEmployee || employees[0];
-    if (!emp) return;
-
-    setShutterFlash(true);
-    setTimeout(() => setShutterFlash(false), 200);
-
-    const watermarked = createWatermarkedPhoto(
-      videoRef.current,
-      videoRef.current.videoWidth || 640,
-      videoRef.current.videoHeight || 480,
-      facingMode === 'user',
-      emp,
-      detectionScore || 90,
-      gpsLocation,
-      isInsideRadius,
-      attendanceAction
-    );
-    setCapturedPhoto(watermarked);
-    stopCamera();
-
-    if (isInsideRadius) {
-      executeAttendanceSubmit(emp, watermarked, detectionScore || 90, 'Presensi Manual Kiosk Wajah');
-    } else {
-      setPendingEmployee(emp);
-      setPendingPhoto(watermarked);
-      setPendingScore(detectionScore || 90);
-      setKioskStep('OUTSIDE_RADIUS_NOTE');
-    }
-  };
-
-  // Native File Upload Handler
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const img = new Image();
-      img.onload = () => {
-        const emp = detectedEmployee || employees[0];
-        if (!emp) return;
-        const watermarked = createWatermarkedPhoto(
-          img,
-          img.width,
-          img.height,
-          false,
-          emp,
-          90,
-          gpsLocation,
-          isInsideRadius,
-          attendanceAction
-        );
-        setCapturedPhoto(watermarked);
-        if (isInsideRadius) {
-          executeAttendanceSubmit(emp, watermarked, 90, 'Presensi Upload Foto Kiosk');
-        } else {
-          setPendingEmployee(emp);
-          setPendingPhoto(watermarked);
-          setPendingScore(90);
-          setKioskStep('OUTSIDE_RADIUS_NOTE');
-        }
-      };
-      img.src = ev.target?.result as string;
-    };
-    reader.readAsDataURL(file);
-    e.target.value = '';
   };
 
   return (
@@ -928,14 +913,26 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
               {/* Geofence info indicator */}
               <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
                 <div className="flex items-center gap-1.5 truncate">
-                  <MapPin className={`w-4 h-4 shrink-0 ${isInsideRadius ? 'text-emerald-600' : 'text-amber-500'}`} />
-                  <span className="truncate">{targetGeofence.name}</span>
+                  <MapPin className={`w-4 h-4 shrink-0 ${!isGpsLocked ? 'text-rose-500 animate-pulse' : isInsideRadius ? 'text-emerald-600' : 'text-amber-500'}`} />
+                  <span className="truncate">{!isGpsLocked ? (isGpsLoading ? 'Mendeteksi sinyal GPS...' : 'GPS Perangkat Belum Terkunci') : targetGeofence.name}</span>
                 </div>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono-code font-bold shrink-0 ${
-                  isInsideRadius ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
-                }`}>
-                  {isInsideRadius ? 'Area Resmi' : 'Luar Radius'}
-                </span>
+                <div className="flex items-center gap-2 shrink-0">
+                  {!isGpsLocked && (
+                    <button
+                      type="button"
+                      onClick={fetchKioskGps}
+                      className="px-2 py-0.5 rounded-lg bg-rose-100 hover:bg-rose-200 text-rose-800 text-[10px] font-mono-code font-bold transition-all flex items-center gap-1 cursor-pointer"
+                    >
+                      <RefreshCw className={`w-2.5 h-2.5 ${isGpsLoading ? 'animate-spin' : ''}`} />
+                      <span>Aktifkan GPS</span>
+                    </button>
+                  )}
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono-code font-bold shrink-0 ${
+                    !isGpsLocked ? 'bg-rose-50 text-rose-700 border border-rose-200' : isInsideRadius ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                  }`}>
+                    {!isGpsLocked ? 'GPS Wajib Aktif' : isInsideRadius ? 'Area Resmi' : 'Luar Radius'}
+                  </span>
+                </div>
               </div>
             </div>
           )}
@@ -1047,7 +1044,7 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
                               VERIFIED
                             </span>
                             <span className="text-[9px] text-slate-400 mt-0.5">
-                              {isInsideRadius ? 'Menyimpan...' : 'Menyiapkan Catatan...'}
+                              {!isGpsLocked ? 'Menunggu GPS...' : isInsideRadius ? 'Menyimpan...' : 'Menyiapkan Catatan...'}
                             </span>
                           </div>
                         </div>
@@ -1062,8 +1059,12 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
                       {/* Live Overlay GPS Badge */}
                       <div className="absolute top-3 left-3 pointer-events-none z-10">
                         <div className="px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur-md border border-white/10 text-[10px] font-mono-code text-white flex items-center gap-1.5">
-                          <span className={`w-2 h-2 rounded-full ${isInsideRadius ? 'bg-emerald-500' : 'bg-amber-500'} animate-pulse`} />
-                          <span>GPS: {gpsLocation.lat.toFixed(4)}, {gpsLocation.lng.toFixed(4)} ({currentDistanceMeters}m)</span>
+                          <span className={`w-2 h-2 rounded-full ${!isGpsLocked ? 'bg-rose-500 animate-ping' : isInsideRadius ? 'bg-emerald-500' : 'bg-amber-500'} animate-pulse`} />
+                          <span>
+                            {!isGpsLocked 
+                              ? (isGpsLoading ? 'Mencari Sinyal GPS...' : 'GPS Wajib Aktif') 
+                              : `GPS: ${gpsLocation.lat.toFixed(4)}, ${gpsLocation.lng.toFixed(4)} (${(currentDistanceMeters / 1000).toFixed(1)} km)`}
+                          </span>
                         </div>
                       </div>
 
@@ -1082,61 +1083,64 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
                   )}
                 </div>
 
-                {/* Shutter / Retake Controls (Exact Match) */}
-                <div className="flex items-center justify-between gap-2 px-1">
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleFileUpload}
-                    accept="image/*"
-                    className="hidden"
-                  />
-
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                    title="Upload foto dari galeri"
-                  >
-                    <Upload className="w-3.5 h-3.5" />
-                    <span className="text-[11px]">Upload</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleManualShutter}
-                    className="flex-1 py-2.5 px-4 rounded-xl bg-[#FF6B00] hover:bg-[#e56000] text-white text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-md shadow-orange-500/20 cursor-pointer active:scale-98"
-                  >
-                    <Camera className="w-4 h-4" />
-                    <span>Jepret Foto Sekarang</span>
-                  </button>
-                </div>
+                {/* Warning GPS Belum Aktif (Kiosk Wajib GPS) */}
+                {!isGpsLocked && (
+                  <div className="p-3 rounded-2xl bg-rose-50 border border-rose-300 text-rose-800 text-xs flex items-center justify-between gap-2 shadow-2xs animate-in fade-in">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                      <span className="text-[11px] leading-relaxed font-semibold">
+                        {gpsError || 'GPS perangkat belum aktif / izin lokasi belum diberikan. Wajib mengaktifkan GPS untuk presensi kiosk.'}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={fetchKioskGps}
+                      className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10px] shrink-0 transition-colors shadow-xs flex items-center gap-1 cursor-pointer"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isGpsLoading ? 'animate-spin' : ''}`} />
+                      <span>Aktifkan GPS</span>
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Geolocation Status Row (Exact Match) */}
               <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200/90 flex items-center justify-between gap-3 text-xs">
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <MapPin className={`w-5 h-5 shrink-0 ${isInsideRadius ? 'text-emerald-600' : 'text-amber-500'}`} />
+                  <MapPin className={`w-5 h-5 shrink-0 ${!isGpsLocked ? 'text-rose-500 animate-pulse' : isInsideRadius ? 'text-emerald-600' : 'text-amber-500'}`} />
                   <div className="truncate">
                     <div className="flex items-center gap-1.5">
                       <span className="font-bold text-slate-800 text-xs truncate">
-                        {targetGeofence.name}
+                        {!isGpsLocked ? 'Menunggu GPS Perangkat' : targetGeofence.name}
                       </span>
                     </div>
                     <div className="text-[10px] text-slate-500 font-mono-code truncate mt-0.5">
-                      Lat {gpsLocation.lat.toFixed(4)}, Lng {gpsLocation.lng.toFixed(4)} • Akurasi ±{gpsLocation.accuracy}m
+                      {!isGpsLocked
+                        ? (gpsError || 'Memeriksa akses GPS & izin lokasi browser...')
+                        : `Lat ${gpsLocation.lat.toFixed(4)}, Lng ${gpsLocation.lng.toFixed(4)} • Akurasi ±${gpsLocation.accuracy}m`}
                     </div>
                   </div>
                 </div>
 
                 <div className="shrink-0 text-right">
-                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-mono-code font-bold border ${
-                    isInsideRadius
-                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                      : 'bg-amber-50 text-amber-700 border-amber-200'
-                  }`}>
-                    {(currentDistanceMeters / 1000).toFixed(1)} km • {isInsideRadius ? 'Masuk Radius (Valid)' : 'Luar Area'}
-                  </span>
+                  {!isGpsLocked ? (
+                    <button
+                      type="button"
+                      onClick={fetchKioskGps}
+                      className="px-2.5 py-1 rounded-xl bg-rose-100 hover:bg-rose-200 text-rose-700 border border-rose-300 font-mono-code font-bold text-[10px] flex items-center gap-1 cursor-pointer transition-all"
+                    >
+                      <RefreshCw className={`w-2.5 h-2.5 ${isGpsLoading ? 'animate-spin' : ''}`} />
+                      <span>{isGpsLoading ? 'Mencari GPS...' : 'Coba Lagi'}</span>
+                    </button>
+                  ) : (
+                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-mono-code font-bold border ${
+                      isInsideRadius
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : 'bg-amber-50 text-amber-700 border-amber-200'
+                    }`}>
+                      {(currentDistanceMeters / 1000).toFixed(1)} km • {isInsideRadius ? 'Masuk Radius (Valid)' : 'Luar Area'}
+                    </span>
+                  )}
                 </div>
               </div>
             </>
