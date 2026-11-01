@@ -385,6 +385,7 @@ export interface Project {
   projectManagerName?: string;
   assignedEmployeeIds?: string[];
   customRules?: ProjectCustomRules;
+  isHeadOffice?: boolean;
 }
 
 export interface ProjectPayrollAllocation {

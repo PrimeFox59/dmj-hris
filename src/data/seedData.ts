@@ -8152,6 +8152,7 @@ export const seedProjects = [
     "totalEstimatedHours": 45000,
     "actualHoursSpent": 0,
     "hourlyRateMultiplier": 1,
+    "isHeadOffice": true,
     "description": "Proyek KANTOR PUSAT & OPERASIONAL MANAJEMEN - Penempatan SURABAYA. Total alokasi tim: 25 personel.",
     "assignedEmployeeIds": [
       "EMP-090",

@@ -595,6 +595,12 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
             const canViewFinancialsThisProject = canViewFinancials || isPmOfThisProject;
             const canManageThisProject = canManage || isPmOfThisProject;
             const pmEmployee = proj.projectManagerId ? employees.find(e => e.id === proj.projectManagerId) : null;
+            const isHeadOfficeProject = Boolean(
+              proj.isHeadOffice || 
+              proj.code === 'PRJ-001' || 
+              proj.id === 'PRJ-001' || 
+              proj.name.toUpperCase().includes('KANTOR PUSAT')
+            );
 
             return (
               <div
@@ -605,7 +611,9 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
                   }
                 }}
                 className={`rounded-3xl p-6 bg-white border shadow-xs hover:shadow-lg transition-all duration-200 flex flex-col justify-between group cursor-pointer ${
-                  isPmOfThisProject 
+                  isHeadOfficeProject
+                    ? 'border-indigo-300 ring-2 ring-indigo-100 hover:border-indigo-400 bg-gradient-to-b from-indigo-50/20 via-white to-white'
+                    : isPmOfThisProject 
                     ? 'border-amber-300/90 ring-1 ring-amber-200 hover:border-amber-400' 
                     : 'border-slate-200/80 hover:border-[#FF6B00]/50'
                 }`}
@@ -629,6 +637,12 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
                       >
                         {proj.status === 'ACTIVE' ? 'BERJALAN / AKTIF' : proj.status === 'PLANNING' ? 'PERENCANAAN' : 'SELESAI'}
                       </span>
+                      {isHeadOfficeProject && (
+                        <span className="px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 text-[11px] font-black flex items-center gap-1 font-mono-code shadow-2xs">
+                          <Building2 className="w-3 h-3 text-indigo-600" />
+                          <span>PUSAT OFFICE</span>
+                        </span>
+                      )}
                       {isPmOfThisProject && (
                         <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 text-[10.5px] font-black flex items-center gap-1 font-mono-code">
                           <Crown className="w-3 h-3 text-amber-700" />
@@ -772,11 +786,15 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
                       )}
                     </div>
 
-                    {/* Geofence Site Proyek */}
+                    {/* Geofence Site Proyek / Pusat Office */}
                     {hasGeofence && (
-                      <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-semibold bg-blue-50 text-blue-900 border border-blue-200/80">
-                        <MapPin className="w-3.5 h-3.5 text-blue-600" />
-                        <span>Site Geofence Aktif</span>
+                      <div className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-semibold ${
+                        isHeadOfficeProject
+                          ? 'bg-indigo-50 text-indigo-900 border border-indigo-200/80'
+                          : 'bg-blue-50 text-blue-900 border border-blue-200/80'
+                      }`}>
+                        <MapPin className={`w-3.5 h-3.5 ${isHeadOfficeProject ? 'text-indigo-600' : 'text-blue-600'}`} />
+                        <span>{isHeadOfficeProject ? 'Geofence Pusat Office Aktif' : 'Site Geofence Aktif'}</span>
                       </div>
                     )}
                   </div>
@@ -1012,6 +1030,37 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
                       placeholder="Contoh: Instalasi Mekanikal Smelter KIT Gresik"
                       className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm focus:ring-2 focus:ring-orange-500"
                     />
+                  </div>
+
+                  {/* Head Office / Pusat Office Designation Toggle */}
+                  <div className="p-4 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-800/40 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 flex items-center justify-center font-bold shrink-0">
+                        <Building2 className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-xs font-black text-slate-900 dark:text-white flex items-center gap-1.5 flex-wrap">
+                          <span>Tetapkan sebagai Pusat Office (Head Office)</span>
+                          {(editingProject.isHeadOffice || editingProject.code === 'PRJ-001') && (
+                            <span className="px-2 py-0.5 rounded-full bg-indigo-600 text-white text-[9px] font-bold font-mono-code">
+                              PUSAT OFFICE AKTIF
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                          Menjadikan entitas proyek ini sebagai basis kantor pusat, koordinat geofence kantor utama, dan pusat manajemen operasional perusahaan.
+                        </p>
+                      </div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(editingProject.isHeadOffice || editingProject.code === 'PRJ-001')}
+                        onChange={e => setEditingProject({ ...editingProject, isHeadOffice: e.target.checked })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-slate-200 dark:bg-slate-700 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                    </label>
                   </div>
 
                   {/* Project Manager / Site Leader Selector */}

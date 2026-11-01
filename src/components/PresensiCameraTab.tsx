@@ -473,7 +473,8 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
   // Nama lokasi resmi penugasan karyawan
   const activeLocationTitle = useMemo(() => {
     if (activeProject) {
-      return `Site ${activeProject.name}`;
+      const isHeadOffice = Boolean(activeProject.isHeadOffice || activeProject.code === 'PRJ-001' || activeProject.name.toUpperCase().includes('KANTOR PUSAT'));
+      return isHeadOffice ? activeProject.name : `Site ${activeProject.name}`;
     }
     if (isInOfficeGeofence) {
       return salaryRules?.officeGeofence?.name || 'Kantor Pusat & Operasional';
