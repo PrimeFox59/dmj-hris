@@ -1,4 +1,4 @@
-import { Employee, Project, PayrollRecord, SalaryRuleConfig, AttendanceRecord, ProjectPayrollAllocation, getEmployeeAssignedProjects } from '../types';
+import { Employee, Project, PayrollRecord, SalaryRuleConfig, AttendanceRecord, ProjectPayrollAllocation, getEmployeeAssignedProjects, KasbonRecord } from '../types';
 
 export function formatIDR(amount: number, isMasked: boolean = false): string {
   if (isMasked) {
@@ -21,6 +21,8 @@ export function formatSalaryDisplay(amount: number, isVisible: boolean = false):
 export interface EmployeeAuditOverride {
   customLatePenaltyAmount?: number;
   customDailyRate?: number;
+  customKasbonDeduction?: number;
+  customKasbonNote?: string;
   presentDays?: number;
   leaveDays?: number;
   unpaidLeaveDays?: number;
@@ -84,7 +86,8 @@ export function calculateEmployeePayroll(
   startDate?: string,
   endDate?: string,
   customWorkingDays?: number,
-  auditOverride?: EmployeeAuditOverride
+  auditOverride?: EmployeeAuditOverride,
+  activeKasbonRecords?: KasbonRecord[]
 ): PayrollRecord {
   // Filter attendance records by employee and optional date range [startDate, endDate]
   const empAttendances = attendances.filter(a => {
@@ -228,7 +231,59 @@ export function calculateEmployeePayroll(
   const taxableAnnual = Math.max(0, annualGross - ptkp - (bpjsKetenagakerjaan * 12));
   const pph21 = Math.round((taxableAnnual * 0.05) / 12);
 
-  const totalDeductions = unapprovedLateDeduction + unpaidLeaveDeduction + bpjsKetenagakerjaan + bpjsKesehatan + pph21;
+  // Kasbon Pribadi & Cicilan Pinjaman Karyawan
+  let kasbonDeduction = 0;
+  let kasbonDeductionNote = '';
+  let kasbonRemainingBalance = 0;
+  let kasbonRecordId = '';
+
+  if (auditOverride?.customKasbonDeduction !== undefined) {
+    kasbonDeduction = auditOverride.customKasbonDeduction;
+    kasbonDeductionNote = auditOverride.customKasbonNote || `Potongan Kasbon Disesuaikan Manual: Rp ${kasbonDeduction.toLocaleString('id-ID')}`;
+  } else if (Array.isArray(activeKasbonRecords) && activeKasbonRecords.length > 0) {
+    const empKasbons = activeKasbonRecords.filter(k =>
+      (k.employeeId === employee.id || (employee.nik && k.employeeNik === employee.nik)) &&
+      (k.status === 'APPROVED' || k.status === 'DISBURSED' || (k as any).status === 'ACTIVE') &&
+      k.remainingBalance > 0
+    );
+
+    empKasbons.forEach(k => {
+      // Periksa apakah jadwal cicilan kasbon ini jatuh tempo pada periode ini
+      const matchingSchedule = Array.isArray(k.installments)
+        ? k.installments.find(inst => inst.period.toLowerCase().trim() === periodStr.toLowerCase().trim())
+        : undefined;
+
+      if (matchingSchedule && !matchingSchedule.isDeducted) {
+        const dueAmount = Math.min(k.remainingBalance, matchingSchedule.amount);
+        kasbonDeduction += dueAmount;
+        kasbonRecordId = k.id;
+        const remainingAfter = Math.max(0, k.remainingBalance - dueAmount);
+        kasbonRemainingBalance += remainingAfter;
+
+        if (k.repaymentType === 'TOTAL_BULANAN') {
+          kasbonDeductionNote = `Pelunasan Kasbon Sekaligus (Lunas)`;
+        } else {
+          kasbonDeductionNote = `Cicilan Kasbon Ke-${matchingSchedule.installmentNumber} dari ${k.totalInstallments} Bulan (Sisa Pokok: Rp ${remainingAfter.toLocaleString('id-ID')})`;
+        }
+      } else if (!matchingSchedule && k.startPeriod && k.startPeriod.toLowerCase().trim() === periodStr.toLowerCase().trim()) {
+        const dueAmount = k.repaymentType === 'TOTAL_BULANAN'
+          ? Math.min(k.remainingBalance, k.amount)
+          : Math.min(k.remainingBalance, k.monthlyDeduction);
+        kasbonDeduction += dueAmount;
+        kasbonRecordId = k.id;
+        const remainingAfter = Math.max(0, k.remainingBalance - dueAmount);
+        kasbonRemainingBalance += remainingAfter;
+
+        if (k.repaymentType === 'TOTAL_BULANAN') {
+          kasbonDeductionNote = `Pelunasan Kasbon Sekaligus (Lunas)`;
+        } else {
+          kasbonDeductionNote = `Cicilan Kasbon Ke-1 dari ${k.totalInstallments} Bulan (Sisa Pokok: Rp ${remainingAfter.toLocaleString('id-ID')})`;
+        }
+      }
+    });
+  }
+
+  const totalDeductions = unapprovedLateDeduction + unpaidLeaveDeduction + bpjsKetenagakerjaan + bpjsKesehatan + pph21 + kasbonDeduction;
   const netSalary = Math.max(0, grossSalary - totalDeductions);
 
   // Proportional Multi-Project Payroll Allocation
@@ -314,6 +369,10 @@ export function calculateEmployeePayroll(
     bpjsKetenagakerjaan,
     bpjsKesehatan,
     pph21,
+    kasbonDeduction,
+    kasbonDeductionNote,
+    kasbonRemainingBalance,
+    kasbonRecordId,
     totalDeductions,
     netSalary,
     projectAllocations,

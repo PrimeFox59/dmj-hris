@@ -34,7 +34,7 @@ import {
   Unlock,
   FileText
 } from 'lucide-react';
-import { Employee, PayrollRecord, Project, SalaryRuleConfig, AttendanceRecord, SystemRole, getEffectiveSystemRole, AnnualWorkCalendarConfig, WorkPeriodItem, getEmployeeAssignedProjects } from '../types';
+import { Employee, PayrollRecord, Project, SalaryRuleConfig, AttendanceRecord, SystemRole, getEffectiveSystemRole, AnnualWorkCalendarConfig, WorkPeriodItem, getEmployeeAssignedProjects, KasbonRecord, KasbonRepaymentType, KasbonStatus, KasbonInstallmentSchedule, ApprovalItem } from '../types';
 import { api } from '../services/api';
 import { rtcService } from '../services/rtcService';
 import { formatSalaryDisplay, calculateEmployeePayroll, EmployeeAuditOverride, isEmployeeInOffice } from '../utils/payrollCalculator';
@@ -51,6 +51,10 @@ interface PayrollTabProps {
   onSelectProjectId?: (projectId: string) => void;
   onUpdateEmployee?: (emp: Employee) => void;
   onUpdateAttendance?: (record: AttendanceRecord) => void;
+  approvals?: ApprovalItem[];
+  onSubmitApproval?: (item: ApprovalItem) => void;
+  onUpdateApproval?: (id: string, reviewerNote?: string) => void;
+  onRejectApproval?: (id: string, reviewerNote?: string) => void;
 }
 
 export const PayrollTab: React.FC<PayrollTabProps> = ({
@@ -63,7 +67,11 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
   selectedProjectId = 'ALL',
   onSelectProjectId,
   onUpdateEmployee,
-  onUpdateAttendance
+  onUpdateAttendance,
+  approvals = [],
+  onSubmitApproval,
+  onUpdateApproval,
+  onRejectApproval
 }) => {
   const currentRole: SystemRole = getEffectiveSystemRole(currentUser);
   const isSuperuser = currentRole === 'superuser';
@@ -85,6 +93,100 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
   const [activeSubView, setActiveSubView] = useState<'REKAP_GAJI' | 'ALOKASI_PROYEK' | 'PROYEKSI_EAC'>('REKAP_GAJI');
   const [searchQuery, setSearchQuery] = useState('');
   const [validationFilter, setValidationFilter] = useState<'ALL' | 'PENDING' | 'VALIDATED'>('ALL');
+
+  // KASBON PRIBADI & CICILAN STATE (Synced with SQLite Approvals + SSOT)
+  const [localKasbonRecords, setLocalKasbonRecords] = useState<KasbonRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem('prime_kasbon_records');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return [
+      {
+        id: 'KSB-202610-001',
+        employeeId: 'EMP-003',
+        employeeName: 'Ahmad Fauzi',
+        employeeNik: '3578012304900001',
+        department: 'Operasional Lapangan',
+        position: 'Site Coordinator',
+        projectId: 'PRJ-002',
+        projectCode: 'PRJ-002',
+        projectName: 'Proyek Smelter Manyar',
+        amount: 3000000,
+        reason: 'Keperluan renovasi atap rumah tinggal keluarga di desa',
+        repaymentType: 'CICILAN',
+        totalInstallments: 3,
+        monthlyDeduction: 1000000,
+        startPeriod: 'Periode Oktober 2026',
+        disbursementBankName: 'BCA',
+        disbursementAccountNumber: '8220194812',
+        disbursementAccountHolder: 'Ahmad Fauzi',
+        status: 'DISBURSED',
+        submittedAt: '2026-09-25T08:00:00.000Z',
+        hrApprovedBy: 'Wahyuningsih (HR Manager)',
+        hrApprovedAt: '2026-09-26T10:00:00.000Z',
+        disbursedBy: 'Finance DMJ',
+        disbursedAt: '2026-09-27T09:00:00.000Z',
+        totalPaid: 1000000,
+        remainingBalance: 2000000,
+        installments: [
+          { installmentNumber: 1, period: 'Periode Oktober 2026', amount: 1000000, isDeducted: true, deductedAt: '2026-10-25' },
+          { installmentNumber: 2, period: 'Periode November 2026', amount: 1000000, isDeducted: false },
+          { installmentNumber: 3, period: 'Periode Desember 2026', amount: 1000000, isDeducted: false }
+        ],
+        notes: 'Disetujui PM & HR Manager'
+      }
+    ];
+  });
+
+  // Merge local state with any KASBON approvals
+  const allKasbonRecords = useMemo(() => {
+    const map = new Map<string, KasbonRecord>();
+    localKasbonRecords.forEach(k => map.set(k.id, k));
+
+    approvals.forEach(a => {
+      if (a.type === 'KASBON' && a.kasbonData) {
+        const k = a.kasbonData;
+        let syncedStatus: KasbonStatus = k.status;
+        if (a.status === 'APPROVED') syncedStatus = 'DISBURSED';
+        if (a.status === 'REJECTED') syncedStatus = 'REJECTED';
+
+        map.set(k.id, {
+          ...k,
+          status: syncedStatus,
+          hrReviewNote: a.reviewNote || k.hrReviewNote
+        });
+      }
+    });
+
+    return Array.from(map.values()).sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
+  }, [localKasbonRecords, approvals]);
+
+  const saveKasbonList = useCallback((newList: KasbonRecord[]) => {
+    setLocalKasbonRecords(newList);
+    try {
+      localStorage.setItem('prime_kasbon_records', JSON.stringify(newList));
+    } catch (e) {}
+  }, []);
+
+  const activeKasbonRecords = useMemo(() => {
+    return allKasbonRecords.filter(k => k.status === 'APPROVED' || k.status === 'DISBURSED' || k.status === 'COMPLETED');
+  }, [allKasbonRecords]);
+
+  // Kasbon UI state
+  const [isKasbonModalOpen, setIsKasbonModalOpen] = useState<boolean>(false);
+  const [selectedKasbonDetail, setSelectedKasbonDetail] = useState<KasbonRecord | null>(null);
+  const [kasbonFilterStatus, setKasbonFilterStatus] = useState<string>('ALL');
+  const [kasbonEmpId, setKasbonEmpId] = useState<string>(currentUser?.id || employees[0]?.id || '');
+  const [kasbonAmount, setKasbonAmount] = useState<number>(1500000);
+  const [kasbonReason, setKasbonReason] = useState<string>('');
+  const [kasbonRepaymentType, setKasbonRepaymentType] = useState<KasbonRepaymentType>('CICILAN');
+  const [kasbonInstallments, setKasbonInstallments] = useState<number>(3);
+  const [kasbonStartPeriod, setKasbonStartPeriod] = useState<string>(selectedPeriod);
+  const [kasbonBankName, setKasbonBankName] = useState<string>('BCA');
+  const [kasbonAccountNumber, setKasbonAccountNumber] = useState<string>('');
+  const [kasbonAccountHolder, setKasbonAccountHolder] = useState<string>('');
+  const [kasbonSuccessMsg, setKasbonSuccessMsg] = useState<string | null>(null);
+  const [kasbonSearchQuery, setKasbonSearchQuery] = useState<string>('');
 
   // =========================================================================
   // RANGE DATE OF WORKING DAY & CUTOFF STATE

@@ -330,9 +330,56 @@ export interface AttendanceRecord {
 
 export type LeaveType = 'CUTI_TAHUNAN' | 'CUTI_ROSTER_NON_LOKAL' | 'CUTI_SAKIT' | 'CUTI_MELAHIRKAN' | 'CUTI_MENIKAH' | 'IZIN_KEPERLUAN_PRIBADI' | 'IZIN_DUKA';
 
+export type KasbonRepaymentType = 'TOTAL_BULANAN' | 'CICILAN';
+export type KasbonStatus = 'PENDING' | 'APPROVED' | 'DISBURSED' | 'REJECTED' | 'COMPLETED';
+
+export interface KasbonInstallmentSchedule {
+  installmentNumber: number;
+  period: string; // e.g. "Oktober 2026"
+  amount: number;
+  isDeducted: boolean;
+  deductedAt?: string;
+  payrollRecordId?: string;
+}
+
+export interface KasbonRecord {
+  id: string; // e.g. "KSB-202611-001"
+  employeeId: string;
+  employeeName: string;
+  employeeNik: string;
+  department: string;
+  position: string;
+  projectId?: string;
+  projectCode?: string;
+  projectName?: string;
+  amount: number;
+  reason: string;
+  repaymentType: KasbonRepaymentType; // 'TOTAL_BULANAN' (Lunas Sekaligus) | 'CICILAN'
+  totalInstallments: number; // 1 jika TOTAL_BULANAN, atau 2, 3, 6, 10, 12 jika CICILAN
+  monthlyDeduction: number;
+  startPeriod: string; // e.g. "Oktober 2026"
+  disbursementBankName?: string;
+  disbursementAccountNumber?: string;
+  disbursementAccountHolder?: string;
+  status: KasbonStatus;
+  submittedAt: string;
+  pmApprovedBy?: string;
+  pmApprovedAt?: string;
+  pmReviewNote?: string;
+  hrApprovedBy?: string;
+  hrApprovedAt?: string;
+  hrReviewNote?: string;
+  disbursedBy?: string;
+  disbursedAt?: string;
+  totalPaid: number;
+  remainingBalance: number;
+  installments: KasbonInstallmentSchedule[];
+  notes?: string;
+}
+
 export interface ApprovalItem {
   id: string;
-  type: 'LEAVE' | 'PERMIT' | 'LATE_JUSTIFICATION' | 'DINAS_LUAR' | 'ATTENDANCE_CORRECTION' | 'OUT_OF_GEOFENCE';
+  type: 'LEAVE' | 'PERMIT' | 'LATE_JUSTIFICATION' | 'DINAS_LUAR' | 'ATTENDANCE_CORRECTION' | 'OUT_OF_GEOFENCE' | 'KASBON';
   employeeId: string;
   employeeName: string;
   employeeNik: string;
@@ -380,6 +427,7 @@ export interface ApprovalItem {
   hrApprovedBy?: string;
   hrApprovedAt?: string;
   hrReviewNote?: string;
+  kasbonData?: KasbonRecord;
 }
 
 export interface ProjectWorkSchedule {
@@ -507,6 +555,10 @@ export interface PayrollRecord {
   bpjsKetenagakerjaan: number;
   bpjsKesehatan: number;
   pph21: number;
+  kasbonDeduction?: number;
+  kasbonDeductionNote?: string;
+  kasbonRemainingBalance?: number;
+  kasbonRecordId?: string;
   totalDeductions: number;
   netSalary: number;
   projectAllocations: ProjectPayrollAllocation[];

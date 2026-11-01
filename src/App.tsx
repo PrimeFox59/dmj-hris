@@ -1691,6 +1691,10 @@ export function App() {
             onSelectProjectId={setSelectedProjectId}
             onUpdateEmployee={handleUpdateEmployee}
             onUpdateAttendance={handleUpdateAttendance}
+            approvals={approvals}
+            onSubmitApproval={handleSubmitNewLeaveRequest}
+            onUpdateApproval={handleApprove}
+            onRejectApproval={handleReject}
           />
         )}
 

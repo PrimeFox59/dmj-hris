@@ -32,7 +32,8 @@ import {
   ExternalLink,
   HardHat,
   Shield,
-  ShieldCheck
+  ShieldCheck,
+  CreditCard
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Employee, ApprovalItem, LeaveType, SystemRole, getEffectiveSystemRole, Project } from '../types';
@@ -728,7 +729,8 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
             { id: 'ATTENDANCE_CORRECTION', label: 'Koreksi Absensi Mandiri' },
             { id: 'LATE_JUSTIFICATION', label: 'Keterlambatan' },
             { id: 'OUT_OF_GEOFENCE', label: 'Presensi Luar Area' },
-            { id: 'DINAS_LUAR', label: 'Dinas Luar Mendadak' }
+            { id: 'DINAS_LUAR', label: 'Dinas Luar Mendadak' },
+            { id: 'KASBON', label: 'Kasbon Pribadi' }
           ].map(tab => (
             <button
               key={tab.id}
@@ -1018,6 +1020,13 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                             >
                               <ShieldCheck className="w-3.5 h-3.5 text-teal-700" />
                             </div>
+                          ) : item.type === 'KASBON' ? (
+                            <div
+                              title={`Tipe: Pengajuan Kasbon Pribadi • ${item.title}`}
+                              className="w-7 h-7 rounded-lg bg-purple-100 text-purple-800 border border-purple-200/90 flex items-center justify-center shadow-2xs hover:scale-110 transition-transform cursor-help"
+                            >
+                              <CreditCard className="w-3.5 h-3.5 text-purple-700" />
+                            </div>
                           ) : (
                             <div
                               title={`Tipe: ${item.type}`}
@@ -1076,6 +1085,12 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                           {item.type === 'ATTENDANCE_CORRECTION' && (
                             <div className="text-[10px] font-mono-code text-teal-800 bg-teal-50 px-1.5 py-0.5 rounded truncate max-w-[220px] border border-teal-200" title={`Target: ${item.targetCheckInTime || '-'} s/d ${item.targetCheckOutTime || '-'}`}>
                               Target: <b>{item.targetCheckInTime || '-'}</b> s/d <b>{item.targetCheckOutTime || '-'}</b>
+                            </div>
+                          )}
+
+                          {item.type === 'KASBON' && item.kasbonData && (
+                            <div className="text-[10px] font-mono-code text-purple-900 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200" title={`Nominal Kasbon: Rp ${item.kasbonData.amount.toLocaleString('id-ID')} (${item.kasbonData.repaymentType === 'TOTAL_BULANAN' ? 'Lunas Sekaligus' : `Cicilan ${item.kasbonData.totalInstallments} Bulan`})`}>
+                              Nominal: <b>Rp {item.kasbonData.amount.toLocaleString('id-ID')}</b> • {item.kasbonData.repaymentType === 'TOTAL_BULANAN' ? 'Lunas 1 Bln' : `Cicilan ${item.kasbonData.totalInstallments}x (Rp ${item.kasbonData.monthlyDeduction.toLocaleString('id-ID')}/bln)`}
                             </div>
                           )}
 
