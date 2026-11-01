@@ -1,4 +1,4 @@
-import { Employee, Project, PayrollRecord, SalaryRuleConfig, AttendanceRecord, ProjectPayrollAllocation } from '../types';
+import { Employee, Project, PayrollRecord, SalaryRuleConfig, AttendanceRecord, ProjectPayrollAllocation, getEmployeeAssignedProjects } from '../types';
 
 export function formatIDR(amount: number, isMasked: boolean = false): string {
   if (isMasked) {
@@ -231,40 +231,53 @@ export function calculateEmployeePayroll(
   const totalDeductions = unapprovedLateDeduction + unpaidLeaveDeduction + bpjsKetenagakerjaan + bpjsKesehatan + pph21;
   const netSalary = Math.max(0, grossSalary - totalDeductions);
 
-  // Project Allocation:
-  const primaryProject = projects.find(p => p.id === employee.assignedProjectId) || projects[0];
-  const secondaryProject = projects.find(p => p.id !== employee.assignedProjectId && p.id !== primaryProject?.id) || (projects.length > 1 ? projects[1] : undefined);
+  // Proportional Multi-Project Payroll Allocation
+  // Jika 1 user terlibat banyak proyek (misal 3 proyek), maka beban gaji & biaya tenaga kerja
+  // dibagi rata ke seluruh proyek tersebut (1/N porsi tiap proyek).
+  // Total akumulasi di resume konsolidasi enterprise tetap 100% akurat sesuai data aktual tanpa duplikasi.
+  const assignedProjects = getEmployeeAssignedProjects(employee, projects);
+  const numProjects = Math.max(1, assignedProjects.length);
 
   const projectAllocations: ProjectPayrollAllocation[] = [];
-  if (primaryProject) {
-    if (secondaryProject) {
-      projectAllocations.push({
-        projectId: primaryProject.id,
-        projectCode: primaryProject.code || primaryProject.id,
-        projectName: primaryProject.name,
-        allocatedHours: Math.round(presentDays * 8 * 0.75),
-        allocatedCost: Math.round(grossSalary * 0.75),
-        percentage: 75
-      });
-      projectAllocations.push({
-        projectId: secondaryProject.id,
-        projectCode: secondaryProject.code || secondaryProject.id,
-        projectName: secondaryProject.name,
-        allocatedHours: Math.round(presentDays * 8 * 0.25),
-        allocatedCost: Math.round(grossSalary * 0.25),
-        percentage: 25
-      });
-    } else {
-      projectAllocations.push({
-        projectId: primaryProject.id,
-        projectCode: primaryProject.code || primaryProject.id,
-        projectName: primaryProject.name,
-        allocatedHours: presentDays * 8,
-        allocatedCost: grossSalary,
-        percentage: 100
-      });
-    }
-  }
+  const baseCostPerProject = Math.floor(grossSalary / numProjects);
+  const remainderCost = grossSalary - (baseCostPerProject * numProjects);
+
+  const baseHoursPerProject = Math.floor((presentDays * 8) / numProjects);
+  const remainderHours = (presentDays * 8) - (baseHoursPerProject * numProjects);
+
+  const basePercentage = Math.floor(100 / numProjects);
+  const remainderPercentage = 100 - (basePercentage * numProjects);
+
+  assignedProjects.forEach((proj, idx) => {
+    const allocatedCost = idx === 0 ? baseCostPerProject + remainderCost : baseCostPerProject;
+    const allocatedHours = idx === 0 ? baseHoursPerProject + remainderHours : baseHoursPerProject;
+    const percentage = idx === 0 ? basePercentage + remainderPercentage : basePercentage;
+
+    const otherProjects = assignedProjects.filter(p => p.id !== proj.id);
+    const otherProjectCodes = otherProjects.map(p => p.code || p.id);
+    const otherProjectNames = otherProjects.map(p => p.name);
+    const allAssignedProjectCodes = assignedProjects.map(p => p.code || p.id);
+    const allAssignedProjectNames = assignedProjects.map(p => p.name);
+
+    const note = numProjects > 1
+      ? `Terlibat di ${numProjects} Proyek: ${assignedProjects.map(p => `[${p.code || p.id}] ${p.name}`).join(', ')} (Alokasi 1/${numProjects} Beban Gaji)`
+      : 'Penugasan Penuh Proyek Tunggal (100%)';
+
+    projectAllocations.push({
+      projectId: proj.id,
+      projectCode: proj.code || proj.id,
+      projectName: proj.name,
+      allocatedHours,
+      allocatedCost,
+      percentage,
+      totalProjectsCount: numProjects,
+      otherProjectCodes,
+      otherProjectNames,
+      allAssignedProjectCodes,
+      allAssignedProjectNames,
+      note
+    });
+  });
 
   return {
     id: `PAY-${employee.id}-${periodStr.replace(/\s+/g, '')}`,

@@ -34,7 +34,7 @@ import {
   Unlock,
   FileText
 } from 'lucide-react';
-import { Employee, PayrollRecord, Project, SalaryRuleConfig, AttendanceRecord, SystemRole, getEffectiveSystemRole, AnnualWorkCalendarConfig, WorkPeriodItem } from '../types';
+import { Employee, PayrollRecord, Project, SalaryRuleConfig, AttendanceRecord, SystemRole, getEffectiveSystemRole, AnnualWorkCalendarConfig, WorkPeriodItem, getEmployeeAssignedProjects } from '../types';
 import { api } from '../services/api';
 import { rtcService } from '../services/rtcService';
 import { formatSalaryDisplay, calculateEmployeePayroll, EmployeeAuditOverride, isEmployeeInOffice } from '../utils/payrollCalculator';
@@ -1210,12 +1210,26 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                               <p className="font-bold text-slate-900 leading-tight truncate group-hover:text-[#FF6B00] transition-colors">
                                 {item.employeeName}
                               </p>
-                              <div className="flex items-center gap-1.5 mt-0.5">
+                              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                                 {emp?.employmentType && (
                                   <span className="text-[9px] px-1 py-0.2 rounded bg-slate-100 text-slate-600 font-mono-code">
                                     {emp.employmentType}
                                   </span>
                                 )}
+                                {(() => {
+                                  const prjs = emp ? getEmployeeAssignedProjects(emp, projects) : [];
+                                  if (prjs.length > 1) {
+                                    return (
+                                      <span
+                                        className="text-[9px] px-1.5 py-0.2 rounded bg-purple-100 text-purple-800 font-mono-code font-bold"
+                                        title={`Terlibat di ${prjs.length} Proyek: ${prjs.map(p => p.name).join(', ')}`}
+                                      >
+                                        ⚡ {prjs.length} Proyek
+                                      </span>
+                                    );
+                                  }
+                                  return null;
+                                })()}
                               </div>
                             </div>
                           </div>
@@ -1403,29 +1417,59 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                   {filteredRecords.flatMap(rec =>
                     rec.projectAllocations
                       .filter(alloc => currentProjectFilter === 'ALL' || alloc.projectId === currentProjectFilter)
-                      .map((alloc, idx) => (
-                        <tr key={`${rec.id}-${alloc.projectId}-${idx}`} className="hover:bg-slate-50/80 transition-colors">
-                          <td className="px-4 py-3">
-                            <p className="font-bold text-slate-900">{rec.employeeName}</p>
-                            <span className="text-[10px] font-mono-code text-slate-400">{rec.nik}</span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className="px-2 py-0.5 rounded-md bg-orange-50 border border-orange-200 text-[#FF6B00] text-[10px] font-mono-code font-bold mr-1.5">
-                              {alloc.projectCode}
-                            </span>
-                            <span className="text-slate-800">{alloc.projectName}</span>
-                          </td>
-                          <td className="px-4 py-3 text-right font-mono-code font-bold text-slate-800">
-                            {alloc.allocatedHours} Jam
-                          </td>
-                          <td className="px-4 py-3 text-right font-mono-code text-slate-600">
-                            {alloc.percentage}%
-                          </td>
-                          <td className="px-4 py-3 text-right font-mono-code font-black text-emerald-700">
-                            {formatSalaryDisplay(alloc.allocatedCost, showPayrollNominal)}
-                          </td>
-                        </tr>
-                      ))
+                      .map((alloc, idx) => {
+                        const isMulti = alloc.totalProjectsCount && alloc.totalProjectsCount > 1;
+                        return (
+                          <tr key={`${rec.id}-${alloc.projectId}-${idx}`} className="hover:bg-slate-50/80 transition-colors">
+                            <td className="px-4 py-3">
+                              <p className="font-bold text-slate-900">{rec.employeeName}</p>
+                              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                <span className="text-[10px] font-mono-code text-slate-400">{rec.nik}</span>
+                                {isMulti && (
+                                  <span className="px-1.5 py-0.2 rounded bg-purple-100 text-purple-800 border border-purple-200 text-[9.5px] font-black font-mono-code">
+                                    ⚡ Multi ({alloc.totalProjectsCount} Proyek)
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="px-2 py-0.5 rounded-md bg-orange-50 border border-orange-200 text-[#FF6B00] text-[10px] font-mono-code font-bold">
+                                  {alloc.projectCode}
+                                </span>
+                                <span className="text-slate-800 font-semibold">{alloc.projectName}</span>
+                              </div>
+                              {isMulti && (
+                                <p className="text-[10px] text-slate-500 mt-1 leading-snug">
+                                  <span className="font-semibold text-purple-900">Alokasi 1/{alloc.totalProjectsCount}:</span>{' '}
+                                  {alloc.allAssignedProjectCodes?.join(', ')}
+                                </p>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono-code font-bold text-slate-800">
+                              {alloc.allocatedHours} Jam
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono-code text-slate-600">
+                              <span className="font-bold">{alloc.percentage}%</span>
+                              {isMulti && (
+                                <span className="block text-[9.5px] text-slate-400 font-normal">
+                                  (1/{alloc.totalProjectsCount})
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono-code">
+                              <span className="font-black text-emerald-700 block text-xs">
+                                {formatSalaryDisplay(alloc.allocatedCost, showPayrollNominal)}
+                              </span>
+                              {isMulti && (
+                                <span className="text-[9.5px] text-slate-400 block font-normal">
+                                  Total: {formatSalaryDisplay(rec.grossSalary, showPayrollNominal)}
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
                   )}
                 </tbody>
               </table>
@@ -2030,6 +2074,26 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                 <span className="text-[10px] text-slate-400 font-mono-code uppercase block">Jabatan / Posisi</span>
                 <span className="font-semibold text-slate-700">{selectedSlip.position}</span>
               </div>
+
+              {selectedSlip.projectAllocations && selectedSlip.projectAllocations.length > 1 && (
+                <div className="col-span-2 sm:col-span-4 p-2.5 rounded-xl bg-purple-50/80 border border-purple-200 mt-1">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="px-1.5 py-0.5 rounded bg-purple-600 text-white font-mono-code font-black text-[9.5px]">
+                      ⚡ MULTI-PROYEK ({selectedSlip.projectAllocations.length} PROYEK)
+                    </span>
+                    <span className="text-[10.5px] font-bold text-purple-950">
+                      Beban Penggajian Terbagi Rata (1/{selectedSlip.projectAllocations.length})
+                    </span>
+                  </div>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {selectedSlip.projectAllocations.map(a => (
+                      <span key={a.projectId} className="px-2 py-0.5 rounded-md bg-white border border-purple-200/90 text-[10px] font-mono-code">
+                        <strong className="text-purple-900">[{a.projectCode}]</strong> {a.projectName}: <span className="font-bold text-slate-700">{a.percentage}%</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Attendance & Audit Info Box */}

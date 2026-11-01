@@ -19,9 +19,10 @@ import {
   Eye,
   EyeOff,
   Zap,
-  ArrowRight
+  ArrowRight,
+  Users
 } from 'lucide-react';
-import { Project, Employee, SalaryRuleConfig } from '../types';
+import { Project, Employee, SalaryRuleConfig, getEmployeeAssignedProjects } from '../types';
 import { formatSalaryDisplay } from '../utils/payrollCalculator';
 
 interface FinanceTimelineChartProps {
@@ -54,30 +55,142 @@ export const FinanceTimelineChart: React.FC<FinanceTimelineChartProps> = ({
   const [selectedMilestone, setSelectedMilestone] = useState<FinancialMilestone | null>(null);
   const [showChartNominal, setShowChartNominal] = useState<boolean>(false);
 
-  // Compute total monthly payroll estimate across all employees
-  const totalMonthlyBaseSalary = employees.reduce((acc, e) => acc + (e.baseSalary || 0), 0);
-  const totalMonthlyFixedAllowance = employees.reduce((acc, e) => acc + (e.fixedAllowance || 0), 0);
-  const totalMonthlyDailyAllowance = employees.reduce((acc, e) => acc + ((e.dailyAllowance || 0) * 22), 0);
-  const totalEstimatedOvertime = employees.reduce((acc, e) => {
-    const hourlyRate = (e.baseSalary || 0) / 173;
-    return acc + Math.round(hourlyRate * 12);
-  }, 0);
-  const totalEstimatedGross = totalMonthlyBaseSalary + totalMonthlyFixedAllowance + totalMonthlyDailyAllowance + totalEstimatedOvertime;
-  const bpjsRate = (salaryRules.bpjsKetenagakerjaanRate || 0.03) + (salaryRules.bpjsKesehatanRate || 0.01);
-  const totalEstimatedDeductions = Math.round(totalMonthlyBaseSalary * bpjsRate) + 3200000;
-  const totalNetPayrollDisbursement = Math.max(0, totalEstimatedGross - totalEstimatedDeductions);
+  // Filtered Project stats
+  const activeProject = selectedProjectId === 'ALL' ? null : projects.find(p => p.id === selectedProjectId);
+  const totalAllocatedBudget = projects.reduce((acc, p) => acc + (p.allocatedBudget || 0), 0);
+  const totalActualLaborCost = projects.reduce((acc, p) => acc + (p.actualLaborCost || 0), 0);
+  const overallBurnRate = totalAllocatedBudget > 0 ? Math.round((totalActualLaborCost / totalAllocatedBudget) * 100) : 0;
+
+  // Proportional Multi-Project Financial Breakdown
+  // Bila user terlibat di N proyek, beban gaji pokok, tunjangan & lembur dibagi rata 1/N.
+  // Saat mode "Semua Proyek (Konsolidasi)", total resume sama persis dengan agregat aktual enterprise.
+  const projectFinancials = useMemo(() => {
+    const bpjsRate = (salaryRules.bpjsKetenagakerjaanRate || 0.03) + (salaryRules.bpjsKesehatanRate || 0.01);
+
+    if (selectedProjectId === 'ALL') {
+      const baseSalary = employees.reduce((acc, e) => acc + (e.baseSalary || 0), 0);
+      const fixedAllowance = employees.reduce((acc, e) => acc + (e.fixedAllowance || 0), 0);
+      const dailyAllowance = employees.reduce((acc, e) => acc + ((e.dailyAllowance || 0) * 22), 0);
+      const overtime = employees.reduce((acc, e) => {
+        const hourlyRate = (e.baseSalary || 0) / 173;
+        return acc + Math.round(hourlyRate * 12);
+      }, 0);
+      const gross = baseSalary + fixedAllowance + dailyAllowance + overtime;
+      const deductions = Math.round(baseSalary * bpjsRate) + 3200000;
+      const net = Math.max(0, gross - deductions);
+
+      // Multi-project personnel list across enterprise
+      const multiProjectPersonnel = employees
+        .map(emp => {
+          const prjs = getEmployeeAssignedProjects(emp, projects);
+          return { emp, prjs, count: prjs.length };
+        })
+        .filter(item => item.count > 1);
+
+      return {
+        isAll: true,
+        assignedCount: employees.length,
+        multiProjectCount: multiProjectPersonnel.length,
+        baseSalary,
+        fixedAllowance,
+        dailyAllowance,
+        estimatedOvertime: overtime,
+        grossSalary: gross,
+        deductions,
+        netDisbursement: net,
+        personnelList: employees.map(emp => {
+          const prjs = getEmployeeAssignedProjects(emp, projects);
+          return {
+            emp,
+            prjs,
+            totalProjects: prjs.length,
+            ratio: 1 / Math.max(1, prjs.length),
+            allocatedBase: emp.baseSalary || 0,
+            allocatedGross: (emp.baseSalary || 0) + (emp.fixedAllowance || 0) + ((emp.dailyAllowance || 0) * 22)
+          };
+        }),
+        multiProjectPersonnel
+      };
+    }
+
+    // Individual Selected Project:
+    // Extract personnel assigned to this project and compute exact 1/N share
+    const assignedPersonnel = employees
+      .map(emp => {
+        const prjs = getEmployeeAssignedProjects(emp, projects);
+        const isAssigned = prjs.some(p => p.id === selectedProjectId || p.code === selectedProjectId);
+        if (!isAssigned) return null;
+
+        const totalProjects = Math.max(1, prjs.length);
+        const ratio = 1 / totalProjects;
+        const empBase = emp.baseSalary || 0;
+        const empFixed = emp.fixedAllowance || 0;
+        const empDaily = (emp.dailyAllowance || 0) * 22;
+        const empOvertime = Math.round(((emp.baseSalary || 0) / 173) * 12);
+        const empGross = empBase + empFixed + empDaily + empOvertime;
+        const empDeduction = Math.round(empBase * bpjsRate);
+        const empNet = Math.max(0, empGross - empDeduction);
+
+        return {
+          emp,
+          prjs,
+          totalProjects,
+          ratio,
+          allocatedBase: Math.round(empBase * ratio),
+          allocatedFixed: Math.round(empFixed * ratio),
+          allocatedDaily: Math.round(empDaily * ratio),
+          allocatedOvertime: Math.round(empOvertime * ratio),
+          allocatedGross: Math.round(empGross * ratio),
+          allocatedDeductions: Math.round(empDeduction * ratio),
+          allocatedNet: Math.round(empNet * ratio)
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null);
+
+    const baseSalary = assignedPersonnel.reduce((acc, item) => acc + item.allocatedBase, 0);
+    const fixedAllowance = assignedPersonnel.reduce((acc, item) => acc + item.allocatedFixed, 0);
+    const dailyAllowance = assignedPersonnel.reduce((acc, item) => acc + item.allocatedDaily, 0);
+    const overtime = assignedPersonnel.reduce((acc, item) => acc + item.allocatedOvertime, 0);
+    const gross = baseSalary + fixedAllowance + dailyAllowance + overtime;
+    const deductions = assignedPersonnel.reduce((acc, item) => acc + item.allocatedDeductions, 0);
+    const net = Math.max(0, gross - deductions);
+
+    const multiProjectItems = assignedPersonnel.filter(item => item.totalProjects > 1);
+
+    return {
+      isAll: false,
+      assignedCount: assignedPersonnel.length,
+      multiProjectCount: multiProjectItems.length,
+      baseSalary,
+      fixedAllowance,
+      dailyAllowance,
+      estimatedOvertime: overtime,
+      grossSalary: gross,
+      deductions,
+      netDisbursement: net,
+      personnelList: assignedPersonnel,
+      multiProjectPersonnel: multiProjectItems
+    };
+  }, [selectedProjectId, employees, projects, salaryRules]);
+
+  // Active Disbursement & Gross to drive timeline
+  const activeNetDisbursement = projectFinancials.netDisbursement;
+  const activeGrossSalary = projectFinancials.grossSalary;
+  const activeDeductions = projectFinancials.deductions;
 
   // Key Financial Milestones in the 30-day cycle
-  const milestones: FinancialMilestone[] = [
+  const milestones: FinancialMilestone[] = useMemo(() => [
     {
       day: 5,
       dateStr: '5 September 2026',
       title: 'Verifikasi Absensi & Timesheet Minggu I',
       phase: 'Timesheet Ingestion',
       category: 'PREPARATION',
-      estAmount: Math.round(totalNetPayrollDisbursement * 0.15),
+      estAmount: Math.round(activeNetDisbursement * 0.15),
       status: 'COMPLETED',
-      description: 'Rekonsiliasi awal rekaman check-in kamera, verifikasi Geofence GPS kantor pusat & seluruh site proyek PT Dwi Martha Jaya.',
+      description: selectedProjectId === 'ALL'
+        ? 'Rekonsiliasi awal rekaman check-in kamera, verifikasi Geofence GPS kantor pusat & seluruh site proyek PT Dwi Martha Jaya.'
+        : `Verifikasi absensi terdistribusi personil proyek ${activeProject?.name || ''} dengan perhitungan porsi jam kerja proporsional.`,
       parties: ['HR People Operations', 'Site Supervisor']
     },
     {
@@ -86,9 +199,11 @@ export const FinanceTimelineChart: React.FC<FinanceTimelineChartProps> = ({
       title: 'Cutoff Interim & Simulasi Payroll Bulanan',
       phase: 'Interim Payroll Run',
       category: 'SIMULATION',
-      estAmount: Math.round(totalNetPayrollDisbursement * 0.25),
+      estAmount: Math.round(activeNetDisbursement * 0.25),
       status: 'ACTIVE_TODAY',
-      description: 'Kalkulasi interim gaji pokok, tunjangan penugasan proyek, serta simulasi pembebanan biaya tenaga kerja antar-proyek.',
+      description: selectedProjectId === 'ALL'
+        ? 'Kalkulasi interim gaji pokok, tunjangan penugasan proyek, serta simulasi pembebanan biaya tenaga kerja antar-proyek.'
+        : `Simulasi interim beban gaji proyek ${activeProject?.code || ''}: ${projectFinancials.multiProjectCount} personil dibagi proporsional dengan proyek lain.`,
       parties: ['Finance Lead', 'HR Manager']
     },
     {
@@ -97,7 +212,7 @@ export const FinanceTimelineChart: React.FC<FinanceTimelineChartProps> = ({
       title: 'Audit Kehadiran & Tunjangan Site',
       phase: 'Attendance & Site Audit',
       category: 'PREPARATION',
-      estAmount: Math.round(totalNetPayrollDisbursement * 0.50),
+      estAmount: Math.round(activeNetDisbursement * 0.50),
       status: 'SCHEDULED',
       description: 'Verifikasi presensi tervalidasi dan tunjangan penugasan personil lapangan serta lembur terkonfirmasi.',
       parties: ['Project Manager Divisi', 'Payroll Officer']
@@ -108,7 +223,7 @@ export const FinanceTimelineChart: React.FC<FinanceTimelineChartProps> = ({
       title: 'Finalisasi Pajak PPh 21 & Iuran BPJS',
       phase: 'Tax & Compliance Audit',
       category: 'TAX_BPJS',
-      estAmount: totalEstimatedDeductions,
+      estAmount: activeDeductions,
       status: 'SCHEDULED',
       description: 'Penyusunan bukti potong PPh 21 Pasal 21/26, BPJS Ketenagakerjaan (3%) dan BPJS Kesehatan (1%) yang disetor ke kas negara.',
       parties: ['Tax Accountant', 'BPJS Ketenagakerjaan']
@@ -119,9 +234,11 @@ export const FinanceTimelineChart: React.FC<FinanceTimelineChartProps> = ({
       title: 'DISBURSEMENT PAYROLL RUN (Transfer Bank)',
       phase: 'Cash Outflow Settlement',
       category: 'DISBURSEMENT',
-      estAmount: totalNetPayrollDisbursement,
+      estAmount: activeNetDisbursement,
       status: 'SCHEDULED',
-      description: 'Pencairan gaji bersih (THP) seluruh tenaga kerja PT Dwi Martha Jaya serentak via Auto-Debit Bank Mandiri, BCA, BNI & BSI.',
+      description: selectedProjectId === 'ALL'
+        ? 'Pencairan gaji bersih (THP) seluruh tenaga kerja PT Dwi Martha Jaya serentak via Auto-Debit Bank Mandiri, BCA, BNI & BSI.'
+        : `Estimasi pencairan gaji bersih (THP) proporsional untuk ${projectFinancials.assignedCount} tenaga kerja proyek ini.`,
       parties: ['Managing Director', 'Bank Mitra Cash Management']
     },
     {
@@ -130,31 +247,25 @@ export const FinanceTimelineChart: React.FC<FinanceTimelineChartProps> = ({
       title: 'Invoicing Tagihan Tenaga Kerja ke Proyek',
       phase: 'Project Cost Allocation & Billing',
       category: 'BILLING',
-      estAmount: totalEstimatedGross,
+      estAmount: activeGrossSalary,
       status: 'SCHEDULED',
       description: 'Jurnal akuntansi pembebanan biaya tenaga kerja langsung (Direct Labor Cost) ke kode akun proyek PT Dwi Martha Jaya.',
       parties: ['Project Accounting Lead', 'Client Representative']
     }
-  ];
-
-  // Filtered Project stats
-  const activeProject = selectedProjectId === 'ALL' ? null : projects.find(p => p.id === selectedProjectId);
-  const totalAllocatedBudget = projects.reduce((acc, p) => acc + (p.allocatedBudget || 0), 0);
-  const totalActualLaborCost = projects.reduce((acc, p) => acc + (p.actualLaborCost || 0), 0);
-  const overallBurnRate = totalAllocatedBudget > 0 ? Math.round((totalActualLaborCost / totalAllocatedBudget) * 100) : 0;
+  ], [activeNetDisbursement, activeGrossSalary, activeDeductions, selectedProjectId, activeProject, projectFinancials]);
 
   // Bank Disbursement Breakdown Data
-  const bankBreakdowns = [
-    { bank: 'Bank Central Asia (BCA)', employees: Math.max(1, Math.round(employees.length * 0.45)), total: Math.round(totalNetPayrollDisbursement * 0.46), color: 'text-blue-700 bg-blue-50 border-blue-200' },
-    { bank: 'Bank Mandiri', employees: Math.max(1, Math.round(employees.length * 0.25)), total: Math.round(totalNetPayrollDisbursement * 0.25), color: 'text-amber-800 bg-amber-50 border-amber-200' },
-    { bank: 'Bank Negara Indonesia (BNI)', employees: Math.max(1, Math.round(employees.length * 0.18)), total: Math.round(totalNetPayrollDisbursement * 0.18), color: 'text-teal-800 bg-teal-50 border-teal-200' },
-    { bank: 'Bank Syariah Indonesia (BSI)', employees: Math.max(1, Math.round(employees.length * 0.12)), total: Math.round(totalNetPayrollDisbursement * 0.11), color: 'text-emerald-800 bg-emerald-50 border-emerald-200' },
-  ];
+  const bankBreakdowns = useMemo(() => [
+    { bank: 'Bank Central Asia (BCA)', employees: Math.max(1, Math.round(projectFinancials.assignedCount * 0.45)), total: Math.round(activeNetDisbursement * 0.46), color: 'text-blue-700 bg-blue-50 border-blue-200' },
+    { bank: 'Bank Mandiri', employees: Math.max(1, Math.round(projectFinancials.assignedCount * 0.25)), total: Math.round(activeNetDisbursement * 0.25), color: 'text-amber-800 bg-amber-50 border-amber-200' },
+    { bank: 'Bank Negara Indonesia (BNI)', employees: Math.max(1, Math.round(projectFinancials.assignedCount * 0.18)), total: Math.round(activeNetDisbursement * 0.18), color: 'text-teal-800 bg-teal-50 border-teal-200' },
+    { bank: 'Bank Syariah Indonesia (BSI)', employees: Math.max(1, Math.round(projectFinancials.assignedCount * 0.12)), total: Math.round(activeNetDisbursement * 0.11), color: 'text-emerald-800 bg-emerald-50 border-emerald-200' },
+  ], [projectFinancials.assignedCount, activeNetDisbursement]);
 
-  // Interactive Progressive Cashflow Curve (Proportional S-Curve based on actual totalNetPayrollDisbursement)
+  // Interactive Progressive Cashflow Curve (Proportional S-Curve based on activeNetDisbursement)
   const daysInMonth = 30;
   const curvePoints = useMemo(() => {
-    const peak = totalNetPayrollDisbursement > 0 ? totalNetPayrollDisbursement : 150000000;
+    const peak = activeNetDisbursement > 0 ? activeNetDisbursement : 15000000;
     return Array.from({ length: daysInMonth }, (_, i) => {
       const day = i + 1;
       let cumulativeCash = 0;
@@ -173,12 +284,12 @@ export const FinanceTimelineChart: React.FC<FinanceTimelineChartProps> = ({
       }
       return { day, cash: Math.round(cumulativeCash) };
     });
-  }, [totalNetPayrollDisbursement]);
+  }, [activeNetDisbursement]);
 
   // SVG dimensions for smooth curve
   const svgWidth = 840;
   const svgHeight = 230;
-  const maxCash = (totalNetPayrollDisbursement > 0 ? totalNetPayrollDisbursement : 150000000) * 1.15;
+  const maxCash = (activeNetDisbursement > 0 ? activeNetDisbursement : 15000000) * 1.15;
 
   // Convert points to smooth bezier path
   const svgPathData = useMemo(() => {
@@ -278,12 +389,14 @@ export const FinanceTimelineChart: React.FC<FinanceTimelineChartProps> = ({
               <Banknote className="w-4 h-4 text-[#FF6B00]" />
             </div>
             <div className="text-xl font-black text-slate-900 font-mono-code mt-0.5 tracking-tight">
-              {formatSalaryDisplay(totalNetPayrollDisbursement, showChartNominal)}
+              {formatSalaryDisplay(activeNetDisbursement, showChartNominal)}
             </div>
           </div>
           <div className="mt-2.5 pt-2 border-t border-orange-200/50 flex items-center justify-between text-[10.5px]">
-            <span className="text-slate-500 font-medium">Jadwal Transfer:</span>
-            <span className="font-bold text-orange-900 font-mono-code">25 September 2026</span>
+            <span className="text-slate-500 font-medium">Personel Terdata:</span>
+            <span className="font-bold text-orange-900 font-mono-code">
+              {projectFinancials.assignedCount} Org {projectFinancials.multiProjectCount > 0 && `(⚡ ${projectFinancials.multiProjectCount} Multi)`}
+            </span>
           </div>
         </div>
 
@@ -315,12 +428,12 @@ export const FinanceTimelineChart: React.FC<FinanceTimelineChartProps> = ({
           <div>
             <div className="flex items-center justify-between mb-1">
               <span className="text-[10px] font-black uppercase tracking-wider text-amber-800 font-mono-code">
-                Total Tunjangan Proyek
+                Total Tunjangan &amp; Lembur
               </span>
               <Zap className="w-4 h-4 text-amber-600" />
             </div>
             <div className="text-xl font-black text-amber-950 font-mono-code mt-0.5 tracking-tight">
-              {formatSalaryDisplay(totalEstimatedOvertime, showChartNominal)}
+              {formatSalaryDisplay(projectFinancials.estimatedOvertime + projectFinancials.fixedAllowance, showChartNominal)}
             </div>
           </div>
           <div className="mt-2.5 pt-2 border-t border-amber-200/50 flex items-center justify-between text-[10.5px]">
@@ -342,18 +455,18 @@ export const FinanceTimelineChart: React.FC<FinanceTimelineChartProps> = ({
               <span className="text-xl font-black text-blue-950 font-mono-code tracking-tight">
                 {activeProject
                   ? ((activeProject.allocatedBudget || 0) > 0
-                      ? `${Math.round((activeProject.actualLaborCost / activeProject.allocatedBudget) * 100)}%`
+                      ? `${Math.round((activeGrossSalary / activeProject.allocatedBudget) * 100)}%`
                       : '0%')
                   : (totalAllocatedBudget > 0 ? `${overallBurnRate}%` : '0%')}
               </span>
               <span className="text-[10.5px] font-semibold text-blue-700 font-mono-code">
-                {totalAllocatedBudget > 0 ? 'Terkendali' : '(Pagu TBD)'}
+                {(activeProject ? (activeProject.allocatedBudget || 0) : totalAllocatedBudget) > 0 ? 'Terkendali' : '(Pagu TBD)'}
               </span>
             </div>
           </div>
           <div className="mt-2.5 pt-2 border-t border-blue-200/50 flex items-center justify-between text-[10.5px]">
-            <span className="text-slate-500 font-medium">Status Risiko:</span>
-            <span className="font-bold text-blue-900">Aman di bawah target</span>
+            <span className="text-slate-500 font-medium">Realisasi Beban Gaji:</span>
+            <span className="font-bold text-blue-900 font-mono-code">{formatSalaryDisplay(activeGrossSalary, showChartNominal)}</span>
           </div>
         </div>
       </div>
@@ -471,7 +584,7 @@ export const FinanceTimelineChart: React.FC<FinanceTimelineChartProps> = ({
             </span>
             <span className="text-[#FF6B00] font-black flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-[#FF6B00] animate-pulse"></span>
-              Puncak Disbursement: {formatSalaryDisplay(totalNetPayrollDisbursement, showChartNominal)} (Tgl 25)
+              Puncak Disbursement: {formatSalaryDisplay(activeNetDisbursement, showChartNominal)} (Tgl 25)
             </span>
           </div>
 
@@ -668,6 +781,149 @@ export const FinanceTimelineChart: React.FC<FinanceTimelineChartProps> = ({
               );
             })}
           </svg>
+        </div>
+
+        {/* 3.5. Proportional Multi-Project Salary Allocation Ledger */}
+        <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-2xs space-y-3.5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-[#FF6B00]"></span>
+                <h4 className="text-xs font-black text-slate-900 uppercase font-mono-code tracking-tight flex items-center gap-1.5">
+                  <Users className="w-4 h-4 text-[#FF6B00]" />
+                  {selectedProjectId === 'ALL'
+                    ? 'Pemetaan Distribusi Gaji Personel Multi-Proyek (Konsolidasi Enterprise)'
+                    : `Daftar Personel & Alokasi Beban Gaji: ${activeProject?.name || activeProject?.code}`}
+                </h4>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                {selectedProjectId === 'ALL'
+                  ? 'Karyawan yang terdaftar di multi-proyek memiliki beban gaji terbagi rata (1/N) per proyek. Total resume agregat tetap 100% presisi sesuai data aktual.'
+                  : `Menampilkan ${projectFinancials.assignedCount} personel terdaftar (${projectFinancials.multiProjectCount} orang memiliki penugasan multi-proyek).`}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-1 rounded-lg bg-orange-50 border border-orange-200 text-[#FF6B00] text-[10.5px] font-black font-mono-code">
+                ⚡ {projectFinancials.multiProjectCount} Karyawan Multi-Proyek
+              </span>
+            </div>
+          </div>
+
+          {/* Roster Allocation Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {(selectedProjectId === 'ALL'
+              ? projectFinancials.multiProjectPersonnel.map(m => {
+                  const totalPrj = m.prjs.length;
+                  const ratio = 1 / totalPrj;
+                  const perProjSalary = Math.round((m.emp.baseSalary || 0) * ratio);
+                  return {
+                    emp: m.emp,
+                    prjs: m.prjs,
+                    totalProjects: totalPrj,
+                    ratio,
+                    allocatedBase: perProjSalary,
+                    allocatedGross: perProjSalary
+                  };
+                })
+              : projectFinancials.personnelList
+            ).slice(0, 12).map((item, idx) => {
+              const isMulti = item.totalProjects > 1;
+              return (
+                <div
+                  key={`${item.emp.id}-${idx}`}
+                  className={`p-3 rounded-xl border transition-all text-xs flex flex-col justify-between ${
+                    isMulti
+                      ? 'bg-purple-50/50 border-purple-200/90 hover:border-purple-300'
+                      : 'bg-slate-50/60 border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center gap-2.5 mb-2">
+                      <img
+                        src={item.emp.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.emp.name)}&background=random`}
+                        alt={item.emp.name}
+                        className="w-8 h-8 rounded-lg object-cover border border-slate-200 shrink-0"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="font-bold text-slate-900 truncate flex items-center justify-between">
+                          <span className="truncate">{item.emp.name}</span>
+                          <span className="text-[10px] font-mono-code text-slate-400 shrink-0 ml-1">
+                            {item.emp.nik}
+                          </span>
+                        </div>
+                        <div className="text-[10.5px] text-slate-500 truncate">
+                          {item.emp.position} • {item.emp.department}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Multi-Project Involvement Badge & Projects List */}
+                    {isMulti ? (
+                      <div className="p-2 rounded-lg bg-white border border-purple-200/80 mb-2 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 font-mono-code font-black text-[9px] uppercase">
+                            ⚡ Terlibat di {item.totalProjects} Proyek (Porsi 1/{item.totalProjects})
+                          </span>
+                        </div>
+                        <div className="text-[10px] font-medium text-slate-700 leading-tight">
+                          {item.prjs.map((p, pIdx) => (
+                            <span key={p.id || pIdx} className="inline-block mr-1.5 mb-0.5">
+                              <span className="px-1 py-0.2 rounded bg-slate-100 text-slate-700 font-mono-code font-bold text-[9.5px]">
+                                {p.code || p.id}
+                              </span>{' '}
+                              <span className="text-slate-600">{p.name}</span>
+                              {pIdx < item.prjs.length - 1 && ','}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-1.5 rounded-lg bg-white border border-slate-200 mb-2 flex items-center justify-between">
+                        <span className="text-[10px] font-medium text-slate-600">
+                          Penugasan Tunggal (100%):
+                        </span>
+                        <span className="text-[10px] font-bold text-slate-800 font-mono-code">
+                          {item.prjs[0]?.code || 'PRJ-001'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Allocated Cost Breakdown */}
+                  <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-[10.5px] font-mono-code">
+                    <span className="text-slate-500">
+                      {isMulti && selectedProjectId !== 'ALL' ? `Alokasi 1/${item.totalProjects}:` : 'Beban Gaji:'}
+                    </span>
+                    <div className="text-right">
+                      <span className="font-black text-slate-900 block">
+                        {formatSalaryDisplay(item.allocatedBase, showChartNominal)}
+                      </span>
+                      {isMulti && (
+                        <span className="text-[9px] text-slate-400 block">
+                          Total: {formatSalaryDisplay(item.emp.baseSalary, showChartNominal)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {(selectedProjectId === 'ALL'
+            ? projectFinancials.multiProjectPersonnel.length > 12
+            : projectFinancials.personnelList.length > 12) && (
+            <div className="text-center pt-1">
+              <span className="text-[10.5px] text-slate-400 font-mono-code font-medium">
+                + Menampilkan 12 dari total{' '}
+                {selectedProjectId === 'ALL'
+                  ? projectFinancials.multiProjectPersonnel.length
+                  : projectFinancials.personnelList.length}{' '}
+                personel terdata
+              </span>
+            </div>
+          )}
         </div>
 
         {/* 4. Complete Milestone Sequence Grid (All 6 Stages Visible) */}

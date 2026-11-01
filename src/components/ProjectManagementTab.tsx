@@ -44,7 +44,8 @@ import {
   ProjectAllowanceRule,
   ProjectGeofenceRule,
   SystemRole,
-  getEffectiveSystemRole
+  getEffectiveSystemRole,
+  getEmployeeAssignedProjects
 } from '../types';
 import { formatSalaryDisplay } from '../utils/payrollCalculator';
 import { normalizeIndoLat } from './PresensiCameraTab';
@@ -317,22 +318,35 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
       }
     }
 
-    // 1. Employees added to this project
+    // 1. Employees added to this project (Maintains multi-project assignments)
     stagedAssignedEmployeeIds.forEach(empId => {
       const emp = employees.find(e => e.id === empId);
-      if (emp && emp.assignedProjectId !== updatedProject.id) {
-        const updatedEmp: Employee = { ...emp, assignedProjectId: updatedProject.id };
+      if (emp) {
+        const currentPrjIds = new Set(Array.isArray(emp.assignedProjectIds) ? emp.assignedProjectIds : (emp.assignedProjectId ? [emp.assignedProjectId] : []));
+        currentPrjIds.add(updatedProject.id);
+        const updatedEmp: Employee = {
+          ...emp,
+          assignedProjectId: emp.assignedProjectId || updatedProject.id,
+          assignedProjectIds: Array.from(currentPrjIds)
+        };
         updatedEmployeesList.push(updatedEmp);
         if (onUpdateEmployee) onUpdateEmployee(updatedEmp);
       }
     });
 
-    // 2. Employees removed from this project (set to default first active project or empty)
+    // 2. Employees removed from this project
     employees.forEach(emp => {
-      if (emp.assignedProjectId === updatedProject.id && !stagedAssignedEmployeeIds.includes(emp.id)) {
-        // Unassign: fallback to another project or first project
-        const fallbackProj = projects.find(p => p.id !== updatedProject.id && p.status === 'ACTIVE') || projects[0];
-        const updatedEmp: Employee = { ...emp, assignedProjectId: fallbackProj ? fallbackProj.id : '' };
+      const isAssignedBefore = emp.assignedProjectId === updatedProject.id || (Array.isArray(emp.assignedProjectIds) && emp.assignedProjectIds.includes(updatedProject.id));
+      if (isAssignedBefore && !stagedAssignedEmployeeIds.includes(emp.id)) {
+        const currentPrjIds = new Set(Array.isArray(emp.assignedProjectIds) ? emp.assignedProjectIds : (emp.assignedProjectId ? [emp.assignedProjectId] : []));
+        currentPrjIds.delete(updatedProject.id);
+        const updatedList = Array.from(currentPrjIds);
+        const fallbackProj = updatedList[0] || (projects.find(p => p.id !== updatedProject.id && p.status === 'ACTIVE') || projects[0])?.id || '';
+        const updatedEmp: Employee = {
+          ...emp,
+          assignedProjectId: fallbackProj,
+          assignedProjectIds: updatedList
+        };
         updatedEmployeesList.push(updatedEmp);
         if (onUpdateEmployee) onUpdateEmployee(updatedEmp);
       }
@@ -358,17 +372,31 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
     }, 1500);
   };
 
-  // Helper to fetch employee counts for each project (bidirectional match: assignedProjectId, project.code, assignedEmployeeIds, or projectManagerId)
+  // Helper to fetch employee counts for each project (bidirectional match: assignedProjectId, project.code, assignedEmployeeIds, projectAdminIds, or projectManagerId)
   const getProjectPersonnel = (project: Project) => {
     const assignedIdSet = new Set<string>(project.assignedEmployeeIds || []);
     if (project.projectManagerId) {
       assignedIdSet.add(project.projectManagerId);
     }
+    if (project.projectAdminIds && Array.isArray(project.projectAdminIds)) {
+      project.projectAdminIds.forEach(id => assignedIdSet.add(id));
+    }
     return employees.filter(e => 
       e.assignedProjectId === project.id || 
       e.assignedProjectId === project.code || 
-      assignedIdSet.has(e.id)
+      assignedIdSet.has(e.id) ||
+      (Array.isArray(e.assignedProjectIds) && e.assignedProjectIds.includes(project.id))
     );
+  };
+
+  const getProjectProportionalLaborCost = (project: Project) => {
+    if (project.actualLaborCost && project.actualLaborCost > 0) return project.actualLaborCost;
+    const personnel = getProjectPersonnel(project);
+    return personnel.reduce((sum, e) => {
+      const prjs = getEmployeeAssignedProjects(e, projects);
+      const count = Math.max(1, prjs.length);
+      return sum + Math.round((e.baseSalary || 0) / count);
+    }, 0);
   };
 
   // Employees available to add (not currently staged in this project)
@@ -614,7 +642,8 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
           {filteredProjects.map(proj => {
             const assignedPeople = getProjectPersonnel(proj);
             const hasBudget = (proj.allocatedBudget || 0) > 0;
-            const budgetUsedPct = hasBudget ? Math.min(100, Math.round(((proj.actualLaborCost || 0) / proj.allocatedBudget) * 100)) : 0;
+            const laborCost = getProjectProportionalLaborCost(proj);
+            const budgetUsedPct = hasBudget ? Math.min(100, Math.round((laborCost / proj.allocatedBudget) * 100)) : 0;
 
             // Display fields - Tampilkan data entitas resmi proyek langsung dari database
             const cleanCode = proj.code;
@@ -776,7 +805,7 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
                       <div className="flex justify-between items-center text-xs mb-1.5">
                         <span className="text-slate-500">Realisasi Biaya Upah:</span>
                         <span className="font-bold text-slate-900 font-mono-code">
-                          {formatSalaryDisplay(proj.actualLaborCost || 0, showBudgetNominal)}{' '}
+                          {formatSalaryDisplay(laborCost, showBudgetNominal)}{' '}
                           <span className="text-slate-400 font-normal">({hasBudget ? `${budgetUsedPct}%` : 'TBD'})</span>
                         </span>
                       </div>
@@ -1462,6 +1491,25 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
                                     <div className="text-xs text-slate-500 dark:text-slate-400">
                                       {emp!.position} • {emp!.department} • <span className="font-semibold">{emp!.employmentType}</span>
                                     </div>
+                                    {(() => {
+                                      const prjs = getEmployeeAssignedProjects(emp, projects);
+                                      if (prjs.length > 1) {
+                                        return (
+                                          <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                                            <span className="px-1.5 py-0.2 rounded bg-purple-100 dark:bg-purple-950/40 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-700/60 text-[9.5px] font-black font-mono-code">
+                                              ⚡ Multi-Proyek ({prjs.length} Proyek)
+                                            </span>
+                                            <span className="text-[10px] text-purple-900 dark:text-purple-200 font-semibold font-mono-code">
+                                              Beban 1/{prjs.length}: {formatSalaryDisplay(Math.round((emp!.baseSalary || 0) / prjs.length), showBudgetNominal)}
+                                            </span>
+                                            <span className="text-[9.5px] text-slate-500 dark:text-slate-400">
+                                              (Terlibat: {prjs.map(p => p.code || p.id).join(', ')})
+                                            </span>
+                                          </div>
+                                        );
+                                      }
+                                      return null;
+                                    })()}
                                   </div>
                                 </div>
 

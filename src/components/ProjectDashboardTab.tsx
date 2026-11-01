@@ -36,7 +36,7 @@ import {
   Crown,
   EyeOff
 } from 'lucide-react';
-import { Project, Employee, AttendanceRecord, ApprovalItem, SalaryRuleConfig, SystemRole, getEffectiveSystemRole } from '../types';
+import { Project, Employee, AttendanceRecord, ApprovalItem, SalaryRuleConfig, SystemRole, getEffectiveSystemRole, getEmployeeAssignedProjects } from '../types';
 import { HrisTimelineChart } from './HrisTimelineChart';
 import { formatSalaryDisplay } from '../utils/payrollCalculator';
 
@@ -94,13 +94,21 @@ export const ProjectDashboardTab: React.FC<ProjectDashboardTabProps> = ({
   const [showProjectNominal, setShowProjectNominal] = useState<boolean>(false);
   const formatIDR = (val: number) => formatSalaryDisplay(val, showProjectNominal);
 
-  // Filter assigned personnel for this specific project
+  // Filter assigned personnel for this specific project (Supports Multi-Project)
   const assignedEmployees = useMemo(() => {
     const assignedIds = new Set(project.assignedEmployeeIds || []);
     if (project.projectManagerId) {
       assignedIds.add(project.projectManagerId);
     }
-    return employees.filter(e => assignedIds.has(e.id) || e.assignedProjectId === project.id);
+    if (project.projectAdminIds && Array.isArray(project.projectAdminIds)) {
+      project.projectAdminIds.forEach(id => assignedIds.add(id));
+    }
+    return employees.filter(e =>
+      assignedIds.has(e.id) ||
+      e.assignedProjectId === project.id ||
+      e.assignedProjectId === project.code ||
+      (Array.isArray(e.assignedProjectIds) && e.assignedProjectIds.includes(project.id))
+    );
   }, [employees, project]);
 
   // Scoped attendances strictly for this project's personnel
@@ -134,12 +142,16 @@ export const ProjectDashboardTab: React.FC<ProjectDashboardTabProps> = ({
     return todayAttendances.filter(a => a.location?.inGeofence !== false).length;
   }, [todayAttendances]);
 
-  // Financial & Budgeting Realization Calculations
+  // Financial & Budgeting Realization Calculations (Proportional Multi-Project)
   const totalAllocatedBudget = project.allocatedBudget || 0;
 
   const totalBaseSalary = useMemo(() => {
-    return assignedEmployees.reduce((sum, e) => sum + (e.baseSalary || 0), 0);
-  }, [assignedEmployees]);
+    return assignedEmployees.reduce((sum, e) => {
+      const prjs = getEmployeeAssignedProjects(e, allProjects);
+      const count = Math.max(1, prjs.length);
+      return sum + Math.round((e.baseSalary || 0) / count);
+    }, 0);
+  }, [assignedEmployees, allProjects]);
 
   const totalSiteAllowance = useMemo(() => {
     const daily = project.customRules?.allowance?.dailySiteAllowance || 0;
@@ -950,20 +962,56 @@ export const ProjectDashboardTab: React.FC<ProjectDashboardTabProps> = ({
                       </div>
                     </div>
 
-                    {/* Financial or department details */}
-                    <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs font-mono-code">
-                      {canViewFinancials ? (
+                    {/* Multi-Project Involvement Badge */}
+                    {(() => {
+                      const empPrjs = getEmployeeAssignedProjects(emp, allProjects);
+                      const isMulti = empPrjs.length > 1;
+                      const allocatedBase = isMulti ? Math.round((emp.baseSalary || 0) / empPrjs.length) : (emp.baseSalary || 0);
+
+                      return (
                         <>
-                          <span className="text-slate-400 text-[11px] font-sans">Gaji Pokok:</span>
-                          <span className="font-black text-slate-800">{formatIDR(emp.baseSalary)}</span>
+                          {isMulti && (
+                            <div className="mt-2.5 p-2 rounded-xl bg-purple-50/80 border border-purple-200/90 text-left">
+                              <div className="flex items-center justify-between">
+                                <span className="px-1.5 py-0.5 rounded bg-purple-600 text-white font-mono-code font-black text-[9px] uppercase">
+                                  ⚡ Multi-Proyek ({empPrjs.length} Proyek)
+                                </span>
+                                <span className="text-[10px] font-mono-code font-bold text-purple-900">
+                                  Porsi 1/{empPrjs.length} Beban
+                                </span>
+                              </div>
+                              <div className="text-[10px] text-slate-700 mt-1 font-medium leading-tight">
+                                Terlibat: {empPrjs.map(p => `[${p.code || p.id}] ${p.name}`).join(', ')}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Financial or department details */}
+                          <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs font-mono-code">
+                            {canViewFinancials ? (
+                              <>
+                                <div>
+                                  <span className="text-slate-400 text-[11px] font-sans block">
+                                    {isMulti ? `Beban Proyek (Porsi 1/${empPrjs.length}):` : 'Gaji Pokok:'}
+                                  </span>
+                                  {isMulti && (
+                                    <span className="text-[9.5px] text-slate-400 font-sans">
+                                      Total Gaji: {formatIDR(emp.baseSalary)}
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="font-black text-slate-800 text-right">{formatIDR(allocatedBase)}</span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="text-slate-400 text-[11px] font-sans">Divisi / Dept:</span>
+                                <span className="font-bold text-slate-700 font-sans">{emp.department || 'Operasional Site'}</span>
+                              </>
+                            )}
+                          </div>
                         </>
-                      ) : (
-                        <>
-                          <span className="text-slate-400 text-[11px] font-sans">Divisi / Dept:</span>
-                          <span className="font-bold text-slate-700 font-sans">{emp.department || 'Operasional Site'}</span>
-                        </>
-                      )}
-                    </div>
+                      );
+                    })()}
                   </div>
 
                   {/* Card Action */}

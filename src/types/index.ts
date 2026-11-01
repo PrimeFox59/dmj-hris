@@ -144,6 +144,46 @@ export function canAccessProjectModule(
   return isFinance || isHR || isSuper || isPM || isPAdmin;
 }
 
+export function getEmployeeAssignedProjects<T extends { id: string; code?: string; name: string; assignedEmployeeIds?: string[]; projectManagerId?: string; projectAdminIds?: string[]; isHeadOffice?: boolean }>(
+  employee?: { id?: string; name?: string; assignedProjectId?: string; assignedProjectIds?: string[] } | null,
+  projects?: T[]
+): T[] {
+  if (!employee || !projects || !Array.isArray(projects)) return [];
+  const assignedMap = new Map<string, T>();
+
+  // 1. Projects where employee ID is in assignedEmployeeIds or is PM/Admin
+  projects.forEach(p => {
+    const list = p.assignedEmployeeIds || [];
+    if (
+      (employee.id && list.includes(employee.id)) ||
+      (employee.id && p.projectManagerId === employee.id) ||
+      (employee.id && p.projectAdminIds && p.projectAdminIds.includes(employee.id))
+    ) {
+      assignedMap.set(p.id, p);
+    }
+  });
+
+  // 2. Direct employee assignment field
+  if (employee.assignedProjectId) {
+    const p = projects.find(prj => prj.id === employee.assignedProjectId || prj.code === employee.assignedProjectId);
+    if (p) assignedMap.set(p.id, p);
+  }
+  if (Array.isArray(employee.assignedProjectIds)) {
+    employee.assignedProjectIds.forEach(pid => {
+      const p = projects.find(prj => prj.id === pid || prj.code === pid);
+      if (p) assignedMap.set(p.id, p);
+    });
+  }
+
+  // Fallback: if completely unassigned, fallback to head office or first project
+  if (assignedMap.size === 0 && projects.length > 0) {
+    const headOffice = projects.find(p => p.isHeadOffice || p.code === 'PRJ-001') || projects[0];
+    assignedMap.set(headOffice.id, headOffice);
+  }
+
+  return Array.from(assignedMap.values());
+}
+
 export type AttendanceMode = 'WFO' | 'DINAS_LUAR' | 'WFH';
 
 export type AttendanceStatus = 'ON_TIME' | 'LATE' | 'DINAS_LUAR' | 'DINAS_LUAR_PENDING' | 'WFH_APPROVED' | 'LEAVE' | 'SICK' | 'PERMIT' | 'ALPA' | 'OUT_OF_GEOFENCE';
@@ -191,6 +231,7 @@ export interface Employee {
   employmentType: 'TETAP' | 'KONTRAK' | 'PROJECT_HIRE';
   joinDate: string;
   assignedProjectId: string;
+  assignedProjectIds?: string[];
   baseSalary: number;
   fixedAllowance: number;
   dailyAllowance: number;
@@ -418,6 +459,12 @@ export interface ProjectPayrollAllocation {
   allocatedHours: number;
   allocatedCost: number;
   percentage: number;
+  totalProjectsCount?: number;
+  otherProjectCodes?: string[];
+  otherProjectNames?: string[];
+  allAssignedProjectCodes?: string[];
+  allAssignedProjectNames?: string[];
+  note?: string;
 }
 
 export interface PayrollRecord {
