@@ -2430,55 +2430,93 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
             </div>
 
             {/* Employee Information */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 rounded-2xl bg-slate-50 border border-slate-200/80 mb-4 text-xs">
-              <div>
-                <span className="text-[10px] text-slate-400 font-mono-code uppercase block">Nama Karyawan</span>
-                <span className="font-bold text-slate-900">{selectedSlip.employeeName}</span>
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-400 font-mono-code uppercase block">ID Login Akun</span>
-                <span className="font-bold text-slate-900 font-mono-code">
-                  {(() => {
-                    const emp = employees.find(e => e.id === selectedSlip.employeeId);
-                    return emp?.loginId || (selectedSlip.employeeId === 'EMP-001' ? 'admin' : ('d' + String(selectedSlip.employeeId.replace(/\D/g, '')).padStart(3, '0')));
-                  })()}
-                </span>
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-400 font-mono-code uppercase block">Departemen</span>
-                <span className="font-semibold text-slate-700">{selectedSlip.department}</span>
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-400 font-mono-code uppercase block">Jabatan / Posisi</span>
-                <span className="font-semibold text-slate-700">{selectedSlip.position}</span>
-              </div>
+            {(() => {
+              const emp = employees.find(e => e.id === selectedSlip.employeeId);
+              const loginId = emp?.loginId || (selectedSlip.employeeId === 'EMP-001' ? 'admin' : ('d' + String(selectedSlip.employeeId.replace(/\D/g, '')).padStart(3, '0')));
+              const nikVal = selectedSlip.nik || emp?.nik || emp?.ktpNumber || '-';
+              const bankInfo = emp?.bankAccount?.accountNumber 
+                ? `${emp.bankAccount.bankName} - ${emp.bankAccount.accountNumber}`
+                : 'Payroll Resmi Bank DMJ';
+              const empType = emp?.employmentType || 'TETAP';
+              const locType = emp?.workLocationType === 'NON_LOKAL' ? 'Non-Lokal (Roster)' : 'Lokal';
 
-              {selectedSlip.projectAllocations && selectedSlip.projectAllocations.length > 1 && (
-                <div className="col-span-2 sm:col-span-4 p-2.5 rounded-xl bg-purple-50/80 border border-purple-200 mt-1">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="px-1.5 py-0.5 rounded bg-purple-600 text-white font-mono-code font-black text-[9.5px]">
-                      ⚡ MULTI-PROYEK ({selectedSlip.projectAllocations.length} PROYEK)
-                    </span>
-                    <span className="text-[10.5px] font-bold text-purple-950">
-                      Beban Penggajian Terbagi Rata (1/{selectedSlip.projectAllocations.length})
-                    </span>
+              return (
+                <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 mb-4 text-xs space-y-2.5">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div>
+                      <span className="text-[10px] text-slate-400 font-mono-code uppercase block">Nama Karyawan</span>
+                      <span className="font-bold text-slate-900">{selectedSlip.employeeName}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 font-mono-code uppercase block">NIK / Identitas</span>
+                      <span className="font-bold text-slate-900 font-mono-code">{nikVal}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 font-mono-code uppercase block">ID Login Akun</span>
+                      <span className="font-bold text-slate-900 font-mono-code">{loginId}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 font-mono-code uppercase block">Departemen</span>
+                      <span className="font-semibold text-slate-700">{selectedSlip.department}</span>
+                    </div>
                   </div>
-                  <div className="mt-1.5 flex flex-wrap gap-1.5">
-                    {selectedSlip.projectAllocations.map(a => (
-                      <span key={a.projectId} className="px-2 py-0.5 rounded-md bg-white border border-purple-200/90 text-[10px] font-mono-code">
-                        <strong className="text-purple-900">[{a.projectCode}]</strong> {a.projectName}: <span className="font-bold text-slate-700">{a.percentage}%</span>
-                      </span>
-                    ))}
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-slate-200/60">
+                    <div>
+                      <span className="text-[10px] text-slate-400 font-mono-code uppercase block">Jabatan / Posisi</span>
+                      <span className="font-semibold text-slate-700">{selectedSlip.position}</span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 font-mono-code uppercase block">Status Kerja</span>
+                      <span className="font-semibold text-slate-700">{empType} • {locType}</span>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="text-[10px] text-slate-400 font-mono-code uppercase block">Rekening Payroll</span>
+                      <span className="font-semibold text-slate-700 font-mono-code text-[11px]">{bankInfo}</span>
+                    </div>
                   </div>
+
+                  {selectedSlip.projectAllocations && selectedSlip.projectAllocations.length > 1 && (
+                    <div className="p-2.5 rounded-xl bg-purple-50/80 border border-purple-200 mt-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="px-1.5 py-0.5 rounded bg-purple-600 text-white font-mono-code font-black text-[9.5px]">
+                          ⚡ MULTI-PROYEK ({selectedSlip.projectAllocations.length} PROYEK)
+                        </span>
+                        <span className="text-[10.5px] font-bold text-purple-950">
+                          Beban Penggajian Terbagi Rata (1/{selectedSlip.projectAllocations.length})
+                        </span>
+                      </div>
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {selectedSlip.projectAllocations.map(a => (
+                          <span key={a.projectId} className="px-2 py-0.5 rounded-md bg-white border border-purple-200/90 text-[10px] font-mono-code">
+                            <strong className="text-purple-900">[{a.projectCode}]</strong> {a.projectName}: <span className="font-bold text-slate-700">{a.percentage}%</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              );
+            })()}
 
             {/* Attendance & Audit Info Box */}
             <div className="p-2.5 rounded-xl bg-orange-50/60 border border-orange-200/70 mb-4 flex flex-wrap items-center justify-between text-[11px] gap-2">
-              <span className="text-slate-600 font-medium">
-                Presensi: <strong>{selectedSlip.presentDays}</strong> Hadir / <strong>{selectedSlip.workingDays}</strong> Hari Kerja • Cuti: {selectedSlip.leaveDays}h {selectedSlip.unpaidLeaveDays > 0 ? `• Unpaid: ${selectedSlip.unpaidLeaveDays}h` : ''}
-              </span>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-slate-600 font-medium">
+                <span>Presensi: <strong>{selectedSlip.presentDays}</strong> Hadir / <strong>{selectedSlip.workingDays}</strong> Hari Kerja</span>
+                <span>• Cuti: <strong>{selectedSlip.leaveDays || 0}</strong>h</span>
+                {Boolean(selectedSlip.unpaidLeaveDays && selectedSlip.unpaidLeaveDays > 0) && (
+                  <span>• Unpaid: <strong className="text-amber-700">{selectedSlip.unpaidLeaveDays}h</strong></span>
+                )}
+                {Boolean(selectedSlip.alphaDays && selectedSlip.alphaDays > 0) && (
+                  <span>• Alpha: <strong className="text-rose-600">{selectedSlip.alphaDays}h</strong></span>
+                )}
+                {Boolean((selectedSlip.overtimeHours && selectedSlip.overtimeHours > 0) || (selectedSlip.overtimePay && selectedSlip.overtimePay > 0)) && (
+                  <span>• Lembur: <strong className="text-emerald-700">{selectedSlip.overtimeHours || 0} Jam</strong></span>
+                )}
+                {Boolean((selectedSlip.lateHours && selectedSlip.lateHours > 0) || (selectedSlip.lateMinutes && selectedSlip.lateMinutes > 0)) && (
+                  <span>• Terlambat: <strong className="text-rose-600">{selectedSlip.lateHours || Math.ceil((selectedSlip.lateMinutes || 0) / 60)} Jam ({selectedSlip.lateMinutes || 0} mnt)</strong></span>
+                )}
+              </div>
               <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold font-mono-code ${
                 selectedSlip.hrValidationStatus === 'VALIDATED_BY_HR'
                   ? 'bg-emerald-100 text-emerald-800'
@@ -2511,6 +2549,12 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                   <span className="text-slate-600">Tunjangan Penugasan Proyek:</span>
                   <span className="font-mono-code font-semibold">{formatSalaryDisplay(selectedSlip.projectAllowance, showPayrollNominal)}</span>
                 </div>
+                {Boolean((selectedSlip.overtimePay && selectedSlip.overtimePay > 0) || (selectedSlip.overtimeHours && selectedSlip.overtimeHours > 0)) && (
+                  <div className="flex justify-between py-0.5 text-emerald-800 font-medium">
+                    <span className="text-slate-600">Upah Lembur ({selectedSlip.overtimeHours || 0} Jam):</span>
+                    <span className="font-mono-code font-semibold">{formatSalaryDisplay(selectedSlip.overtimePay || 0, showPayrollNominal)}</span>
+                  </div>
+                )}
 
                 <div className="flex justify-between pt-1.5 border-t border-slate-200 font-bold text-slate-900">
                   <span>Total Penghasilan Bruto:</span>
@@ -2529,6 +2573,12 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                     <span className="font-mono-code text-rose-600">-{formatSalaryDisplay(selectedSlip.unpaidLeaveDeduction, showPayrollNominal)}</span>
                   </div>
                 )}
+                {Boolean(selectedSlip.alphaDays && selectedSlip.alphaDays > 0) && (
+                  <div className="flex justify-between py-0.5 text-rose-700 font-medium">
+                    <span>Potongan Alpha / Mangkir ({selectedSlip.alphaDays} Hari):</span>
+                    <span className="font-mono-code text-rose-600">-{formatSalaryDisplay(selectedSlip.alphaDeduction || 0, showPayrollNominal)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between py-0.5">
                   <span className="text-slate-600">BPJS Ketenagakerjaan (3%):</span>
                   <span className="font-mono-code text-rose-600">-{formatSalaryDisplay(selectedSlip.bpjsKetenagakerjaan, showPayrollNominal)}</span>
@@ -2541,51 +2591,30 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                   <span className="text-slate-600">Estimasi Pajak PPh 21:</span>
                   <span className="font-mono-code text-rose-600">-{formatSalaryDisplay(selectedSlip.pph21, showPayrollNominal)}</span>
                 </div>
-                <div className="py-1">
-                  <div className="flex justify-between items-center py-0.5">
-                    <span className="text-slate-600 font-medium">
-                      Potongan Keterlambatan:
-                    </span>
-                    <span className={`font-mono-code ${selectedSlip.unapprovedLateDeduction > 0 ? 'text-rose-600 font-bold' : 'text-slate-500'}`}>
-                      {selectedSlip.unapprovedLateDeduction > 0 ? `-${formatSalaryDisplay(selectedSlip.unapprovedLateDeduction, showPayrollNominal)}` : 'Rp 0'}
-                    </span>
-                  </div>
-                  {/* Detail Rincian Keterlambatan Sesuai Permintaan Mr Prime */}
-                  <div className="mt-0.5 text-[10px] text-slate-500 font-mono-code flex items-center justify-between bg-slate-50 px-2 py-1 rounded-md border border-slate-200/60">
-                    <span className="truncate pr-1">
-                      {selectedSlip.isOfficeEmployee ? (
-                        <>
-                          <span className="font-semibold text-slate-700">🏢 Kantor Pusat (Office):</span>{' '}
-                          {selectedSlip.unapprovedLateDeduction > 0 ? (
-                            <span className="text-rose-600 font-bold">
-                              {selectedSlip.lateHours || Math.ceil((selectedSlip.lateMinutes || 0) / 60)} Jam Terlambat ({selectedSlip.lateMinutes || 0} mnt, {selectedSlip.lateDays || 0} hari) @ Rp {(selectedSlip.lateDeductionRate || 50000).toLocaleString('id-ID')}/jam
-                            </span>
-                          ) : (selectedSlip.lateDays && selectedSlip.lateDays > 0) ? (
-                            <span className="text-emerald-700 font-medium">
-                              {selectedSlip.lateDays}x Terlambat ({selectedSlip.lateMinutes || 0} mnt) — Dispensasi PM/HR Disetujui
-                            </span>
-                          ) : (
-                            <span className="text-emerald-700 font-medium">
-                              Tepat Waktu (0 Menit Keterlambatan / Nihil)
-                            </span>
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          <span className="font-semibold text-slate-700">🏗️ Site Lapangan:</span>{' '}
-                          <span className="text-emerald-700 font-medium">
-                            {(selectedSlip.lateDays && selectedSlip.lateDays > 0) ? `${selectedSlip.lateDays}x Terlambat (${selectedSlip.lateMinutes || 0} mnt) • Bebas Denda Site Proyek` : 'Bebas Potongan Denda Site (Nihil)'}
-                          </span>
-                        </>
-                      )}
-                    </span>
-                    {selectedSlip.isOfficeEmployee && (
-                      <span className="text-slate-400 font-semibold text-[9.5px] shrink-0">
-                        Tarif: Rp {(selectedSlip.lateDeductionRate || 50000).toLocaleString('id-ID')}/jam
-                      </span>
-                    )}
-                  </div>
+
+                {/* Potongan Keterlambatan - Clean single row without messy sub-box */}
+                <div className="flex justify-between py-0.5">
+                  <span className="text-slate-600">
+                    {selectedSlip.unapprovedLateDeduction > 0 
+                      ? `Potongan Keterlambatan (${selectedSlip.lateHours || Math.ceil((selectedSlip.lateMinutes || 0) / 60)} Jam @ Rp ${(selectedSlip.lateDeductionRate || 50000).toLocaleString('id-ID')}/jam):`
+                      : 'Potongan Keterlambatan:'
+                    }
+                  </span>
+                  <span className={`font-mono-code ${selectedSlip.unapprovedLateDeduction > 0 ? 'text-rose-600 font-bold' : 'text-slate-500'}`}>
+                    {selectedSlip.unapprovedLateDeduction > 0 ? `-${formatSalaryDisplay(selectedSlip.unapprovedLateDeduction, showPayrollNominal)}` : 'Rp 0'}
+                  </span>
                 </div>
+
+                {/* Potongan Kasbon Pribadi */}
+                {Boolean(selectedSlip.kasbonDeduction && selectedSlip.kasbonDeduction > 0) && (
+                  <div className="flex justify-between py-0.5 text-rose-700 font-medium">
+                    <span title={selectedSlip.kasbonDeductionNote || 'Potongan Cicilan Kasbon Pribadi'}>
+                      Potongan Kasbon Pribadi {selectedSlip.kasbonRemainingBalance !== undefined ? `(Sisa: ${formatSalaryDisplay(selectedSlip.kasbonRemainingBalance, showPayrollNominal)})` : ''}:
+                    </span>
+                    <span className="font-mono-code text-rose-600 font-bold">-{formatSalaryDisplay(selectedSlip.kasbonDeduction || 0, showPayrollNominal)}</span>
+                  </div>
+                )}
+
                 <div className="flex justify-between pt-1.5 border-t border-slate-200 font-bold text-slate-900">
                   <span>Total Potongan:</span>
                   <span className="font-mono-code text-rose-600">-{formatSalaryDisplay(selectedSlip.totalDeductions, showPayrollNominal)}</span>
@@ -2620,7 +2649,7 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
               </div>
 
               <div className="text-right">
-                <p className="text-[10px] text-slate-400 font-mono-code">Surabaya, 08 September 2026</p>
+                <p className="text-[10px] text-slate-400 font-mono-code">Surabaya, {selectedSlip.paymentDate || `25 ${selectedSlip.period}`}</p>
                 <p className="text-xs font-bold text-slate-800 mt-4">Direksi & Finance PT Prime Infinity Systems</p>
                 <span className="text-[9px] text-emerald-600 font-semibold font-mono-code">✓ Digitally Signed & Stamped</span>
               </div>
