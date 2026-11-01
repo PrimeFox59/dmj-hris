@@ -109,35 +109,43 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
     return employees.find(e => e.id === currentUserProject.projectManagerId);
   }, [currentUserProject, employees]);
 
-  // Hak Akses Persetujuan Item (Otoritas Validasi PM vs HR)
+  // Hak Akses Persetujuan Item (Otoritas Validasi Alur 2-Tahap: PM Proyek ➔ HR Manager)
   const canUserApproveItem = React.useCallback((item: ApprovalItem): boolean => {
-    // Tidak bisa menyetujui pengajuan milik sendiri
+    // 1. Tidak bisa menyetujui pengajuan milik sendiri
     if (item.employeeId === currentUser.id) return false;
 
-    // Superuser, Admin, HR Manager memiliki hak persetujuan universal
-    if (currentRole === 'superuser' || currentRole === 'admin' || isHrManager) {
-      return true;
-    }
+    // 2. Item yang sudah final tidak perlu diproses lagi
+    if (item.status === 'APPROVED' || item.status === 'REJECTED') return false;
 
-    // Untuk cuti reguler: HR Manager memegang otoritas utama
-    if (item.type === 'LEAVE' && !isHrManager) {
-      return false;
-    }
+    // 3. Superuser memegang hak override darurat
+    if (currentRole === 'superuser') return true;
 
-    // Jika pengajuan berasal dari staf proyek:
+    // 4. Cari proyek pengaju dan PM proyek terkait
     const applicantProj = (projects || []).find(p => 
       p.id === item.projectId || 
       p.code === item.projectCode ||
       p.id === employees.find(e => e.id === item.employeeId)?.assignedProjectId
     );
+    const pmId = item.projectManagerId || applicantProj?.projectManagerId;
+    const isApplicantThePm = Boolean(pmId && pmId === item.employeeId);
+    const hasProjectPm = Boolean(pmId && !isApplicantThePm);
 
-    // Karyawan Tanpa Proyek: Secara default HANYA HR Manager yang berhak approve
-    if (!applicantProj || !applicantProj.projectManagerId) {
-      return isHrManager;
+    // Tentukan tahap saat ini:
+    // Menunggu PM: jika memiliki PM proyek dan belum disetujui PM (dan targetApproverRole === 'PM' atau stage === 'PM')
+    const isWaitingForPm = hasProjectPm && !item.pmApprovedBy && (item.targetApproverRole === 'PM' || item.stage === 'PM' || !item.stage);
+
+    if (isWaitingForPm) {
+      // TAHAP 1: WAJIB ke PM terkait terlebih dahulu!
+      // HR Manager BELUM berhak menyetujui sampai PM merekomendasikan/menyetujui tahap 1
+      if (pmId === currentUser.id || applicantProj?.projectManagerId === currentUser.id) {
+        return true;
+      }
+      return false;
     }
 
-    // Karyawan Dengan Proyek: PM proyek tersebut berhak approve
-    if (applicantProj.projectManagerId === currentUser.id) {
+    // TAHAP 2: Menunggu Persetujuan HR Manager
+    // Bisa disetujui jika user adalah HR Manager, Admin HR, atau Superuser
+    if (isHrManager || currentRole === 'hr' || currentRole === 'admin') {
       return true;
     }
 
@@ -401,6 +409,11 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
       return;
     }
 
+    const targetProj = currentUserProject;
+    const pmEmp = currentUserProjectManager;
+    const hasPm = Boolean(targetProj && pmEmp && pmEmp.id !== currentUser.id);
+    const approverRole: 'PM' | 'HR' = hasPm ? 'PM' : 'HR';
+
     const newItem: ApprovalItem = {
       id: `APP-${Date.now()}`,
       type: newRequestType,
@@ -421,7 +434,14 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
       isOverQuota: unpaidLeaveDays > 0,
       isOffSchedule,
       offScheduleReason: isOffSchedule ? offScheduleReason : undefined,
-      requiresHrApproval: unpaidLeaveDays > 0 || isOffSchedule,
+      projectId: targetProj?.id,
+      projectCode: targetProj?.code,
+      projectName: targetProj?.name,
+      projectManagerId: pmEmp?.id,
+      projectManagerName: pmEmp?.name,
+      targetApproverRole: approverRole,
+      stage: approverRole,
+      requiresHrApproval: true,
       isEarlySubmission: isRosterLeave ? isEarlySubmission : undefined,
       earlyReason: isRosterLeave && isEarlySubmission ? earlyReason : undefined,
       status: 'PENDING',
@@ -1004,16 +1024,23 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                           )}
 
                           {/* Route Icon Badge */}
-                          {item.targetApproverRole === 'PM' ? (
+                          {item.pmApprovedBy ? (
                             <div
-                              title={item.projectManagerName ? `Rute Otorisasi: PM (${item.projectManagerName})` : 'Rute Otorisasi: Project Manager (PM Site)'}
+                              title={`Tahap 1: Disetujui PM (${item.pmApprovedBy}) • Tahap 2: Menunggu Otorisasi Akhir HR Manager`}
+                              className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-300 flex items-center justify-center shadow-2xs hover:scale-110 transition-transform cursor-help"
+                            >
+                              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                            </div>
+                          ) : item.targetApproverRole === 'PM' || (!item.pmApprovedBy && item.projectManagerId) ? (
+                            <div
+                              title={item.projectManagerName ? `Tahap 1/2: Menunggu Otorisasi PM (${item.projectManagerName})` : 'Tahap 1/2: Menunggu Otorisasi Project Manager'}
                               className="w-7 h-7 rounded-lg bg-amber-50 text-amber-800 border border-amber-300/90 flex items-center justify-center shadow-2xs hover:scale-110 transition-transform cursor-help"
                             >
                               <HardHat className="w-3.5 h-3.5 text-amber-700" />
                             </div>
                           ) : (
                             <div
-                              title="Rute Otorisasi: HR Manager Saja"
+                              title="Rute Otorisasi: HR Manager Saja (Tanpa PM Proyek)"
                               className="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200/90 flex items-center justify-center shadow-2xs hover:scale-110 transition-transform cursor-help"
                             >
                               <Shield className="w-3.5 h-3.5 text-indigo-600" />
@@ -1124,12 +1151,12 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                         isSelected ? 'bg-orange-50/95' : idx % 2 === 1 ? 'bg-slate-50/95' : 'bg-white/95'
                       }`}>
                         <div className="flex items-center justify-center gap-1.5">
-                          {isPending && canApprove && (
+                          {isPending && canApprove ? (
                             <>
                               <button
                                 type="button"
                                 onClick={() => handleActionClick(item, 'APPROVE')}
-                                title="Setujui (Approve)"
+                                title={item.targetApproverRole === 'PM' || (!item.pmApprovedBy && item.projectManagerId) ? "Setujui Tahap 1 (Rekomendasi PM)" : "Setujui Otorisasi Akhir (HR Manager)"}
                                 className="w-7 h-7 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center transition-all cursor-pointer shadow-2xs hover:shadow active:scale-90 shrink-0"
                               >
                                 <Check className="w-3.5 h-3.5 stroke-[2.5]" />
@@ -1151,7 +1178,15 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                                 <AlertCircle className="w-3.5 h-3.5" />
                               </button>
                             </>
-                          )}
+                          ) : isPending && !canApprove ? (
+                            <div
+                              className="text-[10px] text-amber-700 bg-amber-50/90 border border-amber-200/80 px-2 py-0.8 rounded-lg font-medium inline-flex items-center gap-1 max-w-[125px] truncate"
+                              title={item.pmApprovedBy ? 'Disetujui PM • Menunggu Otorisasi Akhir HR Manager' : `Menunggu Otorisasi PM Terkait: ${item.projectManagerName || 'Project Manager'}`}
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0 animate-ping"></span>
+                              <span className="truncate">{item.pmApprovedBy ? 'Menunggu HR' : 'Tunggu PM'}</span>
+                            </div>
+                          ) : null}
                           <button
                             type="button"
                             onClick={() => setDetailModalItem(item)}
@@ -2159,8 +2194,56 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
               )}
             </div>
 
+            {/* Alur Persetujuan Bertingkat (PM Proyek Terkait ➔ HR Manager) */}
+            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 text-xs space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-indigo-600" />
+                  <span>Alur Otorisasi Bertingkat (PM Terkait ➔ HR Manager)</span>
+                </span>
+                <span className="text-[10px] font-mono-code text-slate-500">
+                  {detailModalItem.projectName ? `Proyek: ${detailModalItem.projectName}` : 'Kantor Pusat / Non-Proyek'}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-[11px]">
+                <div className={`p-2.5 rounded-xl border ${detailModalItem.pmApprovedBy ? 'bg-emerald-50 border-emerald-300 text-emerald-900' : (detailModalItem.targetApproverRole === 'PM' || !detailModalItem.pmApprovedBy) && detailModalItem.projectManagerId ? 'bg-amber-50 border-amber-300 text-amber-900 font-semibold ring-2 ring-amber-400/30' : 'bg-slate-100 border-slate-200 text-slate-500'}`}>
+                  <div className="text-[9.5px] uppercase font-mono-code tracking-wider text-slate-400">Tahap 1: Otorisasi PM</div>
+                  <div className="font-bold truncate mt-0.5">{detailModalItem.projectManagerName ? `PM: ${detailModalItem.projectManagerName}` : 'Tidak Ada PM (Lewati)'}</div>
+                  <div className="text-[10px] mt-1">
+                    {detailModalItem.pmApprovedBy ? (
+                      <span className="text-emerald-700 font-medium">✓ Disetujui ({detailModalItem.pmApprovedBy})</span>
+                    ) : detailModalItem.projectManagerId ? (
+                      <span className="text-amber-800 font-medium">⏳ Menunggu Persetujuan PM</span>
+                    ) : (
+                      <span className="text-slate-400">Langsung ke HR</span>
+                    )}
+                  </div>
+                  {detailModalItem.pmReviewNote && (
+                    <div className="text-[9.5px] italic text-emerald-800 mt-1">"{detailModalItem.pmReviewNote}"</div>
+                  )}
+                </div>
+
+                <div className={`p-2.5 rounded-xl border ${detailModalItem.status === 'APPROVED' ? 'bg-emerald-50 border-emerald-300 text-emerald-900' : (detailModalItem.targetApproverRole === 'HR' || detailModalItem.pmApprovedBy || !detailModalItem.projectManagerId) && detailModalItem.status === 'PENDING' ? 'bg-indigo-50 border-indigo-300 text-indigo-900 font-semibold ring-2 ring-indigo-400/30' : 'bg-slate-100 border-slate-200 text-slate-400'}`}>
+                  <div className="text-[9.5px] uppercase font-mono-code tracking-wider text-slate-400">Tahap 2: Otorisasi HR</div>
+                  <div className="font-bold truncate mt-0.5">HR Manager</div>
+                  <div className="text-[10px] mt-1">
+                    {detailModalItem.status === 'APPROVED' ? (
+                      <span className="text-emerald-700 font-medium">✓ Disetujui Final ({detailModalItem.hrApprovedBy || detailModalItem.reviewedBy || 'HR'})</span>
+                    ) : (detailModalItem.targetApproverRole === 'HR' || detailModalItem.pmApprovedBy || !detailModalItem.projectManagerId) ? (
+                      <span className="text-indigo-700 font-medium">⏳ Siap Diotorisasi HR</span>
+                    ) : (
+                      <span className="text-slate-400">🔒 Terkunci (Tunggu PM)</span>
+                    )}
+                  </div>
+                  {detailModalItem.hrReviewNote && (
+                    <div className="text-[9.5px] italic text-indigo-800 mt-1">"{detailModalItem.hrReviewNote}"</div>
+                  )}
+                </div>
+              </div>
+            </div>
+
             {/* Modal Actions */}
-            <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+            <div className="flex items-center justify-between pt-2 border-t border-slate-100 flex-wrap gap-2">
               <button
                 type="button"
                 onClick={() => setDetailModalItem(null)}
@@ -2169,7 +2252,7 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                 Tutup
               </button>
 
-              {detailModalItem.status === 'PENDING' && canUserApproveItem(detailModalItem) && (
+              {detailModalItem.status === 'PENDING' && canUserApproveItem(detailModalItem) ? (
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
@@ -2202,10 +2285,19 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                     }}
                     className="px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 text-white text-xs font-bold cursor-pointer transition-all shadow-xs"
                   >
-                    Setujui (Approve)
+                    {detailModalItem.targetApproverRole === 'PM' || (!detailModalItem.pmApprovedBy && detailModalItem.projectManagerId) ? 'Setujui Tahap 1 (Rekomendasi PM)' : 'Setujui Akhir (Otorisasi HR)'}
                   </button>
                 </div>
-              )}
+              ) : detailModalItem.status === 'PENDING' && !canUserApproveItem(detailModalItem) ? (
+                <div className="px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200/80 text-amber-800 text-xs font-medium flex items-center gap-1.5">
+                  <Shield className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                  <span>
+                    {!detailModalItem.pmApprovedBy && detailModalItem.projectManagerId
+                      ? `Menunggu Otorisasi PM Terkait (${detailModalItem.projectManagerName || 'Project Manager'}) sebelum dapat diproses oleh HR Manager.`
+                      : 'Telah direkomendasikan oleh PM. Menunggu Otorisasi Akhir dari HR Manager.'}
+                  </span>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>,

@@ -318,6 +318,13 @@ export interface ApprovalItem {
   projectManagerId?: string;
   projectManagerName?: string;
   targetApproverRole?: 'PM' | 'HR';
+  stage?: 'PM' | 'HR' | 'FINAL';
+  pmApprovedBy?: string;
+  pmApprovedAt?: string;
+  pmReviewNote?: string;
+  hrApprovedBy?: string;
+  hrApprovedAt?: string;
+  hrReviewNote?: string;
 }
 
 export interface ProjectWorkSchedule {

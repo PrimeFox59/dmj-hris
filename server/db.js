@@ -611,6 +611,65 @@ export function getAttendancePhoto(id) {
   }
 }
 
+/**
+ * Resolve an employee's assigned project and designated Project Manager (PM)
+ */
+export function resolveEmployeeProjectAndPm(employeeId) {
+  const db = getDatabase();
+  if (!employeeId) return null;
+
+  const empRow = db.prepare('SELECT id, name, assignedProjectId, data_json FROM employees WHERE id = ? OR nik = ? LIMIT 1;').get(employeeId, employeeId);
+  if (!empRow) return null;
+
+  let assignedProjId = empRow.assignedProjectId;
+  try {
+    const empData = JSON.parse(empRow.data_json);
+    if (!assignedProjId) assignedProjId = empData.assignedProjectId;
+  } catch (e) {}
+
+  let projRow = null;
+  if (assignedProjId) {
+    projRow = db.prepare('SELECT id, code, name, data_json FROM projects WHERE id = ? OR code = ? LIMIT 1;').get(assignedProjId, assignedProjId);
+  }
+
+  if (!projRow) {
+    const allProjects = db.prepare('SELECT id, code, name, data_json FROM projects;').all();
+    for (const p of allProjects) {
+      try {
+        const pObj = JSON.parse(p.data_json);
+        const pPersonnel = pObj.assignedPersonnelIds || pObj.assignedEmployeeIds || [];
+        if (Array.isArray(pPersonnel) && (pPersonnel.includes(empRow.id) || pPersonnel.includes(employeeId))) {
+          projRow = p;
+          break;
+        }
+      } catch (pe) {}
+    }
+  }
+
+  if (!projRow) return null;
+
+  let projData = {};
+  try {
+    projData = JSON.parse(projRow.data_json);
+  } catch (e) {}
+
+  const pmId = projData.projectManagerId;
+  let pmName = null;
+  if (pmId) {
+    const pmEmp = db.prepare('SELECT id, name FROM employees WHERE id = ? OR nik = ? LIMIT 1;').get(pmId, pmId);
+    if (pmEmp) pmName = pmEmp.name;
+  }
+
+  return {
+    projectId: projRow.id,
+    projectCode: projRow.code,
+    projectName: projRow.name,
+    projectManagerId: pmId || null,
+    projectManagerName: pmName || null,
+    isEmployeeThePm: Boolean(pmId && (pmId === empRow.id || pmId === employeeId))
+  };
+}
+
 export function saveAttendance(record) {
   const db = getDatabase();
 
@@ -749,6 +808,9 @@ export function saveAttendance(record) {
       ? `Catatan Luar Area${distText}: ${record.outOfRangeReason || record.note || 'Presensi di luar radius resmi'}`
       : `Alasan Keterlambatan: ${record.lateReason || 'Keterlambatan operasional'}`;
 
+    const projInfo = resolveEmployeeProjectAndPm(record.employeeId);
+    const hasPm = Boolean(projInfo?.projectManagerId && !projInfo.isEmployeeThePm);
+
     const approvalItem = {
       id: approvalId,
       type: approvalType,
@@ -763,7 +825,15 @@ export function saveAttendance(record) {
       attendanceRecordId: record.id,
       proofAttachment: record.photoUrl,
       status: 'PENDING',
-      submittedAt: `${record.date} ${record.checkInTime}`
+      submittedAt: `${record.date} ${record.checkInTime}`,
+      projectId: projInfo?.projectId || record.projectId || null,
+      projectCode: projInfo?.projectCode || record.projectCode || null,
+      projectName: projInfo?.projectName || record.projectName || null,
+      projectManagerId: projInfo?.projectManagerId || null,
+      projectManagerName: projInfo?.projectManagerName || null,
+      targetApproverRole: hasPm ? 'PM' : 'HR',
+      stage: hasPm ? 'PM' : 'HR',
+      requiresHrApproval: true
     };
 
     db.prepare(`
@@ -875,10 +945,65 @@ export function updateApproval(id, status, reviewNote, reviewedBy = 'Direksi / H
 
   const item = JSON.parse(row.data_json);
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
+
+  // 2-STAGE APPROVAL WORKFLOW GATEKEEPER:
+  // If item is currently at Stage 1 (PM review) and action is 'APPROVED':
+  // Record PM recommendation/approval and shift to Stage 2 (HR Manager)
+  const isPmStage = (item.targetApproverRole === 'PM' || item.stage === 'PM') && !item.pmApprovedBy && Boolean(item.projectManagerId);
+
+  if (status === 'APPROVED' && isPmStage) {
+    item.pmApprovedBy = reviewedBy;
+    item.pmApprovedAt = now;
+    item.pmReviewNote = reviewNote || null;
+    item.targetApproverRole = 'HR';
+    item.stage = 'HR';
+    item.status = 'PENDING'; // Retains PENDING status until final HR approval!
+    item.requiresHrApproval = true;
+
+    db.prepare(`
+      UPDATE approvals
+      SET status = ?, reviewedBy = ?, reviewedAt = ?, reviewNote = ?, data_json = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?;
+    `).run('PENDING', reviewedBy, now, reviewNote || null, JSON.stringify(item), id);
+
+    addAuditLog({
+      action: 'APPROVAL_PM_RECOMMENDED',
+      entity: 'approvals',
+      entityId: id,
+      userName: reviewedBy || 'Project Manager',
+      userRole: 'pm',
+      module: 'APPROVALS',
+      status: 'SUCCESS',
+      details: `Pengajuan [${item.type}] untuk ${item.employeeName} (${item.employeeNik}) telah disetujui Tahap 1 oleh PM ${reviewedBy}. Diteruskan ke HR Manager untuk otorisasi akhir.${reviewNote ? ` Catatan PM: "${reviewNote}"` : ''}`
+    });
+
+    return {
+      success: true,
+      item,
+      updatedAttendance: null,
+      updatedEmployee: null,
+      isIntermediatePmApproval: true
+    };
+  }
+
+  // Final Decision (Stage 2 HR Approval, or Rejection by either PM / HR)
   item.status = status;
   item.reviewNote = reviewNote;
   item.reviewedBy = reviewedBy;
   item.reviewedAt = now;
+
+  if (status === 'APPROVED') {
+    item.hrApprovedBy = reviewedBy;
+    item.hrApprovedAt = now;
+    item.hrReviewNote = reviewNote || null;
+    item.stage = 'FINAL';
+  } else {
+    if (isPmStage) {
+      item.pmReviewNote = reviewNote || null;
+    } else {
+      item.hrReviewNote = reviewNote || null;
+    }
+  }
 
   let updatedAttendance = null;
   let updatedEmployee = null;
@@ -1081,41 +1206,23 @@ export function saveApproval(item) {
     }
   }
 
-  // Attendance Correction Project & Routing Metadata Gatekeeper
-  if (item.type === 'ATTENDANCE_CORRECTION') {
-    const empRow = db.prepare('SELECT assignedProjectId, data_json FROM employees WHERE id = ?').get(item.employeeId);
-    if (empRow) {
-      try {
-        const empData = JSON.parse(empRow.data_json);
-        const projId = empRow.assignedProjectId || empData.assignedProjectId;
-        if (projId) {
-          const projRow = db.prepare('SELECT id, code, name, data_json FROM projects WHERE id = ? OR code = ?').get(projId, projId);
-          if (projRow) {
-            const projData = JSON.parse(projRow.data_json);
-            item.projectId = projRow.id;
-            item.projectCode = projRow.code;
-            item.projectName = projRow.name;
-            if (projData.projectManagerId) {
-              item.projectManagerId = projData.projectManagerId;
-              const pmEmpRow = db.prepare('SELECT name, data_json FROM employees WHERE id = ?').get(projData.projectManagerId);
-              if (pmEmpRow) {
-                item.projectManagerName = pmEmpRow.name;
-              }
-              item.targetApproverRole = 'PM';
-            } else {
-              item.targetApproverRole = 'HR';
-            }
-          } else {
-            item.targetApproverRole = 'HR';
-          }
-        } else {
-          item.targetApproverRole = 'HR';
-        }
-      } catch (e) {
-        item.targetApproverRole = 'HR';
-      }
-    }
+  // Multi-Stage Project & PM Routing Gatekeeper for ALL approval types (Late, Leave, Permit, Correction, Geofence)
+  const projInfo = resolveEmployeeProjectAndPm(item.employeeId);
+  const hasPm = Boolean(projInfo?.projectManagerId && !projInfo.isEmployeeThePm);
+
+  if (!item.projectId && projInfo?.projectId) item.projectId = projInfo.projectId;
+  if (!item.projectCode && projInfo?.projectCode) item.projectCode = projInfo.projectCode;
+  if (!item.projectName && projInfo?.projectName) item.projectName = projInfo.projectName;
+  if (!item.projectManagerId && projInfo?.projectManagerId) item.projectManagerId = projInfo.projectManagerId;
+  if (!item.projectManagerName && projInfo?.projectManagerName) item.projectManagerName = projInfo.projectManagerName;
+
+  if (!item.targetApproverRole) {
+    item.targetApproverRole = hasPm ? 'PM' : 'HR';
   }
+  if (!item.stage) {
+    item.stage = hasPm ? 'PM' : 'HR';
+  }
+  item.requiresHrApproval = true;
 
   db.prepare(`
     INSERT OR REPLACE INTO approvals (

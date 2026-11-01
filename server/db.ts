@@ -441,6 +441,65 @@ export function getAttendancePhoto(id: string): string | null {
   }
 }
 
+/**
+ * Resolve an employee's assigned project and designated Project Manager (PM)
+ */
+export function resolveEmployeeProjectAndPm(employeeId: string) {
+  const db = getDatabase();
+  if (!employeeId) return null;
+
+  const empRow = db.prepare('SELECT id, name, assignedProjectId, data_json FROM employees WHERE id = ? OR nik = ? LIMIT 1;').get(employeeId, employeeId) as any;
+  if (!empRow) return null;
+
+  let assignedProjId = empRow.assignedProjectId;
+  try {
+    const empData = JSON.parse(empRow.data_json);
+    if (!assignedProjId) assignedProjId = empData.assignedProjectId;
+  } catch (e) {}
+
+  let projRow = null as any;
+  if (assignedProjId) {
+    projRow = db.prepare('SELECT id, code, name, data_json FROM projects WHERE id = ? OR code = ? LIMIT 1;').get(assignedProjId, assignedProjId);
+  }
+
+  if (!projRow) {
+    const allProjects = db.prepare('SELECT id, code, name, data_json FROM projects;').all() as any[];
+    for (const p of allProjects) {
+      try {
+        const pObj = JSON.parse(p.data_json);
+        const pPersonnel = pObj.assignedPersonnelIds || pObj.assignedEmployeeIds || [];
+        if (Array.isArray(pPersonnel) && (pPersonnel.includes(empRow.id) || pPersonnel.includes(employeeId))) {
+          projRow = p;
+          break;
+        }
+      } catch (pe) {}
+    }
+  }
+
+  if (!projRow) return null;
+
+  let projData = {} as any;
+  try {
+    projData = JSON.parse(projRow.data_json);
+  } catch (e) {}
+
+  const pmId = projData.projectManagerId;
+  let pmName = null;
+  if (pmId) {
+    const pmEmp = db.prepare('SELECT id, name FROM employees WHERE id = ? OR nik = ? LIMIT 1;').get(pmId, pmId) as any;
+    if (pmEmp) pmName = pmEmp.name;
+  }
+
+  return {
+    projectId: projRow.id,
+    projectCode: projRow.code,
+    projectName: projRow.name,
+    projectManagerId: pmId || null,
+    projectManagerName: pmName || null,
+    isEmployeeThePm: Boolean(pmId && (pmId === empRow.id || pmId === employeeId))
+  };
+}
+
 export function saveAttendance(record: AttendanceRecord): { success: boolean; record: AttendanceRecord } {
   const db = getDatabase();
   const insert = db.prepare(`
@@ -474,26 +533,42 @@ export function saveAttendance(record: AttendanceRecord): { success: boolean; re
   // If this attendance needs approval (Dinas Luar or Late), create approval item in SQLite
   if (record.approvalStatus === 'PENDING' && record.attendanceType !== 'CHECK_OUT') {
     const isDinasLuar = record.mode === 'DINAS_LUAR';
+    const isOutOfGeofence = record.status === 'OUT_OF_GEOFENCE';
     const approvalId = `APPR-${record.id}`;
+    const projInfo = resolveEmployeeProjectAndPm(record.employeeId);
+    const hasPm = Boolean(projInfo?.projectManagerId && !projInfo.isEmployeeThePm);
+
     const approvalItem: ApprovalItem = {
       id: approvalId,
-      type: isDinasLuar ? 'DINAS_LUAR' : 'LATE_JUSTIFICATION',
+      type: isDinasLuar ? 'DINAS_LUAR' : isOutOfGeofence ? 'OUT_OF_GEOFENCE' : 'LATE_JUSTIFICATION',
       employeeId: record.employeeId,
       employeeName: record.employeeName,
       employeeNik: record.employeeNik,
       department: record.department,
       title: isDinasLuar
         ? `Pengajuan Dinas Luar Mendadak: ${record.dinasLuarDetails?.clientName || 'Klien Luar'}`
+        : isOutOfGeofence
+        ? `Persetujuan Presensi Luar Area`
         : `Justifikasi Keterlambatan (${record.lateMinutes} Menit)`,
       description: isDinasLuar
         ? `Tujuan: ${record.dinasLuarDetails?.destination} | Alasan: ${record.dinasLuarDetails?.purpose}`
+        : isOutOfGeofence
+        ? `Presensi di luar radius resmi: ${record.note || ''}`
         : `Alasan Keterlambatan: ${record.lateReason}`,
       startDate: record.date,
       lateMinutes: record.lateMinutes,
       attendanceRecordId: record.id,
       proofAttachment: record.photoUrl,
       status: 'PENDING',
-      submittedAt: `${record.date} ${record.checkInTime}`
+      submittedAt: `${record.date} ${record.checkInTime}`,
+      projectId: projInfo?.projectId || record.projectId,
+      projectCode: projInfo?.projectCode || record.projectCode,
+      projectName: projInfo?.projectName || record.projectName,
+      projectManagerId: projInfo?.projectManagerId,
+      projectManagerName: projInfo?.projectManagerName,
+      targetApproverRole: hasPm ? 'PM' : 'HR',
+      stage: hasPm ? 'PM' : 'HR',
+      requiresHrApproval: true
     };
 
     const insertAppr = db.prepare(`
@@ -536,7 +611,7 @@ export function saveAttendance(record: AttendanceRecord): { success: boolean; re
 
 export function updateApproval(
   id: string,
-  status: 'APPROVED' | 'REJECTED',
+  status: 'APPROVED' | 'REJECTED' | 'REVISION_REQUESTED',
   reviewNote?: string,
   reviewedBy: string = 'Direksi / HR Lead'
 ) {
@@ -549,10 +624,43 @@ export function updateApproval(
   const item: ApprovalItem = JSON.parse(row.data_json);
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
 
+  // 2-STAGE APPROVAL WORKFLOW GATEKEEPER:
+  const isPmStage = (item.targetApproverRole === 'PM' || item.stage === 'PM') && !item.pmApprovedBy && Boolean(item.projectManagerId);
+
+  if (status === 'APPROVED' && isPmStage) {
+    item.pmApprovedBy = reviewedBy;
+    item.pmApprovedAt = now;
+    item.pmReviewNote = reviewNote;
+    item.targetApproverRole = 'HR';
+    item.stage = 'HR';
+    item.status = 'PENDING';
+    item.requiresHrApproval = true;
+
+    db.prepare(`
+      UPDATE approvals
+      SET status = ?, reviewedBy = ?, reviewedAt = ?, reviewNote = ?, data_json = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?;
+    `).run('PENDING', reviewedBy, now, reviewNote || null, JSON.stringify(item), id);
+
+    db.prepare(`
+      INSERT INTO audit_logs (action, entity, entityId, details)
+      VALUES (?, ?, ?, ?);
+    `).run('APPROVAL_PM_RECOMMENDED', 'approvals', id, `Approval ${id} direkomendasikan PM ${reviewedBy}, menunggu HR`);
+
+    return { success: true, item };
+  }
+
   item.status = status;
   item.reviewNote = reviewNote;
   item.reviewedBy = reviewedBy;
   item.reviewedAt = now;
+
+  if (status === 'APPROVED') {
+    item.hrApprovedBy = reviewedBy;
+    item.hrApprovedAt = now;
+    item.hrReviewNote = reviewNote;
+    item.stage = 'FINAL';
+  }
 
   db.prepare(`
     UPDATE approvals
@@ -565,7 +673,8 @@ export function updateApproval(
     const attRow = db.prepare('SELECT data_json FROM attendances WHERE id = ?;').get(item.attendanceRecordId) as any;
     if (attRow) {
       const attRecord: AttendanceRecord = JSON.parse(attRow.data_json);
-      attRecord.approvalStatus = status;
+      const finalAttApprovalStatus = status === 'APPROVED' ? 'APPROVED' : status === 'REJECTED' ? 'REJECTED' : 'PENDING';
+      attRecord.approvalStatus = finalAttApprovalStatus;
       attRecord.approvedBy = reviewedBy;
       attRecord.approvalDate = now;
       attRecord.approvalNote = reviewNote;
@@ -578,7 +687,7 @@ export function updateApproval(
         UPDATE attendances
         SET approvalStatus = ?, status = ?, data_json = ?
         WHERE id = ?;
-      `).run(status, attRecord.status, JSON.stringify(attRecord), item.attendanceRecordId);
+      `).run(finalAttApprovalStatus, attRecord.status, JSON.stringify(attRecord), item.attendanceRecordId);
     }
   }
 

@@ -989,8 +989,43 @@ export function App() {
 
   // Approval actions
   const handleApprove = (id: string, reviewerNote?: string) => {
+    const targetItem = approvals.find(a => a.id === id);
+    const isPmStage = Boolean(
+      targetItem &&
+      (targetItem.targetApproverRole === 'PM' || targetItem.stage === 'PM') &&
+      !targetItem.pmApprovedBy &&
+      targetItem.projectManagerId
+    );
+
     api.updateApproval(id, 'APPROVED', reviewerNote, `${currentUser.name} (${currentUser.role})`)
+      .then(res => {
+        if (res.item) {
+          setApprovals(prev => prev.map(a => a.id === id ? res.item : a));
+        }
+      })
       .catch(err => console.error('Failed to update approval in SQLite', err));
+
+    if (isPmStage) {
+      setApprovals(prev =>
+        prev.map(item => {
+          if (item.id === id) {
+            return {
+              ...item,
+              pmApprovedBy: currentUser.name,
+              pmApprovedAt: new Date().toISOString().replace('T', ' ').substring(0, 19),
+              pmReviewNote: reviewerNote,
+              targetApproverRole: 'HR',
+              stage: 'HR',
+              status: 'PENDING',
+              requiresHrApproval: true
+            };
+          }
+          return item;
+        })
+      );
+      showLiveToast('Persetujuan Tahap 1 (PM) Berhasil. Pengajuan diteruskan ke HR Manager untuk otorisasi akhir.', 'success');
+      return;
+    }
 
     setApprovals(prev =>
       prev.map(item => {

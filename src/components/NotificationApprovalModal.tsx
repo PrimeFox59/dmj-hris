@@ -84,20 +84,28 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
 
   const canUserApproveItem = React.useCallback((item: ApprovalItem): boolean => {
     if (item.employeeId === currentUser.id) return false;
-    if (currentRole === 'superuser' || currentRole === 'admin' || isHrManager) return true;
-    if (item.type === 'LEAVE' && !isHrManager) return false;
+    if (item.status === 'APPROVED' || item.status === 'REJECTED') return false;
+    if (currentRole === 'superuser') return true;
 
     const applicantProj = (projects || []).find(p => 
       p.id === item.projectId || 
       p.code === item.projectCode ||
       p.id === employees.find(e => e.id === item.employeeId)?.assignedProjectId
     );
+    const pmId = item.projectManagerId || applicantProj?.projectManagerId;
+    const isApplicantThePm = Boolean(pmId && pmId === item.employeeId);
+    const hasProjectPm = Boolean(pmId && !isApplicantThePm);
 
-    if (!applicantProj || !applicantProj.projectManagerId) {
-      return isHrManager;
+    const isWaitingForPm = hasProjectPm && !item.pmApprovedBy && (item.targetApproverRole === 'PM' || item.stage === 'PM' || !item.stage);
+
+    if (isWaitingForPm) {
+      if (pmId === currentUser.id || applicantProj?.projectManagerId === currentUser.id) {
+        return true;
+      }
+      return false;
     }
 
-    if (applicantProj.projectManagerId === currentUser.id) {
+    if (isHrManager || currentRole === 'hr' || currentRole === 'admin') {
       return true;
     }
 
@@ -878,16 +886,18 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
                               className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-95"
                             >
                               <Check className="w-3.5 h-3.5" />
-                              <span>Setujui</span>
+                              <span>{item.targetApproverRole === 'PM' || (!item.pmApprovedBy && item.projectManagerId) ? 'Setujui (Rekomendasi PM)' : 'Setujui Akhir (HR)'}</span>
                             </button>
                           </div>
                         ) : isApprover && !canUserApproveItem(item) ? (
                           <div className="pt-2 flex items-center justify-between text-[11px] text-slate-500 border-t border-slate-100">
                             <span className="text-amber-700 font-semibold flex items-center gap-1">
                               <Shield className="w-3.5 h-3.5" />
-                              {item.targetApproverRole === 'HR' || (!item.projectId && !employees.find(e => e.id === item.employeeId)?.assignedProjectId)
-                                ? 'Menunggu Persetujuan Eksklusif HR Manager (Tanpa Proyek)'
-                                : `Menunggu Persetujuan PM: ${item.projectManagerName || 'Project Manager Terkait'}`}
+                              {item.pmApprovedBy
+                                ? `Disetujui PM (${item.pmApprovedBy}) • Menunggu Otorisasi Akhir HR Manager`
+                                : item.targetApproverRole === 'PM' || item.projectManagerId
+                                ? `Menunggu Rekomendasi PM Terkait: ${item.projectManagerName || 'Project Manager'} (Tahap 1)`
+                                : 'Menunggu Persetujuan Eksklusif HR Manager'}
                             </span>
                           </div>
                         ) : null}
