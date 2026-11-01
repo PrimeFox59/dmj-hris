@@ -415,6 +415,11 @@ export interface PayrollRecord {
   workingDays: number;
   presentDays: number;
   lateDays: number;
+  lateMinutes?: number;
+  lateHours?: number;
+  isOfficeEmployee?: boolean;
+  lateDeductionRate?: number;
+  lateDeductionNote?: string;
   unapprovedLateDeduction: number;
   overtimeHours: number;
   overtimePay: number;

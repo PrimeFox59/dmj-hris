@@ -130,38 +130,77 @@ export function calculateEmployeePayroll(
   const alphaDeduction = alphaDays * dailyBaseSalary;
   const unpaidLeaveDeduction = (unpaidLeaveDays * dailyBaseSalary) + alphaDeduction;
 
-  // Calculate unapproved late deductions
+  // Calculate late statistics & deductions
   const unapprovedLates = empAttendances.filter(a => a.isLate && a.approvalStatus !== 'APPROVED');
-  const lateDays = auditOverride?.lateDays !== undefined ? auditOverride.lateDays : unapprovedLates.length;
+  const approvedLates = empAttendances.filter(a => a.isLate && a.approvalStatus === 'APPROVED');
+  const allLates = empAttendances.filter(a => a.isLate);
+  const lateDays = auditOverride?.lateDays !== undefined ? auditOverride.lateDays : allLates.length;
+
+  let totalLateMinutes = 0;
+  let unapprovedLateMinutes = 0;
+  allLates.forEach(late => {
+    totalLateMinutes += (late.lateMinutes || 0);
+  });
+  unapprovedLates.forEach(late => {
+    unapprovedLateMinutes += (late.lateMinutes || 0);
+  });
+
+  if (auditOverride?.lateMinutes !== undefined) {
+    totalLateMinutes = auditOverride.lateMinutes;
+    unapprovedLateMinutes = auditOverride.lateMinutes;
+  }
 
   // Aturan Pemotongan Keterlambatan DMJ HRIS:
   // - Karyawan di Office / Kantor Pusat: Denda keterlambatan Rp 50.000 / jam
   // - Selain Office (Site Proyek Lapangan): Bebas potongan jika terlambat (Rp 0)
   const isOffice = isEmployeeInOffice(employee, projects);
   const officeHourlyPenalty = rules.officeLatePenaltyPerHour || 50000;
+  const gracePeriod = rules.lateGracePeriodMinutes ?? 15;
 
   let unapprovedLateDeduction = 0;
-  if (isOffice && !auditOverride?.isLatePenaltyWaived) {
-    if (auditOverride?.customLatePenaltyAmount !== undefined) {
+  let lateHours = 0;
+  let lateDeductionNote = '';
+
+  if (isOffice) {
+    if (auditOverride?.isLatePenaltyWaived) {
+      unapprovedLateDeduction = 0;
+      lateDeductionNote = 'Dispensasi HR Manager (Denda Dibebaskan)';
+    } else if (auditOverride?.customLatePenaltyAmount !== undefined) {
       unapprovedLateDeduction = Math.max(0, auditOverride.customLatePenaltyAmount);
+      lateHours = Math.ceil(unapprovedLateDeduction / officeHourlyPenalty);
+      lateDeductionNote = `${lateHours} Jam Terlambat (@ Rp ${officeHourlyPenalty.toLocaleString('id-ID')}/jam)`;
     } else if (auditOverride?.lateMinutes !== undefined) {
-      const gracePeriod = rules.lateGracePeriodMinutes ?? 15;
       const effectiveMinutes = Math.max(0, auditOverride.lateMinutes - gracePeriod);
-      const lateHours = Math.ceil(effectiveMinutes / 60);
+      lateHours = Math.ceil(effectiveMinutes / 60);
       unapprovedLateDeduction = lateHours * officeHourlyPenalty;
+      lateDeductionNote = `${lateHours} Jam Terlambat (${auditOverride.lateMinutes} mnt) @ Rp ${officeHourlyPenalty.toLocaleString('id-ID')}/jam`;
     } else {
       unapprovedLates.forEach(late => {
-        const gracePeriod = rules.lateGracePeriodMinutes ?? 15;
         const effectiveMinutes = Math.max(0, (late.lateMinutes || 0) - gracePeriod);
         if (effectiveMinutes > 0) {
-          const lateHours = Math.ceil(effectiveMinutes / 60);
-          unapprovedLateDeduction += lateHours * officeHourlyPenalty;
+          const hours = Math.ceil(effectiveMinutes / 60);
+          lateHours += hours;
+          unapprovedLateDeduction += hours * officeHourlyPenalty;
         }
       });
+      if (unapprovedLateDeduction > 0) {
+        lateDeductionNote = `${lateHours} Jam Terlambat (${unapprovedLateMinutes} mnt, ${unapprovedLates.length} hari) @ Rp ${officeHourlyPenalty.toLocaleString('id-ID')}/jam`;
+      } else if (approvedLates.length > 0) {
+        lateDeductionNote = `${approvedLates.length}x Terlambat (${totalLateMinutes} mnt) — Dispensasi PM/HR Disetujui`;
+      } else if (totalLateMinutes > 0 && totalLateMinutes <= gracePeriod) {
+        lateDeductionNote = `Terlambat ${totalLateMinutes} mnt (Toleransi ${gracePeriod} mnt)`;
+      } else {
+        lateDeductionNote = 'Tepat Waktu (0 Menit Terlambat)';
+      }
     }
   } else {
-    // Selain office bebas potongan keterlambatan
+    // Selain office (Site Lapangan) bebas potongan keterlambatan
     unapprovedLateDeduction = 0;
+    if (allLates.length > 0) {
+      lateDeductionNote = `${allLates.length}x Terlambat (${totalLateMinutes} mnt) • Bebas Potongan Denda Site`;
+    } else {
+      lateDeductionNote = 'Bebas Potongan Denda Site (Nihil)';
+    }
   }
 
   // Calculate Overtime: STRICTLY 0 UNLESS AUDITED/APPROVED (NO DUMMY 16 HOURS!)
@@ -238,6 +277,11 @@ export function calculateEmployeePayroll(
     workingDays,
     presentDays,
     lateDays,
+    lateMinutes: totalLateMinutes,
+    lateHours,
+    isOfficeEmployee: isOffice,
+    lateDeductionRate: officeHourlyPenalty,
+    lateDeductionNote,
     unapprovedLateDeduction,
     overtimeHours,
     overtimePay,

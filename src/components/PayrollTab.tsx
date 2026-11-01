@@ -480,7 +480,7 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
     setAuditFormLeaveDays(existingOverride?.leaveDays !== undefined ? existingOverride.leaveDays : rec.leaveDays);
     setAuditFormUnpaidLeaveDays(existingOverride?.unpaidLeaveDays !== undefined ? existingOverride.unpaidLeaveDays : rec.unpaidLeaveDays);
     setAuditFormLateDays(existingOverride?.lateDays !== undefined ? existingOverride.lateDays : rec.lateDays);
-    setAuditFormLateMinutes(existingOverride?.lateMinutes !== undefined ? existingOverride.lateMinutes : 0);
+    setAuditFormLateMinutes(existingOverride?.lateMinutes !== undefined ? existingOverride.lateMinutes : (rec.lateMinutes || 0));
     setAuditFormWaiveLate(existingOverride?.isLatePenaltyWaived || false);
     setAuditFormOvertimeHours(existingOverride?.overtimeHours !== undefined ? existingOverride.overtimeHours : rec.overtimeHours);
     const defaultDaily = Math.round(emp.baseSalary / customWorkingDays);
@@ -2099,18 +2099,50 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                   <span className="text-slate-600">Estimasi Pajak PPh 21:</span>
                   <span className="font-mono-code text-rose-600">-{formatSalaryDisplay(selectedSlip.pph21, showPayrollNominal)}</span>
                 </div>
-                <div className="flex justify-between py-0.5">
-                  <span className="text-slate-600">
-                    Potongan Keterlambatan:
-                    {selectedSlip.unapprovedLateDeduction === 0 && (
-                      <span className="text-[10px] text-emerald-600 font-normal ml-1">
-                        (Bebas Denda Site / Nihil)
+                <div className="py-1">
+                  <div className="flex justify-between items-center py-0.5">
+                    <span className="text-slate-600 font-medium">
+                      Potongan Keterlambatan:
+                    </span>
+                    <span className={`font-mono-code ${selectedSlip.unapprovedLateDeduction > 0 ? 'text-rose-600 font-bold' : 'text-slate-500'}`}>
+                      {selectedSlip.unapprovedLateDeduction > 0 ? `-${formatSalaryDisplay(selectedSlip.unapprovedLateDeduction, showPayrollNominal)}` : 'Rp 0'}
+                    </span>
+                  </div>
+                  {/* Detail Rincian Keterlambatan Sesuai Permintaan Mr Prime */}
+                  <div className="mt-0.5 text-[10px] text-slate-500 font-mono-code flex items-center justify-between bg-slate-50 px-2 py-1 rounded-md border border-slate-200/60">
+                    <span className="truncate pr-1">
+                      {selectedSlip.isOfficeEmployee ? (
+                        <>
+                          <span className="font-semibold text-slate-700">🏢 Kantor Pusat (Office):</span>{' '}
+                          {selectedSlip.unapprovedLateDeduction > 0 ? (
+                            <span className="text-rose-600 font-bold">
+                              {selectedSlip.lateHours || Math.ceil((selectedSlip.lateMinutes || 0) / 60)} Jam Terlambat ({selectedSlip.lateMinutes || 0} mnt, {selectedSlip.lateDays || 0} hari) @ Rp {(selectedSlip.lateDeductionRate || 50000).toLocaleString('id-ID')}/jam
+                            </span>
+                          ) : (selectedSlip.lateDays && selectedSlip.lateDays > 0) ? (
+                            <span className="text-emerald-700 font-medium">
+                              {selectedSlip.lateDays}x Terlambat ({selectedSlip.lateMinutes || 0} mnt) — Dispensasi PM/HR Disetujui
+                            </span>
+                          ) : (
+                            <span className="text-emerald-700 font-medium">
+                              Tepat Waktu (0 Menit Keterlambatan / Nihil)
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <span className="font-semibold text-slate-700">🏗️ Site Lapangan:</span>{' '}
+                          <span className="text-emerald-700 font-medium">
+                            {(selectedSlip.lateDays && selectedSlip.lateDays > 0) ? `${selectedSlip.lateDays}x Terlambat (${selectedSlip.lateMinutes || 0} mnt) • Bebas Denda Site Proyek` : 'Bebas Potongan Denda Site (Nihil)'}
+                          </span>
+                        </>
+                      )}
+                    </span>
+                    {selectedSlip.isOfficeEmployee && (
+                      <span className="text-slate-400 font-semibold text-[9.5px] shrink-0">
+                        Tarif: Rp {(selectedSlip.lateDeductionRate || 50000).toLocaleString('id-ID')}/jam
                       </span>
                     )}
-                  </span>
-                  <span className={`font-mono-code ${selectedSlip.unapprovedLateDeduction > 0 ? 'text-rose-600' : 'text-slate-500'}`}>
-                    {selectedSlip.unapprovedLateDeduction > 0 ? `-${formatSalaryDisplay(selectedSlip.unapprovedLateDeduction, showPayrollNominal)}` : 'Rp 0'}
-                  </span>
+                  </div>
                 </div>
                 <div className="flex justify-between pt-1.5 border-t border-slate-200 font-bold text-slate-900">
                   <span>Total Potongan:</span>
