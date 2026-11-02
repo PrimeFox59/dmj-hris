@@ -232,7 +232,8 @@ export const api = {
       body: JSON.stringify(record)
     });
     if (!res.ok) {
-      throw new Error(`Gagal menyimpan presensi ke SQLite: ${res.statusText}`);
+      const errData = await res.json().catch(() => null);
+      throw new Error(errData?.error || `Gagal menyimpan presensi ke server: ${res.statusText}`);
     }
     return res.json();
   },
@@ -272,7 +273,8 @@ export const api = {
       body: JSON.stringify({ id, status, reviewNote, reviewedBy })
     });
     if (!res.ok) {
-      throw new Error(`Gagal memperbarui status approval di SQLite: ${res.statusText}`);
+      const errData = await res.json().catch(() => null);
+      throw new Error(errData?.error || `Gagal memperbarui status approval di server: ${res.statusText}`);
     }
     return res.json();
   },
@@ -285,7 +287,8 @@ export const api = {
       body: JSON.stringify(item)
     });
     if (!res.ok) {
-      throw new Error(`Gagal mengirim pengajuan ke server: ${res.statusText}`);
+      const errData = await res.json().catch(() => null);
+      throw new Error(errData?.error || `Gagal mengirim pengajuan ke server: ${res.statusText}`);
     }
     return res.json();
   },
@@ -298,7 +301,8 @@ export const api = {
       body: JSON.stringify(emp)
     });
     if (!res.ok) {
-      throw new Error(`Gagal menyimpan data karyawan ke SQLite: ${res.statusText}`);
+      const errData = await res.json().catch(() => null);
+      throw new Error(errData?.error || `Gagal menyimpan data karyawan ke server: ${res.statusText}`);
     }
     return res.json();
   },
@@ -331,7 +335,8 @@ export const api = {
       body: JSON.stringify(project)
     });
     if (!res.ok) {
-      throw new Error(`Gagal menyimpan data proyek ke SQLite: ${res.statusText}`);
+      const errData = await res.json().catch(() => null);
+      throw new Error(errData?.error || `Gagal menyimpan data proyek ke server: ${res.statusText}`);
     }
     return res.json();
   },
@@ -345,7 +350,8 @@ export const api = {
       body: JSON.stringify(rules)
     });
     if (!res.ok) {
-      throw new Error(`Gagal memperbarui aturan gaji di SQLite: ${res.statusText}`);
+      const errData = await res.json().catch(() => null);
+      throw new Error(errData?.error || `Gagal memperbarui aturan gaji di server: ${res.statusText}`);
     }
     return res.json();
   },

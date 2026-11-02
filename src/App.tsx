@@ -530,6 +530,21 @@ export function App() {
     authUserRef.current = authUser;
   }, [authUser]);
 
+  // Universal Bootstrap Cache Synchronization (Eliminates Cross-Device & Reload Desync)
+  useEffect(() => {
+    if (!authUser && !isKioskPortalActive) return;
+    try {
+      localStorage.setItem('prime_hris_bootstrap_cache', JSON.stringify({
+        employees,
+        projects,
+        attendances,
+        approvals,
+        salaryRules,
+        workCalendar
+      }));
+    } catch (e) {}
+  }, [employees, projects, attendances, approvals, salaryRules, workCalendar, authUser, isKioskPortalActive]);
+
   // Real-Time Communication (WebSocket & SSE Engine) multi-device live sync
   useEffect(() => {
     const unsub = rtcService.subscribe('*', (packet) => {
@@ -1057,7 +1072,10 @@ export function App() {
     });
 
     // Save to SQLite asynchronously
-    api.saveAttendance(record).catch(err => console.error('Failed to save attendance correction to SQLite', err));
+    api.saveAttendance(record).catch(err => {
+      console.error('Failed to save attendance correction to SQLite', err);
+      showLiveToast('Gagal menyimpan koreksi presensi ke server: ' + (err.message || err), 'warn');
+    });
   };
 
   // Handle delete attendance record (Superuser direct deletion for testing/trial)
@@ -1107,7 +1125,10 @@ export function App() {
           setApprovals(prev => prev.map(a => a.id === id ? res.item : a));
         }
       })
-      .catch(err => console.error('Failed to update approval in SQLite', err));
+      .catch(err => {
+        console.error('Failed to update approval in SQLite', err);
+        showLiveToast('Gagal memproses persetujuan ke server: ' + (err.message || err), 'warn');
+      });
 
     if (isPmStage) {
       setApprovals(prev =>
@@ -1283,7 +1304,10 @@ export function App() {
 
   const handleReject = (id: string, reviewerNote?: string) => {
     api.updateApproval(id, 'REJECTED', reviewerNote, `${currentUser.name} (${currentUser.role})`)
-      .catch(err => console.error('Failed to update approval in SQLite', err));
+      .catch(err => {
+        console.error('Failed to update approval in SQLite', err);
+        showLiveToast('Gagal menolak pengajuan ke server: ' + (err.message || err), 'warn');
+      });
 
     setApprovals(prev =>
       prev.map(item => {
@@ -1313,7 +1337,10 @@ export function App() {
 
   const handleRequestRevision = (id: string, reviewerNote?: string) => {
     api.updateApproval(id, 'REVISION_REQUESTED', reviewerNote, `${currentUser.name} (${currentUser.role})`)
-      .catch(err => console.error('Failed to update approval in SQLite', err));
+      .catch(err => {
+        console.error('Failed to update approval in SQLite', err);
+        showLiveToast('Gagal meminta revisi ke server: ' + (err.message || err), 'warn');
+      });
 
     setApprovals(prev =>
       prev.map(item => {
@@ -1333,13 +1360,19 @@ export function App() {
 
   const handleSubmitNewLeaveRequest = (item: ApprovalItem) => {
     setApprovals(prev => [item, ...prev]);
-    api.submitApproval(item).catch(err => console.error('Failed to submit approval to SQLite', err));
+    api.submitApproval(item).catch(err => {
+      console.error('Failed to submit approval to SQLite', err);
+      showLiveToast('Gagal mengirimkan pengajuan ke server: ' + (err.message || err), 'warn');
+    });
   };
 
   // Employee CRUD (User Management)
   const handleAddEmployee = (emp: Employee) => {
     setEmployees(prev => [...prev, emp]);
-    api.saveEmployee(emp).catch(err => console.error('Failed to save employee to SQLite', err));
+    api.saveEmployee(emp).catch(err => {
+      console.error('Failed to save employee to SQLite', err);
+      showLiveToast('Gagal menambahkan karyawan ke server: ' + (err.message || err), 'warn');
+    });
   };
 
   const handleUpdateEmployee = async (emp: Employee) => {
@@ -1414,7 +1447,10 @@ export function App() {
 
   const handleUpdateSalaryRules = (newRules: SalaryRuleConfig) => {
     setSalaryRules(newRules);
-    api.saveSalaryRules(newRules).catch(err => console.error('Failed to update salary rules in SQLite', err));
+    api.saveSalaryRules(newRules).catch(err => {
+      console.error('Failed to update salary rules in SQLite', err);
+      showLiveToast('Gagal memperbarui aturan gaji ke server: ' + (err.message || err), 'warn');
+    });
   };
 
   // Project CRUD & Personnel Placement
@@ -1429,7 +1465,10 @@ export function App() {
       return [proj, ...prev];
     });
 
-    api.saveProject(proj).catch(err => console.error('Failed to save project to SQLite', err));
+    api.saveProject(proj).catch(err => {
+      console.error('Failed to save project to SQLite', err);
+      showLiveToast('Gagal menyimpan konfigurasi proyek ke server: ' + (err.message || err), 'warn');
+    });
 
     if (updatedEmployees && updatedEmployees.length > 0) {
       setEmployees(prev => {

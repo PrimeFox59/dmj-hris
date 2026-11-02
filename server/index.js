@@ -907,9 +907,40 @@ const server = http.createServer(async (req, res) => {
         }
         let data = getAllData();
         if (user && user.systemRole === 'staff' && user.employeeId) {
-          data.employees = (data.employees || []).filter(e => e.id === user.employeeId);
-          data.attendances = (data.attendances || []).filter(a => a.employeeId === user.employeeId);
-          data.approvals = (data.approvals || []).filter(a => a.employeeId === user.employeeId);
+          const userEmpId = user.employeeId || user.id;
+          const userEmpName = (user.employee?.name || user.name || user.username || '').toLowerCase().trim();
+          const userPos = (user.employee?.position || user.position || '').toLowerCase();
+          const userRole = (user.role || '').toLowerCase();
+
+          // Check if user is a PM or Project Admin of any project
+          const managedProjectIds = (data.projects || []).filter(p => {
+            const isPm = p.projectManagerId === userEmpId ||
+                         (p.projectManagerName && userEmpName && p.projectManagerName.toLowerCase().trim() === userEmpName) ||
+                         userPos.includes('project manager') || userPos.includes('site manager') || userRole.includes('pm') || userRole.includes('project_manager');
+            const isPAdmin = (Array.isArray(p.projectAdminIds) && p.projectAdminIds.includes(userEmpId)) ||
+                             (Array.isArray(p.projectAdminNames) && userEmpName && p.projectAdminNames.some(n => n.toLowerCase().trim() === userEmpName));
+            return isPm || isPAdmin;
+          }).map(p => p.id);
+
+          const isPmOrAdmin = managedProjectIds.length > 0;
+          if (isPmOrAdmin) {
+            // Keep projects & employees intact so PMs/Project Admins can view project rosters and assign personnel!
+            // Filter attendances to their own OR members of their managed projects
+            data.attendances = (data.attendances || []).filter(a =>
+              a.employeeId === userEmpId || (a.projectId && managedProjectIds.includes(a.projectId))
+            );
+            // Filter approvals to their own OR approvals targeting their projects or where they are the assigned reviewer
+            data.approvals = (data.approvals || []).filter(a =>
+              a.employeeId === userEmpId ||
+              (a.projectId && managedProjectIds.includes(a.projectId)) ||
+              (a.projectManagerId && a.projectManagerId === userEmpId) ||
+              (Array.isArray(a.projectAdminIds) && a.projectAdminIds.includes(userEmpId))
+            );
+          } else {
+            data.employees = (data.employees || []).filter(e => e.id === userEmpId);
+            data.attendances = (data.attendances || []).filter(a => a.employeeId === userEmpId);
+            data.approvals = (data.approvals || []).filter(a => a.employeeId === userEmpId);
+          }
         }
         return sendJson(200, data);
       }
@@ -1070,14 +1101,46 @@ const server = http.createServer(async (req, res) => {
         return res.end(JSON.stringify({ error: 'Photo not found' }));
       }
 
-      // 7. Update Approval with Instant Broadcast
+      // 7. Update Approval with Instant Broadcast (Supports Admin, HR, Superuser, Finance & PM Stage 1)
       if (cleanUrl === '/api/approval' && (method === 'PUT' || method === 'POST')) {
         const token = getAuthToken();
         const user = token ? getCurrentUserFromToken(token) : null;
-        if (!user || !['admin', 'superuser', 'hr', 'director'].includes(user.systemRole)) {
-          return sendJson(403, { success: false, error: 'Forbidden: Hanya Admin, HR, Direksi, atau Superuser yang berwenang memproses persetujuan' });
+        if (!user) {
+          return sendJson(401, { success: false, error: 'Unauthorized: Sesi tidak valid atau telah berakhir' });
         }
         const body = await readBody();
+        const isPrivileged = ['admin', 'superuser', 'hr', 'director', 'finance'].includes(user.systemRole) ||
+                             user.role === 'Director' ||
+                             user.role === 'Finance' ||
+                             user.role === 'HR_Manager';
+
+        let isPmAuthorized = false;
+        if (!isPrivileged && body?.id) {
+          try {
+            const db = getDatabase();
+            const row = db.prepare('SELECT data_json FROM approvals WHERE id = ?;').get(body.id);
+            if (row) {
+              const item = JSON.parse(row.data_json);
+              const userEmpId = user.employeeId || user.id;
+              const userName = (user.employee?.name || user.name || user.username || '').toLowerCase().trim();
+              const userPos = (user.employee?.position || user.position || '').toLowerCase();
+              const userRole = (user.role || '').toLowerCase();
+
+              const isPm = (item.projectManagerId && item.projectManagerId === userEmpId) ||
+                           (item.projectManagerName && userName && item.projectManagerName.toLowerCase().trim() === userName) ||
+                           userPos.includes('project manager') || userPos.includes('site manager') || userRole.includes('pm');
+              const isPAdmin = (Array.isArray(item.projectAdminIds) && item.projectAdminIds.includes(userEmpId)) ||
+                               (Array.isArray(item.projectAdminNames) && userName && item.projectAdminNames.some(n => n.toLowerCase().trim() === userName));
+              isPmAuthorized = isPm || isPAdmin;
+            }
+          } catch (e) {
+            console.warn('[Approval Auth Check Error]', e);
+          }
+        }
+
+        if (!isPrivileged && !isPmAuthorized) {
+          return sendJson(403, { success: false, error: 'Forbidden: Anda tidak memiliki wewenang untuk memproses persetujuan ini' });
+        }
         const reviewerTitle = body.reviewedBy || user.employee?.name || user.name || user.username || 'Direksi / HR Lead';
         const result = updateApproval(body.id, body.status, body.reviewNote, reviewerTitle);
         broadcastRealtimeEvent('APPROVAL_UPDATED', {
@@ -1156,14 +1219,32 @@ const server = http.createServer(async (req, res) => {
         }
       }
 
-      // 8b. Save Project with Broadcast
+      // 8b. Save Project with Broadcast (Supports Admin, HR, Superuser, PM, and Project Admin)
       if (cleanUrl === '/api/project' && method === 'POST') {
         const token = getAuthToken();
         const user = token ? getCurrentUserFromToken(token) : null;
-        if (!user || !['admin', 'superuser', 'hr', 'pm', 'lead'].includes(user.systemRole)) {
-          return sendJson(403, { success: false, error: 'Forbidden: Hak akses Manajemen Proyek, HR, atau Admin diperlukan' });
+        if (!user) {
+          return sendJson(401, { success: false, error: 'Unauthorized: Sesi tidak valid atau telah berakhir' });
         }
         const body = await readBody();
+        const isPrivileged = ['admin', 'superuser', 'hr'].includes(user.systemRole) || user.role === 'Director';
+        const userEmpId = user.employeeId || user.id;
+        const userName = (user.employee?.name || user.name || user.username || '').toLowerCase().trim();
+        const userPos = (user.employee?.position || user.position || '').toLowerCase();
+        const userRole = (user.role || '').toLowerCase();
+
+        const isPmOrAdmin = isPrivileged ||
+          userPos.includes('project manager') ||
+          userPos.includes('site manager') ||
+          userRole.includes('pm') ||
+          body?.projectManagerId === userEmpId ||
+          (body?.projectManagerName && userName && body.projectManagerName.toLowerCase().trim() === userName) ||
+          (Array.isArray(body?.projectAdminIds) && body.projectAdminIds.includes(userEmpId)) ||
+          (Array.isArray(body?.projectAdminNames) && userName && body.projectAdminNames.some(n => n.toLowerCase().trim() === userName));
+
+        if (!isPmOrAdmin) {
+          return sendJson(403, { success: false, error: 'Forbidden: Hak akses Manajemen Proyek, HR, atau Admin diperlukan' });
+        }
         const result = saveProject(body);
         broadcastRealtimeEvent('PROJECT_SAVED', result.project || body);
         return sendJson(200, result);
@@ -1236,8 +1317,8 @@ const server = http.createServer(async (req, res) => {
         const token = getAuthToken();
         const user = token ? getCurrentUserFromToken(token) : null;
 
-        // STRICT PM SCOPING: If user is staff / PM, strictly lock to their assigned project!
-        if (user && user.systemRole === 'staff') {
+        // PM SCOPING: Fallback to assigned project only if no projectId requested
+        if (!projectId && user && user.systemRole === 'staff') {
           const userProj = user.employee?.assignedProjectId || user.assignedProjectId;
           if (userProj) {
             projectId = userProj;
@@ -1253,8 +1334,8 @@ const server = http.createServer(async (req, res) => {
         const token = getAuthToken();
         const user = token ? getCurrentUserFromToken(token) : null;
 
-        // Strict PM Scoping: Always bind to PM's assigned project
-        if (user && user.systemRole === 'staff') {
+        // PM Scoping: Fallback to assigned project only if body.projectId was not explicitly supplied
+        if (!body.projectId && user && user.systemRole === 'staff') {
           const userProj = user.employee?.assignedProjectId || user.assignedProjectId;
           if (userProj) {
             body.projectId = userProj;
@@ -1286,8 +1367,8 @@ const server = http.createServer(async (req, res) => {
         const token = getAuthToken();
         const user = token ? getCurrentUserFromToken(token) : null;
 
-        // STRICT PM SCOPING: If PM, lock to assigned project!
-        if (user && user.systemRole === 'staff') {
+        // PM SCOPING: Fallback to assigned project only if no projectId requested
+        if (!projectId && user && user.systemRole === 'staff') {
           const userProj = user.employee?.assignedProjectId || user.assignedProjectId;
           if (userProj) {
             projectId = userProj;
@@ -1303,8 +1384,8 @@ const server = http.createServer(async (req, res) => {
         const token = getAuthToken();
         const user = token ? getCurrentUserFromToken(token) : null;
 
-        // Strict PM Scoping
-        if (user && user.systemRole === 'staff') {
+        // PM Scoping: Fallback to assigned project only if body.projectId was not explicitly supplied
+        if (!body.projectId && user && user.systemRole === 'staff') {
           const userProj = user.employee?.assignedProjectId || user.assignedProjectId;
           if (userProj) {
             body.projectId = userProj;
