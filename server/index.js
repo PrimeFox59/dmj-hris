@@ -895,10 +895,13 @@ const server = http.createServer(async (req, res) => {
         });
       }
 
-      // 5. Bootstrap all data from SQLite
+      // 5. Bootstrap all data from SQLite (Authenticated Session Required)
       if (cleanUrl === '/api/bootstrap' && method === 'GET') {
         const token = getAuthToken();
         const user = token ? getCurrentUserFromToken(token) : null;
+        if (!user) {
+          return sendJson(401, { success: false, error: 'Unauthorized: Sesi tidak valid atau telah berakhir. Silakan login kembali.' });
+        }
         let data = getAllData();
         if (user && user.systemRole === 'staff' && user.employeeId) {
           data.employees = (data.employees || []).filter(e => e.id === user.employeeId);
@@ -1066,8 +1069,14 @@ const server = http.createServer(async (req, res) => {
 
       // 7. Update Approval with Instant Broadcast
       if (cleanUrl === '/api/approval' && (method === 'PUT' || method === 'POST')) {
+        const token = getAuthToken();
+        const user = token ? getCurrentUserFromToken(token) : null;
+        if (!user || !['admin', 'superuser', 'hr', 'director'].includes(user.systemRole)) {
+          return sendJson(403, { success: false, error: 'Forbidden: Hanya Admin, HR, Direksi, atau Superuser yang berwenang memproses persetujuan' });
+        }
         const body = await readBody();
-        const result = updateApproval(body.id, body.status, body.reviewNote, body.reviewedBy);
+        const reviewerTitle = body.reviewedBy || user.employee?.name || user.name || user.username || 'Direksi / HR Lead';
+        const result = updateApproval(body.id, body.status, body.reviewNote, reviewerTitle);
         broadcastRealtimeEvent('APPROVAL_UPDATED', {
           id: body.id,
           status: body.status,
@@ -1099,6 +1108,11 @@ const server = http.createServer(async (req, res) => {
 
       // 8. Save Employee with Broadcast
       if (cleanUrl === '/api/employee' && method === 'POST') {
+        const token = getAuthToken();
+        const user = token ? getCurrentUserFromToken(token) : null;
+        if (!user || !['admin', 'superuser', 'hr'].includes(user.systemRole)) {
+          return sendJson(403, { success: false, error: 'Forbidden: Hak akses Admin, HR, atau Superuser diperlukan' });
+        }
         const body = await readBody();
         const result = saveEmployee(body);
         broadcastRealtimeEvent('EMPLOYEE_SAVED', result.employee || body);
@@ -1131,6 +1145,11 @@ const server = http.createServer(async (req, res) => {
 
       // 8b. Save Project with Broadcast
       if (cleanUrl === '/api/project' && method === 'POST') {
+        const token = getAuthToken();
+        const user = token ? getCurrentUserFromToken(token) : null;
+        if (!user || !['admin', 'superuser', 'hr', 'pm', 'lead'].includes(user.systemRole)) {
+          return sendJson(403, { success: false, error: 'Forbidden: Hak akses Manajemen Proyek, HR, atau Admin diperlukan' });
+        }
         const body = await readBody();
         const result = saveProject(body);
         broadcastRealtimeEvent('PROJECT_SAVED', result.project || body);
@@ -1139,6 +1158,11 @@ const server = http.createServer(async (req, res) => {
 
       // 10. Update Salary Rules with Broadcast
       if (cleanUrl === '/api/salary-rules' && (method === 'PUT' || method === 'POST')) {
+        const token = getAuthToken();
+        const user = token ? getCurrentUserFromToken(token) : null;
+        if (!user || !['admin', 'superuser', 'finance', 'hr'].includes(user.systemRole)) {
+          return sendJson(403, { success: false, error: 'Forbidden: Hak akses Finance, HR, atau Admin diperlukan' });
+        }
         const body = await readBody();
         const result = saveSalaryRules(body);
         broadcastRealtimeEvent('SALARY_RULES_UPDATED', body);
@@ -1303,11 +1327,21 @@ const server = http.createServer(async (req, res) => {
         return sendJson(200, { success: true, attendance: saved });
       }
 
-      if (cleanUrl.match(/^\/api\/casual-attendances\/([^\/]+)$/) && method === 'DELETE') {
+      if ((cleanUrl.match(/^\/api\/casual-attendances\/([^\/]+)$/) && method === 'DELETE') || (cleanUrl === '/api/casual-attendances/delete' && method === 'POST')) {
         const token = getAuthToken();
-        const user = getCurrentUserFromToken(token);
-        const match = cleanUrl.match(/^\/api\/casual-attendances\/([^\/]+)$/);
-        const id = match ? match[1] : null;
+        const user = token ? getCurrentUserFromToken(token) : null;
+        if (!user || !['admin', 'superuser', 'hr', 'pm', 'lead', 'staff'].includes(user.systemRole)) {
+          return sendJson(403, { success: false, error: 'Forbidden: Sesi autentikasi PM / Admin diperlukan' });
+        }
+        let id = null;
+        if (method === 'POST') {
+          const body = await readBody();
+          id = body?.id;
+        } else {
+          const match = cleanUrl.match(/^\/api\/casual-attendances\/([^\/]+)$/);
+          id = match ? decodeURIComponent(match[1]) : null;
+        }
+        if (!id) return sendJson(400, { success: false, error: 'ID presensi tukang tidak valid' });
         deleteCasualAttendance(id, user);
         broadcastRealtimeEvent('CASUAL_ATTENDANCE_DELETED', { id });
         return sendJson(200, { success: true, message: 'Presensi tukang berhasil dihapus' });
@@ -1315,6 +1349,11 @@ const server = http.createServer(async (req, res) => {
 
       // 11. Audit Logs (Paginated & Filterable with 10-Item Load)
       if (cleanUrl === '/api/audit-logs' && method === 'GET') {
+        const token = getAuthToken();
+        const user = token ? getCurrentUserFromToken(token) : null;
+        if (!user || !['admin', 'superuser', 'hr', 'finance'].includes(user.systemRole)) {
+          return sendJson(403, { success: false, error: 'Forbidden: Hak akses Admin, HR, Finance, atau Superuser diperlukan untuk melihat log audit' });
+        }
         const urlObj = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
         const page = parseInt(urlObj.searchParams.get('page') || '1', 10);
         const limit = parseInt(urlObj.searchParams.get('limit') || '10', 10);
@@ -1351,6 +1390,11 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (cleanUrl === '/api/wa/logs' && method === 'GET') {
+        const token = getAuthToken();
+        const user = token ? getCurrentUserFromToken(token) : null;
+        if (!user || !['admin', 'superuser', 'hr', 'finance'].includes(user.systemRole)) {
+          return sendJson(403, { success: false, error: 'Forbidden' });
+        }
         const urlObj = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
         const limit = parseInt(urlObj.searchParams.get('limit') || '50', 10);
         const logs = getWaNotificationLogs(limit);
@@ -1359,12 +1403,22 @@ const server = http.createServer(async (req, res) => {
 
       // WhatsApp Opt-In / Active Contacts Registry
       if (cleanUrl === '/api/wa/opt-ins' && method === 'GET') {
+        const token = getAuthToken();
+        const user = token ? getCurrentUserFromToken(token) : null;
+        if (!user || !['admin', 'superuser', 'hr', 'finance'].includes(user.systemRole)) {
+          return sendJson(403, { success: false, error: 'Forbidden' });
+        }
         const optIns = getWaOptIns();
         return sendJson(200, { success: true, optIns, count: optIns.length });
       }
 
       // Webhook for incoming WhatsApp message from gateway
       if (cleanUrl === '/api/wa/incoming' && method === 'POST') {
+        const internalSecret = req.headers['x-internal-secret'] || '';
+        const expectedSecret = process.env.INTERNAL_WA_SECRET || 'prime-internal-wa-2026';
+        if (internalSecret !== expectedSecret) {
+          return sendJson(403, { success: false, error: 'Forbidden: Secret webhook tidak valid' });
+        }
         const body = await readBody();
         const result = recordWaOptIn(body.phone, body.message, body.pushName);
         if (result) {
@@ -1534,10 +1588,13 @@ const server = http.createServer(async (req, res) => {
         return sendJson(200, { success: true, ...result });
       }
 
-      // 12. Reset Database with Broadcast
+      // 12. Reset Database with Broadcast (Superuser Only)
       if (cleanUrl === '/api/reset' && method === 'POST') {
         const token = getAuthToken();
-        const user = getCurrentUserFromToken(token);
+        const user = token ? getCurrentUserFromToken(token) : null;
+        if (!user || user.systemRole !== 'superuser') {
+          return sendJson(403, { success: false, error: 'Forbidden: Hanya Superuser yang memiliki izin reset database' });
+        }
         const result = resetDatabase();
         addAuditLog({
           action: 'DATABASE_RESET',
@@ -1552,7 +1609,14 @@ const server = http.createServer(async (req, res) => {
         broadcastRealtimeEvent('DATABASE_RESET', {});
         return sendJson(200, { success: true, ...result });
       }
+
+      // 12b. Download DB (Superuser Only)
       if (cleanUrl === '/api/download-db' && method === 'GET') {
+        const token = getAuthToken();
+        const user = token ? getCurrentUserFromToken(token) : null;
+        if (!user || user.systemRole !== 'superuser') {
+          return sendJson(403, { success: false, error: 'Forbidden: Hak akses Superuser diperlukan' });
+        }
         if (!fs.existsSync(dbPath)) return sendJson(404, { error: 'Database not found' });
         res.writeHead(200, {
           'Content-Type': 'application/x-sqlite3',
@@ -1567,10 +1631,18 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  // Static File Serving (from dist/)
-  let filePath = path.join(distPath, cleanUrl === '/' ? 'index.html' : cleanUrl);
-  if (!fs.existsSync(filePath)) {
-    filePath = path.join(distPath, 'index.html');
+  // Static File Serving (from dist/) with Path Traversal Protection (CWE-22)
+  const resolvedDist = path.resolve(distPath);
+  let safeSubPath = cleanUrl === '/' ? '/index.html' : decodeURIComponent(cleanUrl);
+  let filePath = path.resolve(resolvedDist, '.' + safeSubPath);
+
+  // Security guard against directory traversal
+  if (!filePath.startsWith(resolvedDist)) {
+    return sendJson(403, { error: 'Forbidden' });
+  }
+
+  if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+    filePath = path.join(resolvedDist, 'index.html');
   }
 
   const ext = path.extname(filePath).toLowerCase();

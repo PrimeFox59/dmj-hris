@@ -352,7 +352,7 @@ export const api = {
 
   // 8. Reset SQLite database to default initial state
   async resetDatabase(): Promise<BootstrapResponse> {
-    const res = await fetch('/api/reset', { method: 'POST' });
+    const res = await fetch('/api/reset', { method: 'POST', headers: api.getAuthHeaders() });
     if (!res.ok) {
       throw new Error(`Gagal me-reset database SQLite: ${res.statusText}`);
     }
@@ -361,7 +361,8 @@ export const api = {
 
   // 9. Download link for SQLite file
   getDownloadDbUrl(): string {
-    return '/api/download-db';
+    const token = api.getAuthToken();
+    return token ? `/api/download-db?token=${encodeURIComponent(token)}` : '/api/download-db';
   },
 
   // 10. Audit Logs with 10-Item Infinite Scroll Pagination
@@ -516,7 +517,7 @@ export const api = {
   },
 
   async getWaLogs(limit: number = 30): Promise<{ success: boolean; logs: WaNotificationLog[] }> {
-    const res = await fetch(`/api/wa/logs?limit=${limit}`);
+    const res = await fetch(`/api/wa/logs?limit=${limit}`, { headers: api.getAuthHeaders() });
     if (!res.ok) throw new Error(`HTTP ${res.status}: Gagal memuat riwayat notifikasi`);
     return res.json();
   },
@@ -591,7 +592,7 @@ export const api = {
   },
 
   async getEmailLogs(limit: number = 30): Promise<{ success: boolean; logs: EmailNotificationLog[] }> {
-    const res = await fetch(`/api/email/logs?limit=${limit}`);
+    const res = await fetch(`/api/email/logs?limit=${limit}`, { headers: api.getAuthHeaders() });
     if (!res.ok) throw new Error(`HTTP ${res.status}: Gagal memuat riwayat email`);
     return res.json();
   },
