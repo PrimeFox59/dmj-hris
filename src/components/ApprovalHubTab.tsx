@@ -1099,8 +1099,8 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                           </p>
 
                           {item.type === 'ATTENDANCE_CORRECTION' && (
-                            <div className="text-[10px] font-mono-code text-teal-800 bg-teal-50 px-1.5 py-0.5 rounded truncate max-w-[220px] border border-teal-200" title={`Target: ${item.targetCheckInTime || '-'} s/d ${item.targetCheckOutTime || '-'}`}>
-                              Target: <b>{item.targetCheckInTime || '-'}</b> s/d <b>{item.targetCheckOutTime || '-'}</b>
+                            <div className="text-[10px] font-mono-code text-teal-800 bg-teal-50 px-1.5 py-0.5 rounded truncate max-w-[220px] border border-teal-200" title={`Target: ${item.targetCheckInTime || '(Tanpa Absen Masuk)'} s/d ${item.targetCheckOutTime || '-'}`}>
+                              Target: <b>{item.targetCheckInTime || '(Tanpa Absen Masuk)'}</b> s/d <b>{item.targetCheckOutTime || '-'}</b>
                             </div>
                           )}
 
@@ -2175,7 +2175,7 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                 <div className="grid grid-cols-2 gap-3 text-xs font-mono-code">
                   <div className="p-2.5 rounded-xl bg-white border border-teal-100">
                     <span className="text-[10px] text-slate-400 block uppercase">Jam Masuk (Check-In)</span>
-                    <b className="text-teal-900 text-sm">{detailModalItem.targetCheckInTime || '-'} WIB</b>
+                    <b className="text-teal-900 text-sm">{detailModalItem.targetCheckInTime ? `${detailModalItem.targetCheckInTime} WIB` : '(Tanpa Absen Masuk)'}</b>
                   </div>
                   <div className="p-2.5 rounded-xl bg-white border border-teal-100">
                     <span className="text-[10px] text-slate-400 block uppercase">Jam Pulang (Check-Out)</span>

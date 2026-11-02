@@ -953,6 +953,39 @@ export function App() {
       setApprovals(prev => [dinasApproval, ...prev]);
       api.submitApproval(dinasApproval).catch(err => console.error('Failed to submit dinas approval', err));
     }
+
+    // 3. Incomplete Attendance (Hanya Absen Pulang / Lupa Absen Masuk): Otomatis submit ke PM kemudian HR
+    const isMissingCheckIn = !record.checkInTime && Boolean(record.checkOutTime);
+    if (isMissingCheckIn) {
+      const incompleteApproval: ApprovalItem = {
+        id: `APP-NOIN-${Date.now()}`,
+        type: 'ATTENDANCE_CORRECTION',
+        employeeId: record.employeeId,
+        employeeName: record.employeeName,
+        employeeNik: record.employeeNik,
+        department: record.department,
+        title: `Persetujuan Presensi Tanpa Absen Masuk - ${record.employeeName}`,
+        description: `Karyawan melakukan Absen Pulang pukul ${record.checkOutTime} WIB tanpa rekam Absen Masuk pada tanggal ${record.date}. Status kehadiran saat ini Tidak Absen (Alpa) dan memerlukan peninjauan kehadiran oleh PM terkait kemudian HR Manager.`,
+        startDate: record.date,
+        targetCheckOutTime: record.checkOutTime,
+        attendanceRecordId: record.id,
+        status: 'PENDING',
+        stage: 'PM',
+        targetApproverRole: pmEmp ? 'PM' : 'HR',
+        requiresHrApproval: true,
+        submittedAt: `${record.date} ${record.checkOutTime}`,
+        projectId: userProj?.id,
+        projectCode: userProj?.code,
+        projectName: userProj?.name,
+        projectManagerId: pmEmp?.id,
+        projectManagerName: pmEmp?.name,
+        projectAdminIds: userProj?.projectAdminIds,
+        projectAdminNames: userProj?.projectAdminNames
+      };
+
+      setApprovals(prev => [incompleteApproval, ...prev]);
+      api.submitApproval(incompleteApproval).catch(err => console.error('Failed to submit missing check-in approval to SQLite', err));
+    }
   };
 
   // Handle attendance correction / update from HR Manager

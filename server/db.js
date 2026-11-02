@@ -690,13 +690,13 @@ export function saveAttendance(record) {
   const attType = record.attendanceType || (record.checkOutTime ? 'CHECK_OUT' : 'CHECK_IN');
 
   let targetId = record.id || `ATT-${Date.now()}`;
-  let finalCheckIn = (record.checkInTime || (attType === 'CHECK_OUT' ? (record.checkOutTime || '08:00:00') : '08:00:00')).replace(/\./g, ':');
+  let finalCheckIn = record.checkInTime ? record.checkInTime.replace(/\./g, ':') : null;
   let finalCheckOut = record.checkOutTime ? record.checkOutTime.replace(/\./g, ':') : null;
-  let finalStatus = record.status || 'ON_TIME';
+  let finalStatus = record.status || (finalCheckOut && !finalCheckIn ? 'ALPA' : 'ON_TIME');
   let finalIsLate = record.isLate ? 1 : 0;
   let finalLateMinutes = record.lateMinutes || 0;
   let finalLateReason = record.lateReason || null;
-  let finalApprovalStatus = record.approvalStatus || 'APPROVED';
+  let finalApprovalStatus = record.approvalStatus || (finalCheckOut && !finalCheckIn ? 'PENDING' : 'APPROVED');
   let mergedData = { ...record };
 
   if (existing) {
@@ -706,7 +706,7 @@ export function saveAttendance(record) {
 
     if (attType === 'CHECK_IN') {
       // MODE PRESENSI MASUK: Hanya set/perbarui jam masuk, jangan pernah set jam pulang
-      finalCheckIn = (record.checkInTime || existing.checkInTime || '').replace(/\./g, ':');
+      finalCheckIn = (record.checkInTime || existing.checkInTime || '').replace(/\./g, ':') || null;
       finalCheckOut = existing.checkOutTime ? existing.checkOutTime.replace(/\./g, ':') : null;
       finalStatus = record.status || existing.status;
       finalIsLate = record.isLate !== undefined ? (record.isLate ? 1 : 0) : existing.isLate;
@@ -718,7 +718,7 @@ export function saveAttendance(record) {
         ...prevData,
         ...record,
         id: targetId,
-        checkInTime: finalCheckIn,
+        checkInTime: finalCheckIn || undefined,
         checkOutTime: finalCheckOut,
         status: finalStatus,
         isLate: Boolean(finalIsLate),
@@ -728,20 +728,28 @@ export function saveAttendance(record) {
         photoUrl: record.photoUrl || prevData.photoUrl
       };
     } else {
-      // MODE PRESENSI PULANG: Pertahankan jam masuk awal, set jam pulang ke waktu sekarang
-      finalCheckIn = (existing.checkInTime || record.checkInTime || '08:00:00').replace(/\./g, ':');
-      finalCheckOut = (record.checkOutTime || record.checkInTime || '').replace(/\./g, ':');
-      finalStatus = existing.status || (record.status === 'LATE' ? 'ON_TIME' : record.status);
+      // MODE PRESENSI PULANG: Pertahankan jam masuk awal JIKA ADA.
+      // JIKA TIDAK PERNAH ABSEN MASUK: Biarkan finalCheckIn = NULL, status = ALPA, butuh approval PM -> HR!
+      finalCheckIn = (existing.checkInTime || record.checkInTime || null);
+      if (finalCheckIn) finalCheckIn = finalCheckIn.replace(/\./g, ':');
+      finalCheckOut = (record.checkOutTime || record.checkInTime || '').replace(/\./g, ':') || null;
+
+      if (!finalCheckIn) {
+        finalStatus = 'ALPA';
+        finalApprovalStatus = 'PENDING';
+      } else {
+        finalStatus = existing.status || (record.status === 'LATE' ? 'ON_TIME' : record.status);
+        finalApprovalStatus = existing.approvalStatus || record.approvalStatus || 'APPROVED';
+      }
       finalIsLate = existing.isLate !== undefined ? existing.isLate : 0;
       finalLateMinutes = existing.lateMinutes !== undefined ? existing.lateMinutes : 0;
       finalLateReason = existing.lateReason || null;
-      finalApprovalStatus = existing.approvalStatus || record.approvalStatus || 'APPROVED';
 
       mergedData = {
         ...prevData,
         ...record,
         id: targetId,
-        checkInTime: finalCheckIn,
+        checkInTime: finalCheckIn || undefined,
         checkOutTime: finalCheckOut,
         status: finalStatus,
         isLate: Boolean(finalIsLate),
@@ -772,7 +780,7 @@ export function saveAttendance(record) {
     record.employeeNik,
     record.department || 'Engineering',
     record.date,
-    finalCheckIn || '08:00:00',
+    finalCheckIn || null,
     finalCheckOut || null,
     record.mode || 'WFO',
     finalStatus || 'ON_TIME',
@@ -786,8 +794,8 @@ export function saveAttendance(record) {
 
   // Sync return values back to record object
   record.id = targetId;
-  record.checkInTime = finalCheckIn;
-  record.checkOutTime = finalCheckOut;
+  record.checkInTime = finalCheckIn || undefined;
+  record.checkOutTime = finalCheckOut || undefined;
   record.status = finalStatus;
   record.isLate = Boolean(finalIsLate);
   record.lateMinutes = finalLateMinutes;
@@ -796,21 +804,32 @@ export function saveAttendance(record) {
   record.photoOutUrl = mergedData.photoOutUrl || record.photoOutUrl;
 
   if (record.approvalStatus === 'PENDING') {
+    const isMissingCheckIn = !record.checkInTime && Boolean(record.checkOutTime);
     const isDinasLuar = record.mode === 'DINAS_LUAR';
     const isOutOfGeofence = record.status === 'OUT_OF_GEOFENCE';
-    // Absen Pulang (CHECK_OUT) TIDAK PERNAH membuat pengajuan LATE_JUSTIFICATION
-    if (!isDinasLuar && !isOutOfGeofence && attType === 'CHECK_OUT') {
-      // Skip late justification approval saat absen pulang
+    // Absen Pulang (CHECK_OUT) hanya skip jika itu adalah keterlambatan biasa
+    if (!isDinasLuar && !isOutOfGeofence && !isMissingCheckIn && attType === 'CHECK_OUT') {
+      // Skip late justification approval saat absen pulang normal
     } else {
     const approvalId = `APPR-${record.id}`;
-    const approvalType = isDinasLuar ? 'DINAS_LUAR' : isOutOfGeofence ? 'OUT_OF_GEOFENCE' : 'LATE_JUSTIFICATION';
+    const approvalType = isMissingCheckIn
+      ? 'ATTENDANCE_CORRECTION'
+      : isDinasLuar
+      ? 'DINAS_LUAR'
+      : isOutOfGeofence
+      ? 'OUT_OF_GEOFENCE'
+      : 'LATE_JUSTIFICATION';
     const distText = record.location?.distanceMeters ? ` (${record.location.distanceMeters >= 1000 ? (record.location.distanceMeters / 1000).toFixed(1) + ' km' : record.location.distanceMeters + 'm'})` : '';
-    const approvalTitle = isDinasLuar
+    const approvalTitle = isMissingCheckIn
+      ? `Persetujuan Presensi Tanpa Absen Masuk - ${record.employeeName}`
+      : isDinasLuar
       ? `Pengajuan Dinas Luar Mendadak: ${record.dinasLuarDetails?.clientName || 'Klien Luar'}`
       : isOutOfGeofence
       ? `Persetujuan Presensi Luar Area${distText}`
       : `Justifikasi Keterlambatan (${record.lateMinutes} Menit)`;
-    const approvalDesc = isDinasLuar
+    const approvalDesc = isMissingCheckIn
+      ? `Karyawan melakukan Absen Pulang pukul ${record.checkOutTime} WIB tanpa rekam Absen Masuk pada tanggal ${record.date}. Status saat ini Tidak Absen (Alpa) dan memerlukan peninjauan kehadiran oleh PM terkait kemudian HR Manager.`
+      : isDinasLuar
       ? `Tujuan: ${record.dinasLuarDetails?.destination} | Alasan: ${record.dinasLuarDetails?.purpose}`
       : isOutOfGeofence
       ? `Catatan Luar Area${distText}: ${record.outOfRangeReason || record.note || 'Presensi di luar radius resmi'}`

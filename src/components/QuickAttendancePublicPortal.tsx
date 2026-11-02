@@ -672,9 +672,9 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
         employeeName: emp.name,
         employeeNik: emp.nik,
         date: dateStr,
-        checkInTime: isClockIn ? timeStr : (existingToday?.checkInTime || timeStr),
+        checkInTime: isClockIn ? timeStr : (existingToday?.checkInTime || undefined),
         checkOutTime: isClockIn ? (existingToday?.checkOutTime || null) : timeStr,
-        status: isLate ? 'LATE' : 'ON_TIME',
+        status: isClockIn ? (isLate ? 'LATE' : 'ON_TIME') : (existingToday?.checkInTime ? 'ON_TIME' : 'ALPA'),
         mode: (isInsideRadius ? 'WFO' : 'DINAS_LUAR') as any,
         department: emp.department || 'Operasional',
         photoUrl: isClockIn ? photoData : (existingToday?.photoUrl || photoData),
@@ -689,7 +689,10 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
         },
         isLate,
         lateMinutes,
-        note: customNote.trim() || defaultNote,
+        approvalStatus: (!isClockIn && !existingToday?.checkInTime) ? 'PENDING' : 'NOT_REQUIRED',
+        note: (!isClockIn && !existingToday?.checkInTime)
+          ? '[Tidak Absen Masuk] Hanya Absen Pulang - Memerlukan Approval PM & HR'
+          : (customNote.trim() || defaultNote),
         biometricVerification: {
           isVerified: true,
           matchScore,

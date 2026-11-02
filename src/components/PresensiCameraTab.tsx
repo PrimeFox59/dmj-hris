@@ -35,7 +35,7 @@ import {
   SlidersHorizontal,
   Trash2
 } from 'lucide-react';
-import { Employee, AttendanceRecord, AttendanceMode, SalaryRuleConfig, SystemRole, getEffectiveSystemRole, Project, BiometricProfile, BiometricVerificationResult } from '../types';
+import { Employee, AttendanceRecord, AttendanceMode, AttendanceStatus, SalaryRuleConfig, SystemRole, getEffectiveSystemRole, Project, BiometricProfile, BiometricVerificationResult } from '../types';
 import { rtcService } from '../services/rtcService';
 import { getEmployeeProjectSchedule } from '../utils/scheduleHelper';
 import { BiometricEnrollmentModal } from './BiometricEnrollmentModal';
@@ -1220,8 +1220,51 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
     const dateStr = `${yyyy}-${mm}-${dd}`;
 
     const existingToday = attendanceHistory.find(
-      a => a.employeeId === currentUser.id && a.date === dateStr && a.checkInTime
+      a => a.employeeId === currentUser.id && a.date === dateStr
     );
+
+    // Deteksi jika karyawan melakukan Absen Pulang tanpa pernah Absen Masuk
+    const isClockOutWithoutCheckIn = !isCheckIn && !existingToday?.checkInTime;
+
+    let finalCheckInTime: string | undefined = undefined;
+    if (isCheckIn) {
+      finalCheckInTime = timeStr;
+    } else {
+      finalCheckInTime = existingToday?.checkInTime || undefined;
+    }
+
+    let finalCheckOutTime: string | undefined = undefined;
+    if (!isCheckIn) {
+      finalCheckOutTime = timeStr;
+    } else {
+      finalCheckOutTime = existingToday?.checkOutTime || undefined;
+    }
+
+    let finalStatus: AttendanceStatus = 'ON_TIME';
+    let finalApprovalStatus: 'NOT_REQUIRED' | 'PENDING' | 'APPROVED' | 'REJECTED' = 'NOT_REQUIRED';
+
+    if (isClockOutWithoutCheckIn) {
+      // Sesuai aturan sistem: Jika absen pulang tanpa absen masuk, status adalah ALPA / Tidak Absen
+      // dan MEMERLUKAN APPROVAL BERJENJANG (PM KEMUDIAN HR)
+      finalStatus = 'ALPA';
+      finalApprovalStatus = 'PENDING';
+      noteToUse = '[Tidak Absen Masuk] Hanya Absen Pulang - Memerlukan Approval PM & HR';
+    } else if (mode === 'DINAS_LUAR') {
+      finalStatus = 'DINAS_LUAR_PENDING';
+      finalApprovalStatus = 'PENDING';
+    } else if (mode === 'WFH') {
+      finalStatus = effectiveIsLate ? 'LATE' : 'WFH_APPROVED';
+      finalApprovalStatus = effectiveIsLate ? 'PENDING' : 'NOT_REQUIRED';
+    } else if (!isPhysicallyInGeofence) {
+      finalStatus = 'OUT_OF_GEOFENCE';
+      finalApprovalStatus = 'PENDING';
+    } else if (effectiveIsLate) {
+      finalStatus = 'LATE';
+      finalApprovalStatus = 'PENDING';
+    } else {
+      finalStatus = 'ON_TIME';
+      finalApprovalStatus = 'NOT_REQUIRED';
+    }
 
     const newRecord: AttendanceRecord = {
       id: isCheckIn ? `ATT-${Date.now()}` : (existingToday?.id || `ATT-${Date.now()}`),
@@ -1230,19 +1273,11 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
       employeeNik: currentUser.nik,
       department: currentUser.department,
       date: dateStr,
-      checkInTime: isCheckIn ? timeStr : (existingToday?.checkInTime || '08:00:00'),
-      checkOutTime: isCheckIn ? undefined : timeStr,
+      checkInTime: finalCheckInTime,
+      checkOutTime: finalCheckOutTime,
       attendanceType: attendanceAction,
       mode: mode,
-      status: mode === 'DINAS_LUAR'
-        ? 'DINAS_LUAR_PENDING'
-        : mode === 'WFH'
-        ? (effectiveIsLate ? 'LATE' : 'WFH_APPROVED')
-        : !isPhysicallyInGeofence
-        ? 'OUT_OF_GEOFENCE'
-        : effectiveIsLate
-        ? 'LATE'
-        : 'ON_TIME',
+      status: finalStatus,
       photoUrl: isCheckIn ? photoToUse : (existingToday?.photoUrl || photoToUse),
       photoOutUrl: !isCheckIn ? photoToUse : (existingToday?.photoOutUrl || undefined),
       location: {
@@ -1274,7 +1309,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
         purpose: dinasPurpose,
         isSudden: true
       } : undefined,
-      approvalStatus: (mode === 'DINAS_LUAR' || effectiveIsLate || !isWithinAnyAuthorizedGeofence) ? 'PENDING' : 'NOT_REQUIRED',
+      approvalStatus: finalApprovalStatus,
       biometricVerification: biometricVerification || (currentUser.biometric?.isEnrolled ? {
         isVerified: true,
         matchScore: 95,
@@ -1882,6 +1917,11 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                             {item.checkInTime} WIB
                           </span>
                         </button>
+                      ) : item.checkOutTime ? (
+                        <span className="px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-bold font-mono-code inline-flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
+                          Tidak Absen Masuk
+                        </span>
                       ) : (
                         <span className="text-slate-400 text-[11px] font-mono-code">-</span>
                       )}
@@ -1926,7 +1966,11 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                       )}
                     </td>
                     <td className="py-3 px-3">
-                      {item.approvalStatus === 'PENDING' ? (
+                      {(!item.checkInTime && item.checkOutTime) ? (
+                        <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-bold animate-pulse inline-flex items-center gap-1">
+                          Perlu Approval PM & HR
+                        </span>
+                      ) : item.approvalStatus === 'PENDING' ? (
                         <span className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 text-[10px] font-bold animate-pulse">
                           Menunggu Approval
                         </span>
