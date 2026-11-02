@@ -22,14 +22,14 @@ if (!row) {
 
   db.prepare(`
     UPDATE attendances
-    SET checkInTime = NULL,
+    SET checkInTime = '',
         status = 'ALPA',
         approvalStatus = 'PENDING',
         data_json = ?
     WHERE id = ?;
   `).run(JSON.stringify(data), row.id);
 
-  console.log('[FIX_JESSICA] Updated attendances table: checkInTime set to NULL, status set to ALPA, approvalStatus set to PENDING.');
+  console.log('[FIX_JESSICA] Updated attendances table: checkInTime set to empty, status set to ALPA, approvalStatus set to PENDING.');
 
   // Create or update approval ticket (PM -> HR)
   const appId = `APP-NOIN-JESSICA-${Date.now()}`;

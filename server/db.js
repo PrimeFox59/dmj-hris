@@ -780,7 +780,7 @@ export function saveAttendance(record) {
     record.employeeNik,
     record.department || 'Engineering',
     record.date,
-    finalCheckIn || null,
+    finalCheckIn || '',
     finalCheckOut || null,
     record.mode || 'WFO',
     finalStatus || 'ON_TIME',
