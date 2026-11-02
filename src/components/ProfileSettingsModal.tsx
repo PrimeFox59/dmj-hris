@@ -200,6 +200,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
       setTimeout(() => setProfileSuccessMsg(null), 4000);
     } catch (err: any) {
       console.error('Error saving profile:', err);
+      alert(`Gagal menyimpan profil ke database: ${err.message || 'Periksa koneksi'}`);
     } finally {
       setIsSavingProfile(false);
     }

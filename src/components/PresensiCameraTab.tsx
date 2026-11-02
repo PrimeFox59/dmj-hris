@@ -155,11 +155,11 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
     const rawList = isSuperOrAdmin
       ? attendanceHistory
       : attendanceHistory.filter(item => {
-          const matchId = Boolean(item.employeeId && currentUser.id && item.employeeId === currentUser.id);
-          const matchNik = Boolean(item.employeeNik && currentUser.nik && item.employeeNik.trim().toLowerCase() === currentUser.nik.trim().toLowerCase());
-          const matchName = Boolean(item.employeeName && currentUser.name && item.employeeName.trim().toLowerCase() === currentUser.name.trim().toLowerCase());
-          return matchId || matchNik || matchName;
-        });
+        const matchId = Boolean(item.employeeId && currentUser.id && item.employeeId === currentUser.id);
+        const matchNik = Boolean(item.employeeNik && currentUser.nik && item.employeeNik.trim().toLowerCase() === currentUser.nik.trim().toLowerCase());
+        const matchName = Boolean(item.employeeName && currentUser.name && item.employeeName.trim().toLowerCase() === currentUser.name.trim().toLowerCase());
+        return matchId || matchNik || matchName;
+      });
 
     return [...rawList].sort((a, b) => {
       // 1. Sort by Date DESC
@@ -184,7 +184,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
   const [attendanceAction, setAttendanceAction] = useState<'CHECK_IN' | 'CHECK_OUT'>(() => {
     return new Date().getHours() >= 12 ? 'CHECK_OUT' : 'CHECK_IN';
   });
-  
+
   const [destination, setDestination] = useState('PT Vale Indonesia, Sorowako Mill Site');
   const [clientName, setClientName] = useState('PT Vale Indonesia Tbk');
   const [projectCode, setProjectCode] = useState('PRJ-VALE-02');
@@ -460,7 +460,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
   const isInOfficeGeofence = isGpsLocked && realGeofenceDistance <= (salaryRules?.officeGeofence?.radiusMeters || 350);
   const isInSelectedProjectGeofence = isGpsLocked && activeProjectDist !== null && activeProjectDist <= activeProjectRadius;
   const isInProjectGeofence = isInSelectedProjectGeofence;
-  
+
   // Jika karyawan ditugaskan di proyek site -> validasi terhadap geofence proyek tersebut.
   // Jika kantor pusat -> validasi terhadap geofence kantor pusat.
   const isPhysicallyInGeofence = isGpsLocked && (activeProject ? isInSelectedProjectGeofence : isInOfficeGeofence);
@@ -793,7 +793,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
           const district = addr.municipality || addr.city_district || addr.subdistrict || '';
           const regency = addr.county || addr.city || '';
           const state = addr.state || '';
-          
+
           const parts = [road, village, district, regency, state].filter(Boolean);
           if (parts.length > 0) {
             return `${parts.join(', ')} (GPS HP Asli)`;
@@ -897,7 +897,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
             accuracy
           }));
         },
-        () => {},
+        () => { },
         { enableHighAccuracy: isMobile, maximumAge: isMobile ? 5000 : 30000, timeout: 15000 }
       );
     }
@@ -1142,7 +1142,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
         const canvasHeight = 480;
         canvas.width = canvasWidth;
         canvas.height = canvasHeight;
-        
+
         drawCover(ctx, img, img.width, img.height, canvasWidth, canvasHeight, false);
         applyWatermark(ctx);
         const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
@@ -1290,7 +1290,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
       },
       projectId: isInOfficeGeofence ? 'OFFICE' : (activeProject?.id || 'OFFICE'),
       projectCode: isInOfficeGeofence ? 'HO' : (activeProject?.code || 'HO'),
-      projectName: isInOfficeGeofence 
+      projectName: isInOfficeGeofence
         ? (salaryRules?.officeGeofence?.name || assignedProject?.name || 'Kantor Pusat & Operasional')
         : (activeProject && isInProjectGeofence ? activeProject.name : (coords.address ? coords.address.replace(' (GPS HP Asli)', '') : 'Presensi Luar Area')),
       networkAudit: {
@@ -1412,11 +1412,10 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
           <button
             type="button"
             onClick={() => setIsBiometricModalOpen(true)}
-            className={`px-3 py-2 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs active:scale-95 ${
-              currentUser.biometric?.isEnrolled
+            className={`px-3 py-2 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs active:scale-95 ${currentUser.biometric?.isEnrolled
                 ? 'bg-emerald-50 border border-emerald-300 text-emerald-800 hover:bg-emerald-100'
                 : 'bg-gradient-to-r from-[#FF6B00] to-[#FF8533] text-white hover:from-[#e56000] hover:to-[#ff771a] shadow-orange-500/20 animate-pulse'
-            }`}
+              }`}
             title="Kelola Profil Biometrik 4 Pose Wajah"
           >
             <Sparkles className="w-3.5 h-3.5" />
@@ -1447,7 +1446,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
             </div>
           </div>
           <div className="text-[11px] font-mono-code text-slate-500 flex items-center gap-2 self-end sm:self-center">
-            <span>Radius: <strong className={isPhysicallyInGeofence ? 'text-emerald-600 font-bold' : 'text-slate-800'}>{effectiveTargetDistance >= 1000 ? `${(effectiveTargetDistance/1000).toFixed(1)} km` : `${effectiveTargetDistance}m`}</strong></span>
+            <span>Radius: <strong className={isPhysicallyInGeofence ? 'text-emerald-600 font-bold' : 'text-slate-800'}>{effectiveTargetDistance >= 1000 ? `${(effectiveTargetDistance / 1000).toFixed(1)} km` : `${effectiveTargetDistance}m`}</strong></span>
             <span>•</span>
             <span className={isWithinAnyAuthorizedGeofence ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold'}>
               {mode === 'WFH' ? '✓ WFH (Valid)' : mode === 'DINAS_LUAR' ? '✓ Dinas (Valid)' : isPhysicallyInGeofence ? '✓ Geofence Valid' : '⚠ Luar Radius'}
@@ -1513,7 +1512,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
       {isAttendanceModalOpen && createPortal(
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 overflow-y-auto animate-in fade-in duration-200">
           <div className="relative w-full max-w-2xl bg-white border border-slate-200 rounded-3xl shadow-2xl overflow-hidden flex flex-col my-auto motion-fade-in-up max-h-[92vh]">
-            
+
             {/* Modal Header */}
             <div className="p-4 sm:px-6 bg-slate-900 border-b border-slate-800 flex items-center justify-between text-white shrink-0">
               <div className="flex items-center gap-3">
@@ -1551,280 +1550,275 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
             <div className="p-5 sm:p-6 overflow-y-auto space-y-4">
               <form id="tour-attendance-form" onSubmit={handleSubmit} className="space-y-4">
 
-            {/* 0. Jenis Presensi (CHECK IN vs CHECK OUT) */}
-            <div className="space-y-1.5 pb-1">
-              <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
-                <span>0. Jenis Presensi</span>
-                <span className={`text-[10px] font-bold font-mono-code px-2 py-0.5 rounded-full ${
-                  attendanceAction === 'CHECK_IN'
-                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                    : 'bg-orange-50 text-[#FF6B00] border border-orange-200'
-                }`}>
-                  {attendanceAction === 'CHECK_IN' ? '🟢 Absen Masuk' : '🟠 Absen Pulang'}
-                </span>
-              </label>
+                {/* 0. Jenis Presensi (CHECK IN vs CHECK OUT) */}
+                <div className="space-y-1.5 pb-1">
+                  <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
+                    <span>0. Jenis Presensi</span>
+                    <span className={`text-[10px] font-bold font-mono-code px-2 py-0.5 rounded-full ${attendanceAction === 'CHECK_IN'
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        : 'bg-orange-50 text-[#FF6B00] border border-orange-200'
+                      }`}>
+                      {attendanceAction === 'CHECK_IN' ? '🟢 Absen Masuk' : '🟠 Absen Pulang'}
+                    </span>
+                  </label>
 
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleToggleAttendanceAction('CHECK_IN')}
-                  className={`py-2.5 px-3 rounded-2xl border text-center transition-all cursor-pointer flex items-center justify-center gap-2 ${
-                    attendanceAction === 'CHECK_IN'
-                      ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-md shadow-emerald-900/20 font-black border-emerald-400'
-                      : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 font-bold'
-                  }`}
-                >
-                  <div className={`w-2.5 h-2.5 rounded-full ${attendanceAction === 'CHECK_IN' ? 'bg-white animate-pulse' : 'bg-emerald-500'}`} />
-                  <span>ABSEN MASUK (IN)</span>
-                </button>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleToggleAttendanceAction('CHECK_IN')}
+                      className={`py-2.5 px-3 rounded-2xl border text-center transition-all cursor-pointer flex items-center justify-center gap-2 ${attendanceAction === 'CHECK_IN'
+                          ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-md shadow-emerald-900/20 font-black border-emerald-400'
+                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 font-bold'
+                        }`}
+                    >
+                      <div className={`w-2.5 h-2.5 rounded-full ${attendanceAction === 'CHECK_IN' ? 'bg-white animate-pulse' : 'bg-emerald-500'}`} />
+                      <span>ABSEN MASUK (IN)</span>
+                    </button>
 
-                <button
-                  type="button"
-                  onClick={() => handleToggleAttendanceAction('CHECK_OUT')}
-                  className={`py-2.5 px-3 rounded-2xl border text-center transition-all cursor-pointer flex items-center justify-center gap-2 ${
-                    attendanceAction === 'CHECK_OUT'
-                      ? 'bg-gradient-to-r from-[#FF6B00] to-amber-600 text-white shadow-md shadow-orange-900/20 font-black border-orange-400'
-                      : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 font-bold'
-                  }`}
-                >
-                  <div className={`w-2.5 h-2.5 rounded-full ${attendanceAction === 'CHECK_OUT' ? 'bg-white animate-pulse' : 'bg-[#FF6B00]'}`} />
-                  <span>ABSEN PULANG (OUT)</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Live Camera Viewfinder & Biometrik */}
-            <div className="space-y-3">
-              <div className="relative aspect-4/3 w-full bg-slate-950 overflow-hidden flex items-center justify-center rounded-2xl shadow-inner border border-slate-800">
-                {capturedPhoto ? (
-                  <div className="relative w-full h-full">
-                    <img
-                      src={capturedPhoto}
-                      alt="Hasil Foto Snapshot"
-                      className="w-full h-full object-contain bg-slate-950"
-                    />
-                    <div className="absolute top-3 left-3 px-3 py-1.5 rounded-xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-400 text-xs font-bold backdrop-blur-md flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                      <span>Foto Biometrik Terverifikasi</span>
-                    </div>
-                    {biometricVerification && (
-                      <div className="absolute top-3 right-3 px-3 py-1.5 rounded-xl bg-slate-900/80 border border-slate-700 text-xs font-mono-code font-bold backdrop-blur-md text-white">
-                        Match: {Math.round(biometricVerification.matchScore)}%
-                      </div>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleToggleAttendanceAction('CHECK_OUT')}
+                      className={`py-2.5 px-3 rounded-2xl border text-center transition-all cursor-pointer flex items-center justify-center gap-2 ${attendanceAction === 'CHECK_OUT'
+                          ? 'bg-gradient-to-r from-[#FF6B00] to-amber-600 text-white shadow-md shadow-orange-900/20 font-black border-orange-400'
+                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 font-bold'
+                        }`}
+                    >
+                      <div className={`w-2.5 h-2.5 rounded-full ${attendanceAction === 'CHECK_OUT' ? 'bg-white animate-pulse' : 'bg-[#FF6B00]'}`} />
+                      <span>ABSEN PULANG (OUT)</span>
+                    </button>
                   </div>
-                ) : (
-                  <div className="relative w-full h-full flex items-center justify-center">
-                    {cameraError ? (
-                      <div className="p-6 text-center text-slate-300 space-y-3 max-w-md">
-                        <div className="w-12 h-12 mx-auto rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400 flex items-center justify-center">
-                          <AlertTriangle className="w-6 h-6" />
+                </div>
+
+                {/* Live Camera Viewfinder & Biometrik */}
+                <div className="space-y-3">
+                  <div className="relative aspect-4/3 w-full bg-slate-950 overflow-hidden flex items-center justify-center rounded-2xl shadow-inner border border-slate-800">
+                    {capturedPhoto ? (
+                      <div className="relative w-full h-full">
+                        <img
+                          src={capturedPhoto}
+                          alt="Hasil Foto Snapshot"
+                          className="w-full h-full object-contain bg-slate-950"
+                        />
+                        <div className="absolute top-3 left-3 px-3 py-1.5 rounded-xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-400 text-xs font-bold backdrop-blur-md flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                          <span>Foto Biometrik Terverifikasi</span>
                         </div>
-                        <p className="text-xs text-rose-300 font-medium">{cameraError}</p>
-                        <button
-                          type="button"
-                          onClick={() => startCamera()}
-                          className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold transition-all shadow-md cursor-pointer"
-                        >
-                          Coba Nyalakan Lagi
-                        </button>
+                        {biometricVerification && (
+                          <div className="absolute top-3 right-3 px-3 py-1.5 rounded-xl bg-slate-900/80 border border-slate-700 text-xs font-mono-code font-bold backdrop-blur-md text-white">
+                            Match: {Math.round(biometricVerification.matchScore)}%
+                          </div>
+                        )}
                       </div>
                     ) : (
-                      <>
-                        <video
-                          ref={videoRef}
-                          autoPlay
-                          playsInline
-                          muted
-                          className={`w-full h-full object-cover ${cameraFacingMode === 'user' ? 'scale-x-[-1]' : ''}`}
-                        />
-
-                        {/* Biometric Face Guide Reticle */}
-                        <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                          <div className="w-44 h-56 sm:w-52 sm:h-64 border-2 border-dashed border-[#FF6B00]/70 rounded-[36px] shadow-[0_0_20px_rgba(255,107,0,0.2)] relative flex items-center justify-center">
-                            <div className="absolute -top-1 -left-1 w-5 h-5 border-t-2 border-l-2 border-[#FF6B00] rounded-tl-xl"></div>
-                            <div className="absolute -top-1 -right-1 w-5 h-5 border-t-2 border-r-2 border-[#FF6B00] rounded-tr-xl"></div>
-                            <div className="absolute -bottom-1 -left-1 w-5 h-5 border-b-2 border-l-2 border-[#FF6B00] rounded-bl-xl"></div>
-                            <div className="absolute -bottom-1 -right-1 w-5 h-5 border-b-2 border-r-2 border-[#FF6B00] rounded-br-xl"></div>
-                            <span className="text-[10px] font-mono-code text-white/80 bg-black/60 px-2 py-0.5 rounded-full backdrop-blur-xs absolute -bottom-7">
-                              Posisikan wajah di dalam bingkai
-                            </span>
+                      <div className="relative w-full h-full flex items-center justify-center">
+                        {cameraError ? (
+                          <div className="p-6 text-center text-slate-300 space-y-3 max-w-md">
+                            <div className="w-12 h-12 mx-auto rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400 flex items-center justify-center">
+                              <AlertTriangle className="w-6 h-6" />
+                            </div>
+                            <p className="text-xs text-rose-300 font-medium">{cameraError}</p>
+                            <button
+                              type="button"
+                              onClick={() => startCamera()}
+                              className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold transition-all shadow-md cursor-pointer"
+                            >
+                              Coba Nyalakan Lagi
+                            </button>
                           </div>
-                        </div>
+                        ) : (
+                          <>
+                            <video
+                              ref={videoRef}
+                              autoPlay
+                              playsInline
+                              muted
+                              className={`w-full h-full object-cover ${cameraFacingMode === 'user' ? 'scale-x-[-1]' : ''}`}
+                            />
 
-                        {/* Live Overlay GPS Badge */}
-                        <div className="absolute top-3 left-3 pointer-events-none">
-                          <div className="px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur-md border border-white/10 text-[10px] font-mono-code text-white flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                            <span>{!isGpsLocked ? 'Mencari Lokasi...' : `GPS: ${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`}</span>
-                          </div>
-                        </div>
+                            {/* Biometric Face Guide Reticle */}
+                            <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+                              <div className="w-44 h-56 sm:w-52 sm:h-64 border-2 border-dashed border-[#FF6B00]/70 rounded-[36px] shadow-[0_0_20px_rgba(255,107,0,0.2)] relative flex items-center justify-center">
+                                <div className="absolute -top-1 -left-1 w-5 h-5 border-t-2 border-l-2 border-[#FF6B00] rounded-tl-xl"></div>
+                                <div className="absolute -top-1 -right-1 w-5 h-5 border-t-2 border-r-2 border-[#FF6B00] rounded-tr-xl"></div>
+                                <div className="absolute -bottom-1 -left-1 w-5 h-5 border-b-2 border-l-2 border-[#FF6B00] rounded-bl-xl"></div>
+                                <div className="absolute -bottom-1 -right-1 w-5 h-5 border-b-2 border-r-2 border-[#FF6B00] rounded-br-xl"></div>
+                                <span className="text-[10px] font-mono-code text-white/80 bg-black/60 px-2 py-0.5 rounded-full backdrop-blur-xs absolute -bottom-7">
+                                  Posisikan wajah di dalam bingkai
+                                </span>
+                              </div>
+                            </div>
 
-                        {/* Flip Camera */}
-                        <div className="absolute top-3 right-3 flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={toggleCameraFlip}
-                            className="p-2 rounded-xl bg-black/60 hover:bg-black/80 text-white backdrop-blur-md border border-white/10 transition-all cursor-pointer shadow-md"
-                            title="Putar Kamera"
-                          >
-                            <FlipHorizontal className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </>
+                            {/* Live Overlay GPS Badge */}
+                            <div className="absolute top-3 left-3 pointer-events-none">
+                              <div className="px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur-md border border-white/10 text-[10px] font-mono-code text-white flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                <span>{!isGpsLocked ? 'Mencari Lokasi...' : `GPS: ${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`}</span>
+                              </div>
+                            </div>
+
+                            {/* Flip Camera */}
+                            <div className="absolute top-3 right-3 flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={toggleCameraFlip}
+                                className="p-2 rounded-xl bg-black/60 hover:bg-black/80 text-white backdrop-blur-md border border-white/10 transition-all cursor-pointer shadow-md"
+                                title="Putar Kamera"
+                              >
+                                <FlipHorizontal className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
                     )}
                   </div>
+
+                  {/* Retake Control (Hanya tampil jika foto telah terambil) */}
+                  {capturedPhoto && (
+                    <div className="px-1">
+                      <button
+                        type="button"
+                        onClick={retakePhoto}
+                        className="w-full py-2 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5 text-[#FF6B00]" />
+                        <span>Ambil Foto Ulang</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Live GPS Coordinates Status Banner */}
+                <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/90 flex items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <MapPin className={`w-5 h-5 shrink-0 ${!isGpsLocked ? 'text-blue-500 animate-pulse' : isWithinAnyAuthorizedGeofence ? 'text-emerald-600' : 'text-rose-500'}`} />
+                    <div className="truncate">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-slate-800 text-xs">
+                          {!isGpsLocked ? 'Mendeteksi Lokasi Presensi...' : activeLocationTitle}
+                        </span>
+                        <span className="text-slate-400 font-mono-code text-[11px]">
+                          ({isGpsLocked && coords.lat ? `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}` : 'Mencari sinyal...'})
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-slate-500 truncate mt-0.5">
+                        {!isGpsLocked
+                          ? 'Sinkronisasi sensor GPS & jaringan...'
+                          : (coords.address ? coords.address.replace(' (GPS HP Asli)', '').replace(' (Lokasi Jaringan PC)', '') : 'Koordinat lokasi terkunci')}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold font-mono-code ${!isGpsLocked
+                        ? 'bg-blue-100 text-blue-800 border border-blue-300 animate-pulse'
+                        : isWithinAnyAuthorizedGeofence
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                          : 'bg-rose-100 text-rose-800 border border-rose-300'
+                      }`}>
+                      {!isGpsLocked
+                        ? 'Mencari Lokasi...'
+                        : isWithinAnyAuthorizedGeofence
+                          ? `${formatDistanceKm(effectiveTargetDistance)} • Masuk Area Kerja (Valid)`
+                          : `${formatDistanceKm(effectiveTargetDistance)} • Luar Area`}
+                    </span>
+                    <button
+                      type="button"
+                      title="Refresh Lokasi Terkini"
+                      onClick={() => fetchDeviceGps(true)}
+                      className="p-1 rounded-lg hover:bg-slate-200 text-slate-500 hover:text-slate-700 transition-colors"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isGpsLoading ? 'animate-spin' : ''}`} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Status Keterlambatan: 1 Baris Input & Tanpa Preset */}
+                {attendanceAction === 'CHECK_IN' && isLate && (
+                  <div className="p-3 rounded-2xl bg-rose-50/90 border border-rose-300 shadow-xs space-y-1.5 motion-fade-in-up">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 text-rose-900 font-bold text-xs">
+                        <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 animate-pulse" />
+                        <span>Terdeteksi Keterlambatan ({lateMinutes} Menit Lewat {userSchedule.cutoffTime} WIB)</span>
+                      </div>
+                      <span className="px-2 py-0.5 rounded-full text-[9.5px] font-black bg-rose-200 text-rose-900 font-mono-code uppercase tracking-wider shrink-0">
+                        Wajib Isi Alasan
+                      </span>
+                    </div>
+                    <input
+                      type="text"
+                      required
+                      value={lateReason}
+                      onChange={e => setLateReason(e.target.value)}
+                      placeholder="Tuliskan catatan alasan kenapa Anda terlambat (wajib diisi mandiri)..."
+                      className="w-full glass-input rounded-xl px-3 py-2 text-xs text-slate-800 placeholder-slate-400 border border-rose-300 focus:ring-2 focus:ring-rose-500/30 bg-white shadow-2xs font-medium"
+                    />
+                  </div>
                 )}
-              </div>
 
-              {/* Retake Control (Hanya tampil jika foto telah terambil) */}
-              {capturedPhoto && (
-                <div className="px-1">
+                {/* Status Masuk Area Kerja: 1 Baris Input & Tanpa Preset */}
+                {!isWithinAnyAuthorizedGeofence && (
+                  <div className="p-3 rounded-2xl bg-amber-50/90 border border-amber-300 shadow-xs space-y-1.5 motion-fade-in-up">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 text-amber-900 font-bold text-xs">
+                        <MapPin className="w-4 h-4 text-amber-600 shrink-0" />
+                        <span>Presensi di Luar Radius Area Kerja ({formatDistanceKm(effectiveTargetDistance)})</span>
+                      </div>
+                      <span className="px-2 py-0.5 rounded-full text-[9.5px] font-black bg-amber-200 text-amber-900 font-mono-code uppercase tracking-wider shrink-0">
+                        Wajib Isi Catatan
+                      </span>
+                    </div>
+                    <input
+                      type="text"
+                      required
+                      value={outOfRangeReason}
+                      onChange={e => setOutOfRangeReason(e.target.value)}
+                      placeholder="Tuliskan catatan / alasan presensi di luar radius (wajib diisi mandiri)..."
+                      className="w-full glass-input rounded-xl px-3 py-2 text-xs text-slate-800 placeholder-slate-400 border border-amber-300 focus:ring-2 focus:ring-amber-500/30 bg-white shadow-2xs font-medium"
+                    />
+                  </div>
+                )}
+
+                {/* 4. Submit Action Button */}
+                <div className="space-y-2 pt-1">
+
+
+                  {/* Peringatan GPS Tidak Aktif */}
+                  {!isGpsLocked && (
+                    <div className="p-3 rounded-2xl bg-rose-50 border border-rose-300 text-rose-800 text-xs flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                        <span className="text-[11px] leading-relaxed font-semibold">
+                          {gpsError || 'GPS perangkat belum aktif / terkunci. Wajib mengaktifkan GPS untuk presensi.'}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => fetchDeviceGps(true)}
+                        className="px-2.5 py-1 rounded-lg bg-rose-200 hover:bg-rose-300 text-rose-900 font-bold text-[10px] shrink-0 transition-colors"
+                      >
+                        Aktifkan GPS
+                      </button>
+                    </div>
+                  )}
+
                   <button
-                    type="button"
-                    onClick={retakePhoto}
-                    className="w-full py-2 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    type="submit"
+                    disabled={!isGpsLocked}
+                    className={`w-full py-3.5 rounded-2xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-md ${!isGpsLocked
+                        ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
+                        : 'bg-gradient-to-r from-[#FF6B00] via-[#FF8533] to-[#FF6B00] text-white hover:shadow-lg hover:shadow-orange-500/25 active:scale-98 cursor-pointer'
+                      }`}
                   >
-                    <RefreshCw className="w-3.5 h-3.5 text-[#FF6B00]" />
-                    <span>Ambil Foto Ulang</span>
+                    <Send className="w-4 h-4" />
+                    <span>
+                      {!isGpsLocked
+                        ? (isGpsLoading ? 'Mencari Sinyal GPS...' : 'GPS Wajib Aktif untuk Presensi')
+                        : capturedPhoto
+                          ? (attendanceAction === 'CHECK_IN' ? 'Kirim Absen Masuk Sekarang' : 'Kirim Absen Pulang Sekarang')
+                          : (attendanceAction === 'CHECK_IN' ? 'Ambil Foto & Absen Masuk' : 'Ambil Foto & Absen Pulang')}
+                    </span>
                   </button>
                 </div>
-              )}
-            </div>
-
-            {/* Live GPS Coordinates Status Banner */}
-            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/90 flex items-center justify-between gap-3 text-xs">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <MapPin className={`w-5 h-5 shrink-0 ${!isGpsLocked ? 'text-blue-500 animate-pulse' : isWithinAnyAuthorizedGeofence ? 'text-emerald-600' : 'text-rose-500'}`} />
-                <div className="truncate">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-slate-800 text-xs">
-                      {!isGpsLocked ? 'Mendeteksi Lokasi Presensi...' : activeLocationTitle}
-                    </span>
-                    <span className="text-slate-400 font-mono-code text-[11px]">
-                      ({isGpsLocked && coords.lat ? `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}` : 'Mencari sinyal...'})
-                    </span>
-                  </div>
-                  <div className="text-[11px] text-slate-500 truncate mt-0.5">
-                    {!isGpsLocked 
-                      ? 'Sinkronisasi sensor GPS & jaringan...' 
-                      : (coords.address ? coords.address.replace(' (GPS HP Asli)', '').replace(' (Lokasi Jaringan PC)', '') : 'Koordinat lokasi terkunci')}
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-1.5 shrink-0">
-                <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold font-mono-code ${
-                  !isGpsLocked
-                    ? 'bg-blue-100 text-blue-800 border border-blue-300 animate-pulse'
-                    : isWithinAnyAuthorizedGeofence
-                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                    : 'bg-rose-100 text-rose-800 border border-rose-300'
-                }`}>
-                  {!isGpsLocked
-                    ? 'Mencari Lokasi...'
-                    : isWithinAnyAuthorizedGeofence
-                    ? `${formatDistanceKm(effectiveTargetDistance)} • Masuk Area Kerja (Valid)`
-                    : `${formatDistanceKm(effectiveTargetDistance)} • Luar Area`}
-                </span>
-                <button
-                  type="button"
-                  title="Refresh Lokasi Terkini"
-                  onClick={() => fetchDeviceGps(true)}
-                  className="p-1 rounded-lg hover:bg-slate-200 text-slate-500 hover:text-slate-700 transition-colors"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isGpsLoading ? 'animate-spin' : ''}`} />
-                </button>
-              </div>
-            </div>
-
-            {/* Status Keterlambatan: 1 Baris Input & Tanpa Preset */}
-            {attendanceAction === 'CHECK_IN' && isLate && (
-              <div className="p-3 rounded-2xl bg-rose-50/90 border border-rose-300 shadow-xs space-y-1.5 motion-fade-in-up">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5 text-rose-900 font-bold text-xs">
-                    <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 animate-pulse" />
-                    <span>Terdeteksi Keterlambatan ({lateMinutes} Menit Lewat {userSchedule.cutoffTime} WIB)</span>
-                  </div>
-                  <span className="px-2 py-0.5 rounded-full text-[9.5px] font-black bg-rose-200 text-rose-900 font-mono-code uppercase tracking-wider shrink-0">
-                    Wajib Isi Alasan
-                  </span>
-                </div>
-                <input
-                  type="text"
-                  required
-                  value={lateReason}
-                  onChange={e => setLateReason(e.target.value)}
-                  placeholder="Tuliskan catatan alasan kenapa Anda terlambat (wajib diisi mandiri)..."
-                  className="w-full glass-input rounded-xl px-3 py-2 text-xs text-slate-800 placeholder-slate-400 border border-rose-300 focus:ring-2 focus:ring-rose-500/30 bg-white shadow-2xs font-medium"
-                />
-              </div>
-            )}
-
-            {/* Status Masuk Area Kerja: 1 Baris Input & Tanpa Preset */}
-            {!isWithinAnyAuthorizedGeofence && (
-              <div className="p-3 rounded-2xl bg-amber-50/90 border border-amber-300 shadow-xs space-y-1.5 motion-fade-in-up">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5 text-amber-900 font-bold text-xs">
-                    <MapPin className="w-4 h-4 text-amber-600 shrink-0" />
-                    <span>Presensi di Luar Radius Area Kerja ({formatDistanceKm(effectiveTargetDistance)})</span>
-                  </div>
-                  <span className="px-2 py-0.5 rounded-full text-[9.5px] font-black bg-amber-200 text-amber-900 font-mono-code uppercase tracking-wider shrink-0">
-                    Wajib Isi Catatan
-                  </span>
-                </div>
-                <input
-                  type="text"
-                  required
-                  value={outOfRangeReason}
-                  onChange={e => setOutOfRangeReason(e.target.value)}
-                  placeholder="Tuliskan catatan / alasan presensi di luar radius (wajib diisi mandiri)..."
-                  className="w-full glass-input rounded-xl px-3 py-2 text-xs text-slate-800 placeholder-slate-400 border border-amber-300 focus:ring-2 focus:ring-amber-500/30 bg-white shadow-2xs font-medium"
-                />
-              </div>
-            )}
-
-            {/* 4. Submit Action Button */}
-            <div className="space-y-2 pt-1">
-
-
-              {/* Peringatan GPS Tidak Aktif */}
-              {!isGpsLocked && (
-                <div className="p-3 rounded-2xl bg-rose-50 border border-rose-300 text-rose-800 text-xs flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-                    <span className="text-[11px] leading-relaxed font-semibold">
-                      {gpsError || 'GPS perangkat belum aktif / terkunci. Wajib mengaktifkan GPS untuk presensi.'}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => fetchDeviceGps(true)}
-                    className="px-2.5 py-1 rounded-lg bg-rose-200 hover:bg-rose-300 text-rose-900 font-bold text-[10px] shrink-0 transition-colors"
-                  >
-                    Aktifkan GPS
-                  </button>
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={!isGpsLocked}
-                className={`w-full py-3.5 rounded-2xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-md ${
-                  !isGpsLocked
-                    ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
-                    : 'bg-gradient-to-r from-[#FF6B00] via-[#FF8533] to-[#FF6B00] text-white hover:shadow-lg hover:shadow-orange-500/25 active:scale-98 cursor-pointer'
-                }`}
-              >
-                <Send className="w-4 h-4" />
-                <span>
-                  {!isGpsLocked
-                    ? (isGpsLoading ? 'Mencari Sinyal GPS...' : 'GPS Wajib Aktif untuk Presensi')
-                    : capturedPhoto 
-                    ? (attendanceAction === 'CHECK_IN' ? 'Kirim Absen Masuk Sekarang' : 'Kirim Absen Pulang Sekarang')
-                    : (attendanceAction === 'CHECK_IN' ? 'Ambil Foto & Absen Masuk' : 'Ambil Foto & Absen Pulang')}
-                </span>
-              </button>
-            </div>
 
               </form>
             </div>
@@ -2015,13 +2009,13 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
 
       {/* Modal Photo Inspector (Portaled to document.body) */}
       {selectedHistoryItem && typeof document !== 'undefined' && createPortal(
-        <div 
+        <div
           className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4 overflow-y-auto animate-in fade-in"
           onClick={(e) => {
             if (e.target === e.currentTarget) setSelectedHistoryItem(null);
           }}
         >
-          <div 
+          <div
             className="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200 modal-dialog-animate my-auto"
             onClick={e => e.stopPropagation()}
           >
@@ -2029,11 +2023,10 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
               <div>
                 <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
                   <span>Bukti Foto & Watermark</span>
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold font-mono-code ${
-                    selectedPhotoType === 'CHECK_IN'
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold font-mono-code ${selectedPhotoType === 'CHECK_IN'
                       ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                       : 'bg-blue-100 text-blue-800 border border-blue-300'
-                  }`}>
+                    }`}>
                     {selectedPhotoType === 'CHECK_IN' ? 'FOTO MASUK' : 'FOTO PULANG'}
                   </span>
                 </h3>
@@ -2053,11 +2046,10 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                 <button
                   type="button"
                   onClick={() => setSelectedPhotoType('CHECK_IN')}
-                  className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                    selectedPhotoType === 'CHECK_IN'
+                  className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${selectedPhotoType === 'CHECK_IN'
                       ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-300'
                       : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
-                  }`}
+                    }`}
                 >
                   <span className="w-2 h-2 rounded-full bg-emerald-400" />
                   <span>Foto Masuk ({selectedHistoryItem.checkInTime || '-'})</span>
@@ -2066,11 +2058,10 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                 <button
                   type="button"
                   onClick={() => setSelectedPhotoType('CHECK_OUT')}
-                  className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                    selectedPhotoType === 'CHECK_OUT'
+                  className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${selectedPhotoType === 'CHECK_OUT'
                       ? 'bg-blue-600 text-white shadow-sm ring-2 ring-blue-300'
                       : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
-                  }`}
+                    }`}
                 >
                   <span className="w-2 h-2 rounded-full bg-blue-400" />
                   <span>Foto Pulang ({selectedHistoryItem.checkOutTime || '-'})</span>
@@ -2130,17 +2121,17 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
 
       {/* Real Attendance Submission Success Dialog (Portaled to document.body) */}
       {isSuccessModalOpen && submittedRecord && typeof document !== 'undefined' && createPortal(
-        <div 
+        <div
           className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200"
           onClick={(e) => {
             if (e.target === e.currentTarget) setIsSuccessModalOpen(false);
           }}
         >
-          <div 
+          <div
             className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-5 my-auto animate-in zoom-in-95 duration-200"
             onClick={e => e.stopPropagation()}
           >
-            
+
             <div className="text-center space-y-2">
               <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto shadow-lg shadow-emerald-500/20 animate-bounce">
                 <CheckCircle2 className="w-8 h-8" />
@@ -2181,11 +2172,10 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
               </div>
               <div className="flex justify-between items-center py-0.5 border-b border-slate-100">
                 <span className="text-slate-500">Status Kehadiran:</span>
-                <span className={`font-bold px-2 py-0.2 rounded-md font-mono-code text-[11px] ${
-                  submittedRecord.status === 'ON_TIME'
+                <span className={`font-bold px-2 py-0.2 rounded-md font-mono-code text-[11px] ${submittedRecord.status === 'ON_TIME'
                     ? 'bg-emerald-100 text-emerald-800'
                     : 'bg-amber-100 text-amber-800'
-                }`}>
+                  }`}>
                   {submittedRecord.status === 'ON_TIME'
                     ? 'TEPAT WAKTU (ON TIME)'
                     : `TERLAMBAT (${submittedRecord.lateMinutes}m - PENGAJUAN DIAJUKAN KE HR)`}
@@ -2238,17 +2228,17 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
 
       {/* Unified Geofence & Location Coordinates Setting Modal (Portaled to document.body for instant screen-centered pop up) */}
       {isGeofenceModalOpen && typeof document !== 'undefined' && createPortal(
-        <div 
+        <div
           className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6 bg-slate-950/70 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200"
           onClick={(e) => {
             if (e.target === e.currentTarget) setIsGeofenceModalOpen(false);
           }}
         >
-          <div 
+          <div
             className="glass-card bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 space-y-4 my-auto animate-in zoom-in-95 duration-200 max-h-[92vh] overflow-y-auto"
             onClick={e => e.stopPropagation()}
           >
-            
+
             {/* Modal Header */}
             <div className="flex items-start justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-3">
@@ -2288,11 +2278,10 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                 <button
                   type="button"
                   onClick={() => loadOfficeTarget()}
-                  className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
-                    geofenceTargetType === 'OFFICE'
+                  className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${geofenceTargetType === 'OFFICE'
                       ? 'bg-white text-[#FF6B00] shadow-xs border border-orange-200'
                       : 'text-slate-600 hover:text-slate-900 bg-white/50'
-                  }`}
+                    }`}
                 >
                   <Building className="w-4 h-4" />
                   <span>🏢 Kantor Pusat & Workshop</span>
@@ -2302,11 +2291,10 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                   <button
                     type="button"
                     onClick={() => loadProjectTarget(selectedGeoProjectId || projects[0]?.id || '')}
-                    className={`py-1.5 px-2.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all cursor-pointer shrink-0 ${
-                      geofenceTargetType === 'PROJECT'
+                    className={`py-1.5 px-2.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-all cursor-pointer shrink-0 ${geofenceTargetType === 'PROJECT'
                         ? 'bg-white text-[#FF6B00] shadow-2xs border border-orange-200'
                         : 'text-slate-600 hover:text-slate-900'
-                    }`}
+                      }`}
                   >
                     <Briefcase className="w-3.5 h-3.5" />
                     <span>⚡ Proyek:</span>
@@ -2339,7 +2327,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                   Akurasi: ±{coords.accuracy}m
                 </span>
               </div>
-              
+
               <div className="text-[11px] font-mono-code text-slate-700 bg-white/80 p-2 rounded-xl border border-orange-100 flex flex-wrap items-center justify-between gap-2">
                 <div>
                   Lat: <strong className="text-slate-900">{coords.lat}</strong>, Lng: <strong className="text-slate-900">{coords.lng}</strong>
@@ -2385,13 +2373,12 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
 
             {/* Feedback Message */}
             {geofenceModalMsg && (
-              <div className={`p-3 rounded-xl text-xs flex items-center gap-2 ${
-                geofenceModalMsg.type === 'success'
+              <div className={`p-3 rounded-xl text-xs flex items-center gap-2 ${geofenceModalMsg.type === 'success'
                   ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
                   : geofenceModalMsg.type === 'info'
-                  ? 'bg-blue-50 border border-blue-200 text-blue-800'
-                  : 'bg-rose-50 border border-rose-200 text-rose-800'
-              }`}>
+                    ? 'bg-blue-50 border border-blue-200 text-blue-800'
+                    : 'bg-rose-50 border border-rose-200 text-rose-800'
+                }`}>
                 {geofenceModalMsg.type === 'success' ? (
                   <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
                 ) : geofenceModalMsg.type === 'info' ? (
@@ -2477,11 +2464,10 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                       key={chip.radius}
                       type="button"
                       onClick={() => setTempOfficeRadius(chip.radius)}
-                      className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer ${
-                        tempOfficeRadius === chip.radius
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer ${tempOfficeRadius === chip.radius
                           ? 'bg-orange-50 border-[#FF6B00] text-[#FF6B00] font-bold'
                           : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
-                      }`}
+                        }`}
                     >
                       {chip.label}
                     </button>
@@ -2518,11 +2504,10 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[11px] font-bold text-slate-700">Verifikasi Jarak Saat Ini:</span>
                   {modalDistance !== null && (
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                      modalDistance <= tempOfficeRadius
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${modalDistance <= tempOfficeRadius
                         ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
                         : 'text-amber-700 bg-amber-50 border-amber-200'
-                    }`}>
+                      }`}>
                       {modalDistance <= tempOfficeRadius
                         ? `✓ Di Dalam Radius (${modalDistance}m ≤ ${tempOfficeRadius}m)`
                         : `⚠ Di Luar Radius (${modalDistance}m > ${tempOfficeRadius}m)`}

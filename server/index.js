@@ -402,6 +402,9 @@ const server = http.createServer(async (req, res) => {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0',
       'Vary': 'Accept-Encoding'
     };
 
@@ -1106,15 +1109,25 @@ const server = http.createServer(async (req, res) => {
         return sendJson(200, result);
       }
 
-      // 8. Save Employee with Broadcast
+      // 8. Save Employee with Broadcast (Permits Admin/HR/Superuser OR self-identity profile update)
       if (cleanUrl === '/api/employee' && method === 'POST') {
         const token = getAuthToken();
         const user = token ? getCurrentUserFromToken(token) : null;
-        if (!user || !['admin', 'superuser', 'hr'].includes(user.systemRole)) {
-          return sendJson(403, { success: false, error: 'Forbidden: Hak akses Admin, HR, atau Superuser diperlukan' });
+        if (!user) {
+          return sendJson(401, { success: false, error: 'Unauthorized: Sesi tidak valid atau telah berakhir' });
         }
         const body = await readBody();
-        const result = saveEmployee(body);
+        const isSelf = Boolean(
+          (user.employeeId && user.employeeId === body?.id) ||
+          (user.id && user.id === body?.id) ||
+          (user.username && body?.loginId === user.username) ||
+          (user.email && body?.email && user.email.toLowerCase() === body.email.toLowerCase())
+        );
+        const isPrivileged = ['admin', 'superuser', 'hr'].includes(user.systemRole);
+        if (!isPrivileged && !isSelf) {
+          return sendJson(403, { success: false, error: 'Forbidden: Hak akses Admin, HR, atau Superuser diperlukan' });
+        }
+        const result = saveEmployee(body, user);
         broadcastRealtimeEvent('EMPLOYEE_SAVED', result.employee || body);
         return sendJson(200, result);
       }

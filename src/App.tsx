@@ -360,9 +360,42 @@ export function App() {
     setAuthUser(user);
     if (user.employee) {
       setCurrentUser(user.employee);
+      // Immediately merge latest logged-in employee record into employees state
+      setEmployees(prev => {
+        const exists = prev.some(e => e.id === user.employee!.id);
+        if (exists) {
+          return prev.map(e => e.id === user.employee!.id ? user.employee! : e);
+        }
+        return [user.employee!, ...prev];
+      });
     }
     // Sesuai instruksi Mr Prime: Saat aplikasi dibuka atau setelah login, langsung arahkan ke menu Presensi Kamera ('attendance')
     setActiveTab('attendance');
+    
+    // Refresh fresh bootstrap data from SQLite immediately upon login
+    api.getBootstrapData().then(data => {
+      if (data.employees && data.employees.length > 0) {
+        setEmployees(data.employees);
+        setCurrentUser(prev => {
+          const fresh = data.employees.find((e: Employee) => e.id === prev.id);
+          return fresh || prev;
+        });
+      }
+      if (data.projects && data.projects.length > 0) setProjects(data.projects);
+      if (Array.isArray(data.attendances)) setAttendances(data.attendances);
+      if (data.approvals && data.approvals.length > 0) setApprovals(data.approvals);
+      if (data.salaryRules) setSalaryRules(data.salaryRules);
+      try {
+        localStorage.setItem('prime_hris_bootstrap_cache', JSON.stringify({
+          employees: data.employees,
+          projects: data.projects,
+          attendances: data.attendances,
+          approvals: data.approvals,
+          salaryRules: data.salaryRules,
+          workCalendar: data.workCalendar
+        }));
+      } catch (e) {}
+    }).catch(err => console.warn('Post-login bootstrap sync', err));
     if (typeof window !== 'undefined') {
       try {
         const url = new URL(window.location.href);
@@ -565,6 +598,26 @@ export function App() {
             }
             return prev;
           });
+          setAuthUser(prev => {
+            if (prev && prev.employee && prev.employee.id === updatedEmp.id) {
+              const next = { ...prev, employee: { ...prev.employee, ...updatedEmp } };
+              try {
+                localStorage.setItem('prime_hris_auth_user', JSON.stringify(next));
+              } catch (e) {}
+              return next;
+            }
+            return prev;
+          });
+          try {
+            const cachedBoot = localStorage.getItem('prime_hris_bootstrap_cache');
+            if (cachedBoot) {
+              const parsed = JSON.parse(cachedBoot);
+              if (parsed.employees) {
+                parsed.employees = parsed.employees.map((e: Employee) => e.id === updatedEmp.id ? { ...e, ...updatedEmp } : e);
+                localStorage.setItem('prime_hris_bootstrap_cache', JSON.stringify(parsed));
+              }
+            }
+          } catch (e) {}
         }
       } else if (packet.type === 'EMPLOYEE_DELETED') {
         const deletedId = packet.payload?.id || packet.payload;
@@ -1289,8 +1342,8 @@ export function App() {
     api.saveEmployee(emp).catch(err => console.error('Failed to save employee to SQLite', err));
   };
 
-  const handleUpdateEmployee = (emp: Employee) => {
-    setEmployees(prev => prev.map(e => (e.id === emp.id ? emp : e)));
+  const handleUpdateEmployee = async (emp: Employee) => {
+    setEmployees(prev => prev.map(e => (e.id === emp.id ? { ...e, ...emp } : e)));
     if (currentUser.id === emp.id) {
       setCurrentUser(emp);
       try { localStorage.setItem('prime_hris_current_user', JSON.stringify(emp)); } catch (e) {}
@@ -1311,13 +1364,26 @@ export function App() {
       if (cachedBoot) {
         const parsed = JSON.parse(cachedBoot);
         if (parsed.employees) {
-          parsed.employees = parsed.employees.map((e: Employee) => e.id === emp.id ? emp : e);
+          parsed.employees = parsed.employees.map((e: Employee) => e.id === emp.id ? { ...e, ...emp } : e);
           localStorage.setItem('prime_hris_bootstrap_cache', JSON.stringify(parsed));
         }
       }
     } catch (e) {}
 
-    api.saveEmployee(emp).catch(err => console.error('Failed to update employee in SQLite', err));
+    try {
+      const res = await api.saveEmployee(emp);
+      if (res && res.employee) {
+        setEmployees(prev => prev.map(e => (e.id === res.employee.id ? res.employee : e)));
+        if (currentUser.id === res.employee.id) {
+          setCurrentUser(res.employee);
+          try { localStorage.setItem('prime_hris_current_user', JSON.stringify(res.employee)); } catch (e) {}
+        }
+      }
+    } catch (err: any) {
+      console.error('Failed to update employee in SQLite:', err);
+      showLiveToast(`Gagal menyimpan perubahan ke database: ${err.message || 'Error'}`, 'warn');
+      throw err;
+    }
   };
 
   const handleDeleteEmployee = async (id: string) => {

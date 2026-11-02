@@ -1438,8 +1438,27 @@ export function getEmployeeProjectSchedule(employeeOrId, fallbackRules = null) {
   };
 }
 
-export function saveEmployee(emp) {
+export function saveEmployee(emp, operatorUser = null) {
   const db = getDatabase();
+
+  // If this is a self-update by non-privileged user, safeguard administrative fields
+  if (operatorUser && !['admin', 'superuser', 'hr'].includes(operatorUser.systemRole)) {
+    const existing = db.prepare('SELECT role, department, position, assignedProjectId, baseSalary, fixedAllowance, dailyAllowance, leaveQuota, usedLeave, data_json FROM employees WHERE id = ?;').get(emp.id);
+    if (existing) {
+      let ex = {};
+      try { ex = JSON.parse(existing.data_json); } catch (e) {}
+      emp.role = ex.role || existing.role || emp.role;
+      emp.systemRole = ex.systemRole || emp.systemRole;
+      emp.baseSalary = ex.baseSalary !== undefined ? ex.baseSalary : existing.baseSalary;
+      emp.fixedAllowance = ex.fixedAllowance !== undefined ? ex.fixedAllowance : existing.fixedAllowance;
+      emp.dailyAllowance = ex.dailyAllowance !== undefined ? ex.dailyAllowance : existing.dailyAllowance;
+      emp.leaveQuota = ex.leaveQuota !== undefined ? ex.leaveQuota : existing.leaveQuota;
+      emp.usedLeave = ex.usedLeave !== undefined ? ex.usedLeave : existing.usedLeave;
+      emp.assignedProjectId = ex.assignedProjectId || existing.assignedProjectId;
+      emp.status = ex.status || 'ACTIVE';
+    }
+  }
+
   db.prepare(`
     INSERT OR REPLACE INTO employees (
       id, nik, name, email, phone, role, department, position,
@@ -1464,8 +1483,17 @@ export function saveEmployee(emp) {
     const res = db.prepare(`
       UPDATE user_accounts 
       SET email = COALESCE(?, email), system_role = ?, role = ?, status = ?, updated_at = CURRENT_TIMESTAMP 
-      WHERE employee_id = ?;
-    `).run(emp.email || null, targetSysRole, targetRole, userAccountStatus, emp.id);
+      WHERE employee_id = ? OR id = ?;
+    `).run(emp.email || null, targetSysRole, targetRole, userAccountStatus, emp.id, emp.id);
+
+    // Sync project manager name across projects if this employee is a PM
+    try {
+      db.prepare(`
+        UPDATE projects 
+        SET projectManagerName = ?, updated_at = CURRENT_TIMESTAMP 
+        WHERE projectManagerId = ?;
+      `).run(emp.name, emp.id);
+    } catch (ePm) {}
 
     // Auto-sync employee phone into wa_opt_ins (enterprise ID contacts are pre-verified)
     if (emp.phone) {
