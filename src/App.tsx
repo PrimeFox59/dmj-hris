@@ -778,9 +778,12 @@ export function App() {
         return;
       }
       if (tabId === 'projects' || tabId === 'project_dashboard' || tabId === 'project_detail') {
-        setActiveTab('dashboard');
-        setDashboardSubView('performance');
-        return;
+        const canProjects = canAccessProjectModule(currentUser, projects);
+        if (!canProjects) {
+          setActiveTab('dashboard');
+          setDashboardSubView('performance');
+          return;
+        }
       }
     }
 

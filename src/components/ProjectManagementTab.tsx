@@ -114,7 +114,11 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
       const targetProj = projects.find(p => p.id === initialProjectId);
       if (targetProj) {
         const isPm = targetProj.projectManagerId === currentUser.id || Boolean(targetProj.projectManagerName && currentUser.name && targetProj.projectManagerName.toLowerCase().trim() === currentUser.name.toLowerCase().trim());
-        if (canManage || isPm) {
+        const isAdmin = Boolean(
+          (currentUser.id && targetProj.projectAdminIds?.includes(currentUser.id)) ||
+          (currentUser.name && targetProj.projectAdminNames?.some(n => n.toLowerCase().trim() === currentUser.name.toLowerCase().trim()))
+        );
+        if (canManage || isPm || isAdmin) {
           handleOpenEdit(targetProj, 'schedule');
         }
       }
@@ -659,10 +663,15 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
             const hasCustomAllowance = proj.customRules?.allowance?.enabled;
             const hasGeofence = proj.customRules?.geofence?.enabled;
 
-            // Project Manager (PM) Resolution for This Specific Project
+            // Project Manager (PM) & Admin Proyek Resolution for This Specific Project
             const isPmOfThisProject = proj.projectManagerId === currentUser.id || Boolean(proj.projectManagerName && currentUser.name && proj.projectManagerName.toLowerCase().trim() === currentUser.name.toLowerCase().trim());
-            const canViewFinancialsThisProject = canViewFinancials || isPmOfThisProject;
-            const canManageThisProject = canManage || isPmOfThisProject;
+            const isAdminOfThisProject = Boolean(
+              (currentUser.id && proj.projectAdminIds?.includes(currentUser.id)) ||
+              (currentUser.name && proj.projectAdminNames?.some(n => n.toLowerCase().trim() === currentUser.name.toLowerCase().trim()))
+            );
+            const isPmOrAdminOfThisProject = isPmOfThisProject || isAdminOfThisProject;
+            const canViewFinancialsThisProject = canViewFinancials || isPmOrAdminOfThisProject;
+            const canManageThisProject = canManage || isPmOrAdminOfThisProject;
             const pmEmployee = proj.projectManagerId ? employees.find(e => e.id === proj.projectManagerId) : null;
             const isHeadOfficeProject = Boolean(
               proj.isHeadOffice || 

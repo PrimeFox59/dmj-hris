@@ -68,9 +68,17 @@ export const ProjectDashboardTab: React.FC<ProjectDashboardTabProps> = ({
   onUpdateEmployee
 }) => {
   const currentRole: SystemRole = getEffectiveSystemRole(currentUser);
-  const isProjectManager = Boolean(project.projectManagerId && project.projectManagerId === currentUser.id);
-  const canViewFinancials = currentRole === 'admin' || currentRole === 'hr' || currentRole === 'finance' || currentRole === 'superuser' || isProjectManager;
-  const canManageProject = currentRole === 'admin' || currentRole === 'hr' || currentRole === 'superuser' || isProjectManager;
+  const isProjectManager = Boolean(
+    (project.projectManagerId && project.projectManagerId === currentUser.id) ||
+    (project.projectManagerName && currentUser.name && project.projectManagerName.toLowerCase().trim() === currentUser.name.toLowerCase().trim())
+  );
+  const isProjectAdminUser = Boolean(
+    (project.projectAdminIds && currentUser.id && project.projectAdminIds.includes(currentUser.id)) ||
+    (project.projectAdminNames && currentUser.name && project.projectAdminNames.some(n => n.toLowerCase().trim() === currentUser.name.toLowerCase().trim()))
+  );
+  const isPmOrAdmin = isProjectManager || isProjectAdminUser;
+  const canViewFinancials = currentRole === 'admin' || currentRole === 'hr' || currentRole === 'finance' || currentRole === 'superuser' || isPmOrAdmin;
+  const canManageProject = currentRole === 'admin' || currentRole === 'hr' || currentRole === 'superuser' || isPmOrAdmin;
   const isStaff = !canViewFinancials;
   const pmEmployee = project.projectManagerId ? employees.find(e => e.id === project.projectManagerId) : null;
 
