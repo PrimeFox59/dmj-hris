@@ -1083,14 +1083,14 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
             )}
           </div>
 
-          {isSuperuser && (
-              <div className="py-1">
+          {isHR && dropdownAnchor.emp.id !== 'EMP-001' && (
+            <div className="py-1">
               <button
                 type="button"
                 onClick={() => {
                   const emp = dropdownAnchor.emp;
                   setDropdownAnchor(null);
-                  if (confirm(`Yakin hapus data karyawan ${emp.name}?`)) {
+                  if (confirm(`Yakin hapus data karyawan ${emp.name}? Tindakan ini akan menghapus data profil, akun login, dan riwayat presensi secara permanen.`)) {
                     onDeleteEmployee(emp.id);
                   }
                 }}
@@ -1099,7 +1099,7 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                 <Trash2 className="w-3.5 h-3.5 text-rose-500 shrink-0" />
                 <div className="text-left">
                   <div className="font-semibold text-xs">Hapus Karyawan</div>
-                  <div className="text-[10px] text-rose-400">Akses khusus superuser</div>
+                  <div className="text-[10px] text-rose-400">Akses HR & Superuser</div>
                 </div>
               </button>
             </div>

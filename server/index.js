@@ -1198,6 +1198,15 @@ const server = http.createServer(async (req, res) => {
       // 8a. Delete Employee with Broadcast
       const empDeleteMatch = cleanUrl.match(/^\/api\/employee\/([^\/]+)$/);
       if ((empDeleteMatch && method === 'DELETE') || (cleanUrl === '/api/employee/delete' && method === 'POST')) {
+        const token = getAuthToken();
+        const user = token ? getCurrentUserFromToken(token) : null;
+        const sysRole = String(user?.systemRole || '').toLowerCase();
+        const uRole = String(user?.role || '').toLowerCase();
+        const isAuthorized = ['admin', 'superuser', 'hr'].includes(sysRole) || uRole.includes('hr') || uRole.includes('director');
+        if (!user || !isAuthorized) {
+          return sendJson(403, { success: false, error: 'Forbidden: Hak akses Admin, HR, atau Superuser diperlukan untuk menghapus data karyawan' });
+        }
+
         let id;
         if (empDeleteMatch) {
           id = decodeURIComponent(empDeleteMatch[1]);
@@ -1206,6 +1215,10 @@ const server = http.createServer(async (req, res) => {
           id = body?.id;
         }
         if (!id) return sendJson(400, { success: false, error: 'ID karyawan tidak valid' });
+
+        if (id === 'EMP-001') {
+          return sendJson(400, { success: false, error: 'Akun Master Superuser (EMP-001) dilindungi dan tidak dapat dihapus' });
+        }
 
         try {
           const result = deleteEmployee(id, user);

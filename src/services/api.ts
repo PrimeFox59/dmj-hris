@@ -322,7 +322,14 @@ export const api = {
       });
     }
     if (!res.ok) {
-      throw new Error(`Gagal menghapus data karyawan dari SQLite: ${res.statusText}`);
+      let errMsg = res.statusText;
+      try {
+        const errJson = await res.json();
+        if (errJson && (errJson.error || errJson.message)) {
+          errMsg = errJson.error || errJson.message;
+        }
+      } catch (e) {}
+      throw new Error(`Gagal menghapus data karyawan dari SQLite: ${errMsg}`);
     }
     return res.json();
   },

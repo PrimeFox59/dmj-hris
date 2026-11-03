@@ -103,6 +103,9 @@ export function sqliteApiPlugin(): Plugin {
           if ((empDeleteMatch && method === 'DELETE') || (cleanUrl === '/api/employee/delete' && method === 'POST')) {
             let id = empDeleteMatch ? decodeURIComponent(empDeleteMatch[1]) : (await readBody())?.id;
             if (!id) return sendJson(400, { success: false, error: 'ID karyawan tidak valid' });
+            if (id === 'EMP-001') {
+              return sendJson(400, { success: false, error: 'Akun Master Superuser (EMP-001) dilindungi dan tidak dapat dihapus' });
+            }
             const result = deleteEmployee(id);
             return sendJson(result.success ? 200 : 400, result);
           }

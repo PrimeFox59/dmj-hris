@@ -1467,11 +1467,11 @@ export function saveEmployee(emp, operatorUser = null) {
       bankAccount, avatar, data_json, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP);
   `).run(
-    emp.id, emp.nik, emp.name, emp.email, emp.phone, emp.role,
-    emp.department, emp.position, emp.employmentType, emp.joinDate,
-    emp.assignedProjectId, emp.baseSalary, emp.fixedAllowance,
-    emp.dailyAllowance, emp.leaveQuota, emp.usedLeave,
-    JSON.stringify(emp.bankAccount), emp.avatar, JSON.stringify(emp)
+    emp.id, emp.nik, emp.name, emp.email || null, emp.phone || null, emp.role || 'Employee',
+    emp.department || null, emp.position || null, emp.employmentType || 'TETAP', emp.joinDate || null,
+    emp.assignedProjectId || null, emp.baseSalary ?? 0, emp.fixedAllowance ?? 0,
+    emp.dailyAllowance ?? 0, emp.leaveQuota ?? 12, emp.usedLeave ?? 0,
+    emp.bankAccount ? JSON.stringify(emp.bankAccount) : null, emp.avatar || null, JSON.stringify(emp)
   );
 
   // Synchronize active/inactive status and system_role/role to user_accounts
@@ -1545,6 +1545,9 @@ export function deleteEmployee(employeeId, operatorUser = null) {
   const db = getDatabase();
   const cleanId = String(employeeId || '').trim();
   if (!cleanId) return { success: false, error: 'Employee ID is required' };
+  if (cleanId === 'EMP-001') {
+    return { success: false, error: 'Akun Master Superuser (EMP-001) dilindungi dan tidak dapat dihapus' };
+  }
 
   const empRow = db.prepare('SELECT id, nik, name FROM employees WHERE id = ? OR nik = ? LIMIT 1;').get(cleanId, cleanId);
   const targetId = empRow?.id || cleanId;
@@ -1581,21 +1584,30 @@ export function deleteEmployee(employeeId, operatorUser = null) {
     console.warn('[SQLite] Warning cleaning up project assigned personnel for employee', cleanId, err);
   }
 
-  // 4. Delete from employees
+  // 4. Clean up related attendances and approvals to avoid orphaned records
+  try {
+    db.prepare('DELETE FROM attendances WHERE employeeId = ? OR employeeNik = ?;').run(targetId, targetNik);
+  } catch (err) {}
+  try {
+    db.prepare('DELETE FROM approvals WHERE employeeId = ? OR employeeNik = ?;').run(targetId, targetNik);
+  } catch (err) {}
+
+  // 5. Delete from employees
   const res = db.prepare('DELETE FROM employees WHERE id = ? OR nik = ?;').run(targetId, targetNik);
 
   addAuditLog({
     action: 'DELETE_EMPLOYEE',
     entity: 'employees',
     entityId: targetId,
-    userName: operatorUser?.name || 'Admin HR',
-    userRole: operatorUser?.role || 'admin',
+    userName: operatorUser?.name || operatorUser?.username || 'Admin HR',
+    userNik: operatorUser?.nik || operatorUser?.userNik || null,
+    userRole: operatorUser?.systemRole || operatorUser?.role || 'admin',
     module: 'EMPLOYEES',
     status: 'SUCCESS',
-    details: `Data master karyawan ${targetName} (${targetNik}) berhasil dihapus permanen oleh ${operatorUser?.name || 'Admin'}.`
+    details: `Data master karyawan ${targetName} (${targetNik}) berhasil dihapus permanen oleh ${operatorUser?.name || operatorUser?.username || 'Admin HR'}.`
   });
 
-  return { success: res.changes > 0, id: targetId, name: targetName };
+  return { success: true, id: targetId, name: targetName };
 }
 
 /**
