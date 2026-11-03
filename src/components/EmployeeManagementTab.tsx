@@ -786,7 +786,7 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                           </span>
                         )}
                         <span className="text-[10px] text-slate-500 font-mono-code capitalize pl-0.5">
-                          {emp.role.replace('_', ' ')}
+                          {effRole === 'superuser' ? 'Direksi / Superuser' : emp.role.replace('_', ' ')}
                         </span>
                       </div>
                     </td>
@@ -1226,7 +1226,7 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                       onChange={e => {
                         const newSysRole = e.target.value as SystemRole;
                         setSystemRole(newSysRole);
-                        if (newSysRole === 'superuser' && role === 'Employee') {
+                        if (newSysRole === 'superuser') {
                           setRole('Director');
                         } else if (newSysRole === 'finance' && role === 'Employee') {
                           setRole('Finance');
@@ -1261,7 +1261,9 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                       onChange={e => {
                         const newRole = e.target.value as UserRole;
                         setRole(newRole);
-                        if (newRole === 'Finance' && systemRole === 'staff') {
+                        if (newRole === 'Director') {
+                          setSystemRole('superuser');
+                        } else if (newRole === 'Finance' && systemRole === 'staff') {
                           setSystemRole('finance');
                         }
                       }}

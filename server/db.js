@@ -544,7 +544,10 @@ export function getAllData() {
     if (userRoleMap.has(r.id)) {
       const uInfo = userRoleMap.get(r.id);
       if (uInfo.systemRole) emp.systemRole = uInfo.systemRole;
-      if (uInfo.role && (!emp.role || emp.role === 'Employee')) emp.role = uInfo.role;
+      if (uInfo.role) emp.role = uInfo.role;
+    }
+    if (emp.systemRole === 'superuser') {
+      emp.role = 'Director';
     }
     if (!emp.loginId) {
       if (emp.id === 'EMP-001') emp.loginId = 'admin';
@@ -1477,6 +1480,22 @@ export function saveEmployee(emp, operatorUser = null) {
     }
   }
 
+  // Synchronize active/inactive status and system_role/role to user_accounts
+  const userAccountStatus = emp.status === 'INACTIVE' ? 'inactive' : 'active';
+  const targetSysRole = emp.id === 'EMP-001' ? 'superuser' : (emp.systemRole === 'admin' ? 'hr' : emp.systemRole || 'staff');
+  let targetRole = emp.role || 'Employee';
+  if (targetSysRole === 'superuser') {
+    targetRole = 'Director';
+    emp.role = 'Director';
+  } else if (targetSysRole === 'hr' && (targetRole === 'Employee' || targetRole === 'Staff')) {
+    targetRole = 'HR_Manager';
+    emp.role = 'HR_Manager';
+  } else if (targetSysRole === 'finance' && (targetRole === 'Employee' || targetRole === 'Staff')) {
+    targetRole = 'Finance';
+    emp.role = 'Finance';
+  }
+  emp.systemRole = targetSysRole;
+
   db.prepare(`
     INSERT OR REPLACE INTO employees (
       id, nik, name, email, phone, role, department, position,
@@ -1485,17 +1504,12 @@ export function saveEmployee(emp, operatorUser = null) {
       bankAccount, avatar, data_json, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP);
   `).run(
-    emp.id, emp.nik, emp.name, emp.email || null, emp.phone || null, emp.role || 'Employee',
+    emp.id, emp.nik, emp.name, emp.email || null, emp.phone || null, targetRole,
     emp.department || null, emp.position || null, emp.employmentType || 'TETAP', emp.joinDate || null,
     emp.assignedProjectId || null, emp.baseSalary ?? 0, emp.fixedAllowance ?? 0,
     emp.dailyAllowance ?? 0, emp.leaveQuota ?? 12, emp.usedLeave ?? 0,
     emp.bankAccount ? JSON.stringify(emp.bankAccount) : null, emp.avatar || null, JSON.stringify(emp)
   );
-
-  // Synchronize active/inactive status and system_role/role to user_accounts
-  const userAccountStatus = emp.status === 'INACTIVE' ? 'inactive' : 'active';
-  const targetSysRole = emp.id === 'EMP-001' ? 'superuser' : (emp.systemRole === 'admin' ? 'hr' : emp.systemRole || 'staff');
-  const targetRole = emp.role || 'Employee';
 
   try {
     const res = db.prepare(`

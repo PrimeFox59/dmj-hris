@@ -1199,8 +1199,8 @@
       "name": "Wulan",
       "email": "wulan@dwimarthajaya.com",
       "phone": "+62 812-3400-0037",
-      "role": "Employee",
-      "systemRole": "staff",
+      "role": "Director",
+      "systemRole": "superuser",
       "department": "Head Office & Management Support",
       "position": "Staff Kantor DMJ",
       "employmentType": "KONTRAK_SELESAI",
@@ -1221,7 +1221,8 @@
       "statusNote": "Arsip staf cuti 2025/2026 (kontrak telah selesai / non-aktif per Sept 2026)",
       "ktpNumber": "DMJ-HO-028",
       "loginId": "d028",
-      "workLocationType": "LOKAL"
+      "workLocationType": "LOKAL",
+      "status": "ACTIVE"
     },
     {
       "id": "EMP-038",
@@ -8000,8 +8001,8 @@
       "id": "EMP-160",
       "nik": "3516165501010002",
       "name": "WAHYUNING WULANDARI",
-      "role": "Staff",
-      "systemRole": "staff",
+      "role": "Director",
+      "systemRole": "superuser",
       "department": "Mechanical, Electrical & Plumbing (MEP)",
       "position": "MANAGEMENT ASET",
       "employmentType": "TETAP",
@@ -8040,7 +8041,8 @@
       "source": "DMJ_MASTER_EXCEL_NEW",
       "ktpNumber": "3516165501010002",
       "loginId": "d151",
-      "workLocationType": "LOKAL"
+      "workLocationType": "LOKAL",
+      "status": "ACTIVE"
     },
     {
       "id": "EMP-161",

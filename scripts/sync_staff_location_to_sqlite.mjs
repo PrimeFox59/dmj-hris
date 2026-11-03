@@ -51,6 +51,9 @@ for (const emp of seed.INITIAL_EMPLOYEES || []) {
       if (existingData.avatar && !merged.avatar) {
         merged.avatar = existingData.avatar;
       }
+      if (existingData.systemRole) merged.systemRole = existingData.systemRole;
+      if (existingData.role) merged.role = existingData.role;
+      if (existingData.status) merged.status = existingData.status;
     } catch (e) {}
   }
 

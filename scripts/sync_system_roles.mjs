@@ -14,6 +14,10 @@ const db = new DatabaseSync(dbPath);
 
 function determineSystemRole(emp) {
   if (!emp) return 'staff';
+  // PRESERVE existing systemRole if already explicitly set!
+  if (emp.systemRole && emp.systemRole !== 'staff') {
+    return emp.systemRole;
+  }
   const pos = (emp.position || '').toUpperCase();
   const dept = (emp.department || '').toUpperCase();
   const roleStr = String(emp.role || '').toUpperCase();

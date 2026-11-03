@@ -713,6 +713,22 @@ export function updateApproval(
 
 export function saveEmployee(emp: Employee) {
   const db = getDatabase();
+  // Synchronize active/inactive status and system_role/role to user_accounts
+  const userAccountStatus = emp.status === 'INACTIVE' ? 'inactive' : 'active';
+  const targetSysRole = emp.id === 'EMP-001' ? 'superuser' : (emp.systemRole === 'admin' ? 'hr' : emp.systemRole || 'staff');
+  let targetRole = emp.role || 'Employee';
+  if (targetSysRole === 'superuser') {
+    targetRole = 'Director';
+    emp.role = 'Director';
+  } else if (targetSysRole === 'hr' && ((targetRole as string) === 'Employee' || (targetRole as string) === 'Staff')) {
+    targetRole = 'HR_Manager';
+    emp.role = 'HR_Manager';
+  } else if (targetSysRole === 'finance' && ((targetRole as string) === 'Employee' || (targetRole as string) === 'Staff')) {
+    targetRole = 'Finance';
+    emp.role = 'Finance';
+  }
+  emp.systemRole = targetSysRole;
+
   const insert = db.prepare(`
     INSERT OR REPLACE INTO employees (
       id, nik, name, email, phone, role, department, position,
@@ -728,7 +744,7 @@ export function saveEmployee(emp: Employee) {
     emp.name,
     emp.email || null,
     emp.phone || null,
-    emp.role || 'Employee',
+    targetRole,
     emp.department || null,
     emp.position || null,
     emp.employmentType || 'TETAP',
@@ -743,11 +759,6 @@ export function saveEmployee(emp: Employee) {
     emp.avatar || null,
     JSON.stringify(emp)
   );
-
-  // Synchronize active/inactive status and system_role/role to user_accounts
-  const userAccountStatus = emp.status === 'INACTIVE' ? 'inactive' : 'active';
-  const targetSysRole = emp.id === 'EMP-001' ? 'superuser' : (emp.systemRole === 'admin' ? 'hr' : emp.systemRole || 'staff');
-  const targetRole = emp.role || 'Employee';
 
   try {
     db.prepare(`

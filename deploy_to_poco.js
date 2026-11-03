@@ -8,10 +8,7 @@ console.log('[MC18] Packaging dist, server, wa-gateway, and data...');
 const bundleTargets = [
   'dist', 'server/db.js', 'server/index.js', 'server/whatsappService.js', 'server/emailService.js',
   'wa-gateway/package.json', 'wa-gateway/server.js', 'data/seedData.json',
-  'galih_enrolled_square.jpg', 'test_enrolled_front.png', 'scripts/enroll_galih_biometric.mjs',
-  'scripts/sync_project_schedules.mjs', 'scripts/purge_dummy_and_reindex_logins.mjs',
-  'scripts/sync_staff_location_to_sqlite.mjs', 'scripts/sync_project_personnel_assignments.mjs',
-  'scripts/sync_system_roles.mjs', 'scripts/fix_poco_attendance_data.mjs'
+  'galih_enrolled_square.jpg', 'test_enrolled_front.png', 'scripts/enroll_galih_biometric.mjs'
 ].filter(f => fs.existsSync(f));
 execSync(`tar -czf bundle.tar.gz ${bundleTargets.join(' ')}`, { stdio: 'inherit' });
 
@@ -47,21 +44,7 @@ try {
   execSync('ln -sfn /data/data/com.termux/files/home/waskita/wa-service/node_modules "' + path.join(appDir, 'wa-gateway', 'node_modules') + '"');
 } catch (e) {}
 
-try {
-  execSync('node scripts/sync_staff_location_to_sqlite.mjs', { cwd: appDir, stdio: 'inherit' });
-} catch (e) {}
-
-try {
-  execSync('node scripts/sync_project_personnel_assignments.mjs', { cwd: appDir, stdio: 'inherit' });
-} catch (e) {}
-
-try {
-  execSync('node scripts/sync_system_roles.mjs', { cwd: appDir, stdio: 'inherit' });
-} catch (e) {}
-
-try {
-  execSync('node scripts/fix_poco_attendance_data.mjs', { cwd: appDir, stdio: 'inherit' });
-} catch (e) {}
+// Routine zero-downtime deployment: migrations disabled to prevent overwriting live database state
 
 try {
   execSync('node scripts/enroll_galih_biometric.mjs', { cwd: appDir, stdio: 'inherit' });
