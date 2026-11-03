@@ -846,7 +846,7 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
                           (Toleransi {customSchedule?.lateGraceMinutes}m)
                         </span>
                       ) : (
-                        <span>Jam Kerja Standar Kantor (08:30)</span>
+                        <span>Jam Kerja Standar Kantor (08:15)</span>
                       )}
                     </div>
 
@@ -1590,7 +1590,7 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
                         <span>Gunakan Jam Kerja Khusus Proyek (In/Out Site)</span>
                       </div>
                       <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                        Jika diaktifkan, presensi teknisi di site ini akan dievaluasi berdasarkan jam kerja proyek di bawah, bukan jam kantor umum (08:30 WIB).
+                        Jika diaktifkan, presensi teknisi di site ini akan dievaluasi berdasarkan jam kerja proyek di bawah, bukan jam kantor umum (08:15 WIB).
                       </div>
                     </div>
 

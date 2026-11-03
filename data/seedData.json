@@ -9864,8 +9864,8 @@
   "INITIAL_SALARY_RULES": {
     "standardWorkDaysPerMonth": 22,
     "standardHoursPerDay": 8,
-    "cutoffTime": "08:30",
-    "lateGracePeriodMinutes": 10,
+    "cutoffTime": "08:15",
+    "lateGracePeriodMinutes": 15,
     "latePenaltyPerBlock": 25000,
     "officeLatePenaltyPerHour": 50000,
     "overtimeFormula": {

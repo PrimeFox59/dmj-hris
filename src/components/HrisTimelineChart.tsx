@@ -111,7 +111,7 @@ export const HrisTimelineChart: React.FC<HrisTimelineChartProps> = ({
   // Active selected project schedule (if filtered to a specific project)
   const activeSelectedSched = useMemo(() => {
     if (selectedProjectId === 'ALL') return null;
-    return getEmployeeProjectSchedule({ assignedProjectId: selectedProjectId } as any, projects, salaryRules?.cutoffTime || '08:30');
+    return getEmployeeProjectSchedule({ assignedProjectId: selectedProjectId } as any, projects, salaryRules?.cutoffTime || '08:15');
   }, [selectedProjectId, projects, salaryRules]);
 
   // Map employee with their attendance status strictly for activeDate and their project schedule
@@ -120,17 +120,30 @@ export const HrisTimelineChart: React.FC<HrisTimelineChartProps> = ({
       const att = attendances.find(a => a.employeeId === emp.id && a.date === activeDate);
       const decTime = att ? parseTimeToDecimal(att.checkInTime) : null;
       const approval = approvals.find(ap => ap.employeeId === emp.id && ap.status === 'PENDING');
-      const schedule = getEmployeeProjectSchedule(emp, projects, salaryRules?.cutoffTime || '08:30');
+      const schedule = getEmployeeProjectSchedule(emp, projects, salaryRules?.cutoffTime || '08:15');
       
       let status: 'ON_TIME' | 'LATE' | 'DINAS_LUAR' | 'ABSENT' = 'ABSENT';
+      let effectiveLateMinutes = 0;
+
       if (att) {
         if (att.mode === 'DINAS_LUAR') {
           status = 'DINAS_LUAR';
-        } else if (decTime !== null) {
-          // Dynamic evaluation against specific project cutoff
-          status = decTime > schedule.cutoffDecimal ? 'LATE' : 'ON_TIME';
         } else {
-          status = att.isLate ? 'LATE' : 'ON_TIME';
+          // ATURAN MUTLAK: Jika check-in melebihi batas cutoff (proyek terkait atau office utama 08:15), otomatis status TELAT
+          // Meskipun sudah diapprove oleh PM/HR, status histori kedatangan tetap TELAT (isLate = true, status = LATE)
+          const isLateByCutoff = decTime !== null && decTime > schedule.cutoffDecimal;
+          const isLateByRecord = Boolean(att.isLate || att.status === 'LATE');
+
+          if (isLateByCutoff || isLateByRecord) {
+            status = 'LATE';
+            if (att.lateMinutes && att.lateMinutes > 0) {
+              effectiveLateMinutes = att.lateMinutes;
+            } else if (decTime !== null && decTime > schedule.cutoffDecimal) {
+              effectiveLateMinutes = Math.max(1, Math.round((decTime - schedule.cutoffDecimal) * 60));
+            }
+          } else {
+            status = 'ON_TIME';
+          }
         }
       }
 
@@ -139,6 +152,7 @@ export const HrisTimelineChart: React.FC<HrisTimelineChartProps> = ({
         attendance: att,
         decimalTime: decTime,
         status,
+        effectiveLateMinutes,
         approval,
         schedule
       };
@@ -452,7 +466,7 @@ export const HrisTimelineChart: React.FC<HrisTimelineChartProps> = ({
             </span>
           </div>
           <div className="text-lg font-black text-rose-600 font-mono-code mt-0.5">
-            {activeSelectedSched ? `${activeSelectedSched.cutoffTime} WIB` : '06:40 – 08:30 WIB'}
+            {activeSelectedSched ? `${activeSelectedSched.cutoffTime} WIB` : '06:40 – 08:15 WIB'}
           </div>
           <span className="text-[10px] text-slate-500 block truncate mt-0.5 font-medium">
             {activeSelectedSched 
@@ -531,34 +545,34 @@ export const HrisTimelineChart: React.FC<HrisTimelineChartProps> = ({
               </>
             ) : (
               <>
-                {/* Early / Prep Zone */}
+                {/* Early / Prep Zone: 06:00 - 08:00 */}
                 <div
-                  style={{ width: `${((7 - 6) / totalHours) * 100}%` }}
+                  style={{ width: `${((8.0 - 6) / totalHours) * 100}%` }}
                   className="bg-slate-100 text-slate-500 flex items-center justify-center border-r border-slate-200 truncate px-1.5 whitespace-nowrap"
-                  title="06:00 - 07:00: Persiapan Shift Awal"
+                  title="06:00 - 08:00: Persiapan Kerja Awal"
                 >
-                  06:00 - 07:00
+                  06:00 - 08:00
                 </div>
 
-                {/* On-Time Multi-Site Zone: 06:30 - 08:30 */}
+                {/* On-Time Zone: 08:00 - 08:15 (Toleransi 15 Menit Kantor Pusat) */}
                 <div
-                  style={{ width: `${((8.5 - 7) / totalHours) * 100}%` }}
+                  style={{ width: `${((8.25 - 8.0) / totalHours) * 100}%` }}
                   className="bg-emerald-100/90 text-emerald-800 flex items-center justify-center border-r-2 border-dashed border-rose-400 relative px-1.5 whitespace-nowrap"
-                  title="Rentang Tepat Waktu: 06:30 - 08:30 WIB (Sesuai Shift Tiap Proyek)"
+                  title="Rentang Tepat Waktu: 08:00 - 08:15 WIB (Aturan Office Utama & Sesuai Shift Proyek Terkait)"
                 >
                   <span className="flex items-center gap-1.5 truncate">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
-                    <span className="truncate">Tepat Waktu</span>
+                    <span className="truncate">Tepat Waktu (s/d 08:15)</span>
                   </span>
                 </div>
 
-                {/* Late Zone */}
+                {/* Late Zone: 08:15+ */}
                 <div
-                  style={{ width: `${((12 - 8.5) / totalHours) * 100}%` }}
+                  style={{ width: `${((12 - 8.25) / totalHours) * 100}%` }}
                   className="bg-rose-50/80 text-rose-700 flex items-center justify-center border-r border-slate-200 truncate px-1.5 whitespace-nowrap"
-                  title="Lewat batas toleransi proyek: Terlambat"
+                  title="Lewat batas toleransi cutoff proyek / kantor: Terlambat"
                 >
-                  Terlambat
+                  Terlambat (08:15+)
                 </div>
 
                 {/* Lunch: 12:00 - 13:00 */}
@@ -617,7 +631,7 @@ export const HrisTimelineChart: React.FC<HrisTimelineChartProps> = ({
               <span className="px-2.5 py-0.5 rounded-full bg-rose-600 text-white text-[9px] font-black uppercase font-mono-code shadow-xs whitespace-nowrap">
                 {activeSelectedSched 
                   ? `Cutoff ${activeSelectedSched.cutoffTime} (${activeSelectedSched.projectCode})` 
-                  : 'Cutoff Site 06:40 - 08:30'}
+                  : 'Cutoff Kantor 08:15 / Shift Site'}
               </span>
             </div>
           </div>
@@ -657,7 +671,7 @@ export const HrisTimelineChart: React.FC<HrisTimelineChartProps> = ({
                             ? 'bg-amber-50 text-amber-900 border border-amber-200/80' 
                             : 'bg-slate-100 text-slate-600 border border-slate-200'
                         }`} title={`Jadwal Site: ${item.schedule.checkInTime} - ${item.schedule.checkOutTime} WIB (Batas Cutoff: ${item.schedule.cutoffTime})`}>
-                          {item.schedule.isCustom ? `${item.schedule.projectCode} • ${item.schedule.checkInTime}` : 'Kantor 08:30'}
+                          {item.schedule.isCustom ? `${item.schedule.projectCode} • ${item.schedule.checkInTime}` : `${item.schedule.projectCode} • Cutoff ${item.schedule.cutoffTime}`}
                         </span>
                       </div>
                     </div>
@@ -757,7 +771,7 @@ export const HrisTimelineChart: React.FC<HrisTimelineChartProps> = ({
                       {status === 'ON_TIME'
                         ? 'Tepat Waktu'
                         : status === 'LATE'
-                        ? `Telat ${attendance?.lateMinutes}m`
+                        ? `Telat ${item.effectiveLateMinutes || attendance?.lateMinutes || 1}m`
                         : status === 'DINAS_LUAR'
                         ? 'Dinas Luar'
                         : 'Belum Masuk'}

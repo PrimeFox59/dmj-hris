@@ -375,12 +375,12 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
   const activeSchedule = useMemo(() => {
     const activeEmp = detectedEmployee || pendingEmployee;
     if (activeEmp) {
-      return getEmployeeProjectSchedule(activeEmp, projects, '08:30');
+      return getEmployeeProjectSchedule(activeEmp, projects, '08:15');
     }
     return {
       checkInTime: '08:00',
       checkOutTime: '17:00',
-      cutoffTime: '08:30',
+      cutoffTime: '08:15',
       workDaysPerWeek: 6
     };
   }, [detectedEmployee, pendingEmployee, projects]);
@@ -658,7 +658,7 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
 
       // Calculate Late Status
       const [nowH, nowM] = timeStr.split(':').map(Number);
-      const [cutoffH, cutoffM] = (activeSchedule.cutoffTime || '08:30').split(':').map(Number);
+      const [cutoffH, cutoffM] = (activeSchedule.cutoffTime || '08:15').split(':').map(Number);
       const isLate = isClockIn && (nowH * 60 + nowM) > (cutoffH * 60 + cutoffM);
       const lateMinutes = isLate ? (nowH * 60 + nowM) - (cutoffH * 60 + cutoffM) : 0;
 

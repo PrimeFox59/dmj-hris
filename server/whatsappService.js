@@ -283,7 +283,7 @@ export async function notifyAttendanceLate(employee, record, salaryRules = null,
 
   const sched = projectSchedule || getEmployeeProjectSchedule(employee, salaryRules);
   const timeStr = record.checkInTime || '08:45:00';
-  const cutoffStr = sched.cutoffTime || salaryRules?.cutoffTime || '08:30';
+  const cutoffStr = sched.cutoffTime || salaryRules?.cutoffTime || '08:15';
   const lateMins = record.lateMinutes || 15;
   const dateStr = record.date || new Date().toISOString().substring(0, 10);
   const projectName = sched.projectName ? (sched.projectName + ' (' + sched.projectCode + ')') : 'Site Operasional PRIME';
@@ -325,7 +325,7 @@ export async function notifyMorningReminder(employee, projectScheduleOrRules = n
     : getEmployeeProjectSchedule(employee, projectScheduleOrRules);
 
   const todayStr = dateStr || new Date().toISOString().substring(0, 10);
-  const cutoffStr = sched.cutoffTime || '08:30';
+  const cutoffStr = sched.cutoffTime || '08:15';
   const projectName = sched.projectName ? (sched.projectName + ' (' + sched.projectCode + ')') : 'Site Penugasan Proyek';
 
   const msg = 
@@ -361,7 +361,7 @@ export async function notifyApproachingCutoff(employee, projectScheduleOrCutoff 
 
   const todayStr = dateStr || new Date().toISOString().substring(0, 10);
   const nowWib = new Date().toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hour12: false }).replace(/\./g, ':');
-  const cutoffStr = sched.cutoffTime || (typeof projectScheduleOrCutoff === 'string' ? projectScheduleOrCutoff : '08:30');
+  const cutoffStr = sched.cutoffTime || (typeof projectScheduleOrCutoff === 'string' ? projectScheduleOrCutoff : '08:15');
   const projectName = sched.projectName ? (sched.projectName + ' (' + sched.projectCode + ')') : 'Site Penugasan Proyek';
 
   const msg = 
@@ -397,7 +397,7 @@ export async function notifyOverdueCheckIn(employee, projectSchedule = null, dat
 
   const todayStr = dateStr || new Date().toISOString().substring(0, 10);
   const nowWib = new Date().toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hour12: false }).replace(/\./g, ':');
-  const cutoffStr = sched.cutoffTime || '08:30';
+  const cutoffStr = sched.cutoffTime || '08:15';
   const projectName = sched.projectName ? (sched.projectName + ' (' + sched.projectCode + ')') : 'Site Penugasan Proyek';
 
   const msg = 
@@ -804,7 +804,7 @@ export async function blastUnrecordedEmployees(targetDate = null) {
   const details = [];
 
   for (const emp of targets) {
-    const res = await notifyApproachingCutoff(emp, '08:30', todayStr);
+    const res = await notifyApproachingCutoff(emp, '08:15', todayStr);
     if (res?.success) {
       sentCount++;
       details.push({ id: emp.id, name: emp.name, phone: emp.phone, status: 'SUCCESS' });

@@ -4,8 +4,8 @@ import { seedEmployees, seedProjects } from './seedData.ts';
 export const INITIAL_SALARY_RULES: SalaryRuleConfig = {
   standardWorkDaysPerMonth: 22,
   standardHoursPerDay: 8,
-  cutoffTime: "08:30",
-  lateGracePeriodMinutes: 10,
+  cutoffTime: "08:15",
+  lateGracePeriodMinutes: 15,
   latePenaltyPerBlock: 25000, // Rp 25.000 / 15 menit jika tidak diapprove
   overtimeFormula: {
     firstHourRateMultiplier: 1.5,

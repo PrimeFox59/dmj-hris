@@ -42,12 +42,12 @@ export function addMinutesToTimeString(timeStr: string, minutesToAdd: number): s
 /**
  * Resolves the effective work schedule & attendance cutoff for an employee based on their assigned project.
  * If the project has customRules.workSchedule.enabled, it returns the project's schedule and cutoff.
- * Otherwise, it falls back to standard office hours (default cutoff: 08:30).
+ * Otherwise, it falls back to standard office hours (default cutoff: 08:15).
  */
 export function getEmployeeProjectSchedule(
   employee: Employee | undefined | null,
   projects: Project[] = [],
-  defaultCutoffTime: string = '08:30'
+  defaultCutoffTime: string = '08:15'
 ): EffectiveSchedule {
   const assignedId = (employee?.assignedProjectId || '').trim();
 
@@ -65,17 +65,24 @@ export function getEmployeeProjectSchedule(
     });
   }
 
+  // Jika tidak punya proyek atau proyek tidak ditemukan, otomatis mengikuti aturan Office Utama (Kantor Pusat / PRJ-001)
+  if (!matchedProject && projects && projects.length > 0) {
+    matchedProject = projects.find(p => p && (p.id === 'PRJ-001' || p.code === 'PRJ-001' || (p.name && p.name.toUpperCase().includes('KANTOR PUSAT'))));
+  }
+
   // Check if project has custom work schedule enabled
   const customSched = matchedProject?.customRules?.workSchedule;
   if (customSched && customSched.enabled && customSched.checkInTime) {
-    const checkIn = customSched.checkInTime; // e.g. "07:00"
-    const checkOut = customSched.checkOutTime || '16:30';
+    const checkIn = customSched.checkInTime; // e.g. "08:00" atau "07:00"
+    const checkOut = customSched.checkOutTime || '17:00';
     const grace = typeof customSched.lateGraceMinutes === 'number' ? customSched.lateGraceMinutes : 15;
-    const cutoffTime = addMinutesToTimeString(checkIn, grace); // e.g. 07:00 + 15m = 07:15
+    const cutoffTime = addMinutesToTimeString(checkIn, grace); // e.g. 08:00 + 15m = 08:15
 
-    const cutoffDecimal = parseTimeToDecimal(cutoffTime) || 7.25;
-    const startDecimal = parseTimeToDecimal(checkIn) || 7.0;
-    const endDecimal = parseTimeToDecimal(checkOut) || 16.5;
+    const cutoffDecimal = parseTimeToDecimal(cutoffTime) || 8.25;
+    const startDecimal = parseTimeToDecimal(checkIn) || 8.0;
+    const endDecimal = parseTimeToDecimal(checkOut) || 17.0;
+
+    const isOffice = matchedProject?.id === 'PRJ-001' || matchedProject?.code === 'PRJ-001' || (matchedProject?.name && matchedProject.name.toUpperCase().includes('KANTOR PUSAT'));
 
     return {
       checkInTime: checkIn,
@@ -85,26 +92,27 @@ export function getEmployeeProjectSchedule(
       startDecimal,
       endDecimal,
       lateGraceMinutes: grace,
-      isCustom: true,
-      projectName: matchedProject?.name || 'Proyek Site',
-      projectCode: matchedProject?.code || matchedProject?.id || 'SITE',
+      isCustom: !isOffice,
+      projectName: matchedProject?.name || (isOffice ? 'Kantor Pusat / Operasional' : 'Proyek Site'),
+      projectCode: matchedProject?.code || matchedProject?.id || (isOffice ? 'PRJ-001' : 'SITE'),
       projectId: matchedProject?.id
     };
   }
 
-  // Standard office fallback
-  const fallbackCutoffDecimal = parseTimeToDecimal(defaultCutoffTime) || 8.5;
+  // Aturan Resmi Standar Office Utama (Kantor Pusat): Masuk 08:00, Toleransi 15 Menit -> Batas Cutoff 08:15
+  const resolvedCutoff = defaultCutoffTime || '08:15';
+  const fallbackCutoffDecimal = parseTimeToDecimal(resolvedCutoff) || 8.25;
   return {
     checkInTime: '08:00',
     checkOutTime: '17:00',
-    cutoffTime: defaultCutoffTime || '08:30',
+    cutoffTime: resolvedCutoff,
     cutoffDecimal: fallbackCutoffDecimal,
     startDecimal: 8.0,
     endDecimal: 17.0,
-    lateGraceMinutes: 30,
+    lateGraceMinutes: 15,
     isCustom: false,
-    projectName: matchedProject?.name || 'Kantor Pusat / Umum',
-    projectCode: matchedProject?.code || 'OFFICE',
-    projectId: matchedProject?.id
+    projectName: matchedProject?.name || 'Kantor Pusat / Operasional',
+    projectCode: matchedProject?.code || 'PRJ-001',
+    projectId: matchedProject?.id || 'PRJ-001'
   };
 }

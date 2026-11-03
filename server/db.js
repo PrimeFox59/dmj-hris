@@ -695,6 +695,23 @@ export function saveAttendance(record) {
   let finalStatus = record.status || (finalCheckOut && !finalCheckIn ? 'ALPA' : 'ON_TIME');
   let finalIsLate = record.isLate ? 1 : 0;
   let finalLateMinutes = record.lateMinutes || 0;
+
+  // Evaluasi otomatis terhadap aturan batas cutoff masuk (proyek terkait atau Office Utama 08:15)
+  if (finalCheckIn && attType !== 'CHECK_OUT') {
+    const sched = getEmployeeProjectSchedule(record.employeeId);
+    const [inH, inM] = finalCheckIn.split(':').map(Number);
+    const [cutH, cutM] = (sched.cutoffTime || '08:15').split(':').map(Number);
+    const inMins = (inH || 0) * 60 + (inM || 0);
+    const cutMins = (cutH || 0) * 60 + (cutM || 0);
+
+    if (inMins > cutMins) {
+      finalIsLate = 1;
+      finalLateMinutes = inMins - cutMins;
+      if (record.mode !== 'DINAS_LUAR' && finalStatus !== 'OUT_OF_GEOFENCE') {
+        finalStatus = 'LATE';
+      }
+    }
+  }
   let finalLateReason = record.lateReason || null;
   let finalApprovalStatus = record.approvalStatus || (finalCheckOut && !finalCheckIn ? 'PENDING' : 'APPROVED');
   let mergedData = { ...record };
@@ -1061,8 +1078,9 @@ export function updateApproval(id, status, reviewNote, reviewedBy = 'Direksi / H
       attRecord.approvedBy = reviewedBy;
       attRecord.approvalDate = now;
       attRecord.approvalNote = reviewNote;
-      if (status === 'APPROVED' && attRecord.status === 'LATE') {
-        attRecord.status = 'ON_TIME';
+      // Status keterlambatan tetap dipertahankan (LATE), approval hanya mencatat persetujuan dispensasi/justifikasi
+      if (status === 'APPROVED' && attRecord.isLate) {
+        attRecord.approvalStatus = 'APPROVED';
       }
       db.prepare(`UPDATE attendances SET approvalStatus = ?, status = ?, data_json = ? WHERE id = ?;`)
         .run(status, attRecord.status, JSON.stringify(attRecord), item.attendanceRecordId);
@@ -1366,7 +1384,7 @@ export function getEmployeeProjectSchedule(employeeOrId, fallbackRules = null) {
     ? employeeOrId
     : getEmployeeByIdentifier(employeeOrId);
 
-  const fallbackCutoff = fallbackRules?.cutoffTime || '08:30';
+  const fallbackCutoff = fallbackRules?.cutoffTime || '08:15';
   const fallbackCheckIn = fallbackRules?.standardCheckInTime || '08:00';
   const fallbackCheckOut = fallbackRules?.standardCheckOutTime || '17:00';
   const fallbackGrace = Number(fallbackRules?.lateGracePeriodMinutes ?? 15);

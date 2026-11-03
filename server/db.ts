@@ -689,8 +689,9 @@ export function updateApproval(
       attRecord.approvalDate = now;
       attRecord.approvalNote = reviewNote;
 
-      if (status === 'APPROVED' && attRecord.status === 'LATE') {
-        attRecord.status = 'ON_TIME'; // forgiven
+      // Status keterlambatan tetap dipertahankan (LATE), approval hanya mencatat persetujuan
+      if (status === 'APPROVED' && attRecord.isLate) {
+        attRecord.approvalStatus = 'APPROVED';
       }
 
       db.prepare(`

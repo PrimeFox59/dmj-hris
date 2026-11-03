@@ -366,7 +366,7 @@ export async function notifyAttendanceLateEmail(employee, record, salaryRules = 
 
   const sched = projectSchedule || getEmployeeProjectSchedule(employee, salaryRules);
   const timeStr = record.checkInTime || '08:45:00';
-  const cutoffStr = sched.cutoffTime || salaryRules?.cutoffTime || '08:30';
+  const cutoffStr = sched.cutoffTime || salaryRules?.cutoffTime || '08:15';
   const lateMins = record.lateMinutes || 15;
   const dateStr = record.date || new Date().toISOString().substring(0, 10);
   const isOffice = Boolean(
@@ -456,7 +456,7 @@ export async function notifyOverdueCheckInEmail(employee, projectSchedule = null
     : getEmployeeProjectSchedule(employee);
 
   const todayStr = dateStr || new Date().toISOString().substring(0, 10);
-  const cutoffStr = sched.cutoffTime || '08:30';
+  const cutoffStr = sched.cutoffTime || '08:15';
   const projectName = sched.projectName ? (sched.projectName + ' (' + sched.projectCode + ')') : 'Site Penugasan Proyek';
 
   const subject = '[DMJ HRIS Peringatan] Anda Belum Melakukan Presensi Masuk - ' + sched.projectCode + ' - ' + todayStr;
