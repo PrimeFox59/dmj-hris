@@ -7,6 +7,7 @@ import {
   saveAttendance,
   updateApproval,
   saveEmployee,
+  updateUserProfile,
   deleteEmployee,
   saveProject,
   saveSalaryRules,
@@ -88,6 +89,13 @@ export function sqliteApiPlugin(): Plugin {
           if (cleanUrl === '/api/approval' && (method === 'PUT' || method === 'POST')) {
             const body = await readBody();
             const result = updateApproval(body.id, body.status, body.reviewNote, body.reviewedBy);
+            return sendJson(200, result);
+          }
+
+          // 5-profile. Update User Profile
+          if ((cleanUrl === '/api/user/profile' || cleanUrl === '/api/profile') && method === 'POST') {
+            const body = await readBody();
+            const result = updateUserProfile(body);
             return sendJson(200, result);
           }
 

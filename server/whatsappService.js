@@ -635,11 +635,19 @@ async function evaluateScheduledReminders() {
 
   // Fetch today attendances with checkIn and checkOut status
   const todayAttendances = db.prepare(
-    "SELECT employeeId, checkInTime, checkOutTime, attendanceType FROM attendances WHERE date = ?;"
+    "SELECT employeeId, checkInTime, checkOutTime, data_json FROM attendances WHERE date = ?;"
   ).all(todayStr);
 
   const attMap = new Map();
   for (const a of todayAttendances) {
+    let aType = a.checkOutTime ? 'CHECK_OUT' : 'CHECK_IN';
+    try {
+      if (a.data_json) {
+        const d = JSON.parse(a.data_json);
+        if (d.attendanceType) aType = d.attendanceType;
+      }
+    } catch (e) {}
+    a.attendanceType = aType;
     attMap.set(a.employeeId, a);
   }
 
@@ -839,11 +847,19 @@ export async function blastUnrecordedCheckOut(targetDate = null) {
   });
 
   const todayAttendances = db.prepare(
-    "SELECT employeeId, checkInTime, checkOutTime, attendanceType FROM attendances WHERE date = ?;"
+    "SELECT employeeId, checkInTime, checkOutTime, data_json FROM attendances WHERE date = ?;"
   ).all(todayStr);
 
   const attMap = new Map();
   for (const a of todayAttendances) {
+    let aType = a.checkOutTime ? 'CHECK_OUT' : 'CHECK_IN';
+    try {
+      if (a.data_json) {
+        const d = JSON.parse(a.data_json);
+        if (d.attendanceType) aType = d.attendanceType;
+      }
+    } catch (e) {}
+    a.attendanceType = aType;
     attMap.set(a.employeeId, a);
   }
 

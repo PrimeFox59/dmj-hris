@@ -32,12 +32,9 @@ const appDir = '/data/data/com.termux/files/home/prime-hris';
 const destTar = path.join(appDir, 'bundle_update.tar.gz');
 
 if (fs.existsSync(destTar)) {
-  try {
-    execSync('rm -rf "' + path.join(appDir, 'dist', 'assets') + '"/*', { stdio: 'ignore' });
-  } catch (e) {}
   execSync('tar -xzf "' + destTar + '" -C "' + appDir + '"', { stdio: 'inherit' });
   fs.unlinkSync(destTar);
-  console.log('[POCO] Stale assets purged and new bundle unpacked successfully.');
+  console.log('[POCO] New bundle unpacked successfully with content-hashed asset preservation.');
 }
 
 try {
@@ -45,10 +42,6 @@ try {
 } catch (e) {}
 
 // Routine zero-downtime deployment: migrations disabled to prevent overwriting live database state
-
-try {
-  execSync('node scripts/enroll_galih_biometric.mjs', { cwd: appDir, stdio: 'inherit' });
-} catch (e) {}
 
 try {
   execSync('pm2 reload prime-hris --update-env', { stdio: 'inherit' });

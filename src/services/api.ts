@@ -35,6 +35,21 @@ export interface BootstrapResponse {
 
 let currentAuthToken: string | null = typeof window !== 'undefined' ? localStorage.getItem('prime_hris_token') : null;
 
+async function fetchWithRetry(url: string, options: RequestInit, retries = 2, delayMs = 300): Promise<Response> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fetch(url, options);
+    } catch (err: any) {
+      if (attempt < retries && (err?.name === 'TypeError' || err?.message?.toLowerCase().includes('fetch'))) {
+        await new Promise(r => setTimeout(r, delayMs * (attempt + 1)));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error('Permintaan gagal setelah beberapa kali mencoba');
+}
+
 export const api = {
   setAuthToken(token: string | null) {
     currentAuthToken = token;
@@ -45,15 +60,19 @@ export const api = {
   },
 
   getAuthToken(): string | null {
+    if (!currentAuthToken && typeof window !== 'undefined') {
+      currentAuthToken = localStorage.getItem('prime_hris_token');
+    }
     return currentAuthToken;
   },
 
   getAuthHeaders(): HeadersInit {
+    const token = api.getAuthToken();
     const headers: Record<string, string> = {
       'Content-Type': 'application/json'
     };
-    if (currentAuthToken) {
-      headers['Authorization'] = `Bearer ${currentAuthToken}`;
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
     }
     return headers;
   },
@@ -293,12 +312,44 @@ export const api = {
     return res.json();
   },
 
-  // 5. Save/Update Employee in SQLite
-  async saveEmployee(emp: Employee): Promise<{ success: boolean; employee: Employee }> {
-    const res = await fetch('/api/employee', {
+  // 5-profile. Update User Profile (Dedicated, Lightweight & Resilient for Profile Settings)
+  async updateProfile(profileData: {
+    id: string;
+    name?: string;
+    phone?: string;
+    email?: string;
+    bankAccount?: { bankName: string; accountNumber: string; accountHolder: string };
+    avatar?: string;
+  }): Promise<{ success: boolean; message?: string; employee: Employee }> {
+    const token = api.getAuthToken();
+    const payload = token ? { ...profileData, _authToken: token } : profileData;
+    let res = await fetchWithRetry('/api/user/profile', {
       method: 'POST',
       headers: api.getAuthHeaders(),
-      body: JSON.stringify(emp)
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok && res.status === 404) {
+      res = await fetchWithRetry('/api/profile', {
+        method: 'POST',
+        headers: api.getAuthHeaders(),
+        body: JSON.stringify(payload)
+      });
+    }
+    if (!res.ok) {
+      const errData = await res.json().catch(() => null);
+      throw new Error(errData?.error || `Gagal menyimpan profil: ${res.statusText}`);
+    }
+    return res.json();
+  },
+
+  // 5. Save/Update Employee in SQLite
+  async saveEmployee(emp: Employee): Promise<{ success: boolean; employee: Employee }> {
+    const token = api.getAuthToken();
+    const payload = token ? { ...emp, _authToken: token } : emp;
+    const res = await fetchWithRetry('/api/employee', {
+      method: 'POST',
+      headers: api.getAuthHeaders(),
+      body: JSON.stringify(payload)
     });
     if (!res.ok) {
       const errData = await res.json().catch(() => null);

@@ -301,6 +301,16 @@ try {
     }
   } catch (e) {}
 
+  // Ensure attendances columns exist (backward-compatible schema migration)
+  try {
+    const existingAttCols = db.prepare('PRAGMA table_info(attendances);').all().map(c => c.name);
+    if (!existingAttCols.includes('attendanceType')) {
+      try {
+        db.exec('ALTER TABLE attendances ADD COLUMN attendanceType TEXT DEFAULT "CHECK_IN";');
+      } catch (e) {}
+    }
+  } catch (e) {}
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS user_accounts (
       id TEXT PRIMARY KEY,
@@ -1571,6 +1581,105 @@ export function saveEmployee(emp, operatorUser = null) {
   });
 
   return { success: true, employee: emp };
+}
+
+export function updateUserProfile(profileData, operatorUser = null) {
+  const db = getDatabase();
+  const empId = profileData.id || profileData.employeeId;
+  if (!empId) {
+    return { success: false, error: 'Employee ID is required' };
+  }
+
+  const existingRow = db.prepare('SELECT id, nik, name, email, phone, role, department, position, data_json FROM employees WHERE id = ? OR nik = ?;').get(empId, empId);
+  if (!existingRow) {
+    return { success: false, error: 'Data karyawan tidak ditemukan di database' };
+  }
+
+  let emp = {};
+  try {
+    emp = JSON.parse(existingRow.data_json);
+  } catch (e) {}
+
+  // Update personal allowed fields
+  if (profileData.name && String(profileData.name).trim()) {
+    emp.name = String(profileData.name).trim();
+  }
+  if (profileData.phone !== undefined) {
+    emp.phone = String(profileData.phone).trim();
+  }
+  if (profileData.email !== undefined) {
+    emp.email = String(profileData.email).trim();
+  }
+  if (profileData.bankAccount) {
+    emp.bankAccount = {
+      bankName: profileData.bankAccount.bankName || emp.bankAccount?.bankName || 'BCA',
+      accountNumber: String(profileData.bankAccount.accountNumber || '').trim(),
+      accountHolder: String(profileData.bankAccount.accountHolder || emp.name).trim()
+    };
+  }
+  if (profileData.avatar) {
+    emp.avatar = profileData.avatar;
+  }
+
+  // Preserve ID and NIK
+  emp.id = existingRow.id;
+  emp.nik = existingRow.nik;
+
+  // Update employees table
+  db.prepare(`
+    UPDATE employees
+    SET name = ?, email = ?, phone = ?, bankAccount = ?, avatar = COALESCE(?, avatar), data_json = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?;
+  `).run(
+    emp.name,
+    emp.email || null,
+    emp.phone || null,
+    emp.bankAccount ? JSON.stringify(emp.bankAccount) : null,
+    profileData.avatar || null,
+    JSON.stringify(emp),
+    emp.id
+  );
+
+  // Update user_accounts table (email and sync name in audit)
+  try {
+    db.prepare(`
+      UPDATE user_accounts
+      SET email = COALESCE(?, email), updated_at = CURRENT_TIMESTAMP
+      WHERE employee_id = ? OR id = ?;
+    `).run(emp.email || null, emp.id, emp.id);
+  } catch (errUa) {}
+
+  // Sync phone to wa_opt_ins
+  if (emp.phone) {
+    let eDigits = String(emp.phone).replace(/\D+/g, '');
+    if (eDigits.startsWith('0')) eDigits = '62' + eDigits.slice(1);
+    else if (eDigits.startsWith('8')) eDigits = '62' + eDigits;
+    else if (eDigits.startsWith('620')) eDigits = '62' + eDigits.slice(3);
+    if (eDigits.startsWith('62') && eDigits.length >= 10) {
+      try {
+        db.prepare(`
+          INSERT INTO wa_opt_ins (phone, employee_id, employee_name, first_message, first_message_at, last_message, last_message_at, message_count)
+          VALUES (?, ?, ?, 'Terverifikasi dari ID Master Data', CURRENT_TIMESTAMP, 'Pembaruan Profil Mandiri', CURRENT_TIMESTAMP, 1)
+          ON CONFLICT(phone) DO UPDATE SET employee_id = excluded.employee_id, employee_name = excluded.employee_name, last_message_at = CURRENT_TIMESTAMP;
+        `).run(eDigits, emp.id, emp.name);
+      } catch (errOpt) {}
+    }
+  }
+
+  // Add audit log
+  addAuditLog({
+    action: 'UPDATE_PROFILE',
+    entity: 'employees',
+    entityId: emp.id,
+    userName: operatorUser?.name || emp.name,
+    userNik: operatorUser?.nik || emp.nik,
+    userRole: operatorUser?.systemRole || emp.systemRole || 'staff',
+    module: 'MASTER_DATA',
+    status: 'SUCCESS',
+    details: `Profil mandiri karyawan ${emp.name} (${emp.nik}) berhasil diperbarui (No HP: ${emp.phone || '-'}, Rekening: ${emp.bankAccount?.bankName || '-'} ${emp.bankAccount?.accountNumber || '-'}).`
+  });
+
+  return { success: true, message: 'Profil mandiri berhasil disimpan ke database', employee: emp };
 }
 
 export function deleteEmployee(employeeId, operatorUser = null) {

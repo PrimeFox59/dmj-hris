@@ -778,6 +778,77 @@ export function saveEmployee(emp: Employee) {
   return { success: true, employee: emp };
 }
 
+export function updateUserProfile(profileData: any, operatorUser: any = null) {
+  const db = getDatabase();
+  const empId = profileData.id || profileData.employeeId;
+  if (!empId) {
+    return { success: false, error: 'Employee ID is required' };
+  }
+
+  const existingRow = (db.prepare('SELECT id, nik, name, email, phone, role, department, position, data_json FROM employees WHERE id = ? OR nik = ?;').get(empId, empId) as any);
+  if (!existingRow) {
+    return { success: false, error: 'Data karyawan tidak ditemukan di database' };
+  }
+
+  let emp: any = {};
+  try {
+    emp = JSON.parse(existingRow.data_json);
+  } catch (e) {}
+
+  if (profileData.name && String(profileData.name).trim()) {
+    emp.name = String(profileData.name).trim();
+  }
+  if (profileData.phone !== undefined) {
+    emp.phone = String(profileData.phone).trim();
+  }
+  if (profileData.email !== undefined) {
+    emp.email = String(profileData.email).trim();
+  }
+  if (profileData.bankAccount) {
+    emp.bankAccount = {
+      bankName: profileData.bankAccount.bankName || emp.bankAccount?.bankName || 'BCA',
+      accountNumber: String(profileData.bankAccount.accountNumber || '').trim(),
+      accountHolder: String(profileData.bankAccount.accountHolder || emp.name).trim()
+    };
+  }
+  if (profileData.avatar) {
+    emp.avatar = profileData.avatar;
+  }
+
+  emp.id = existingRow.id;
+  emp.nik = existingRow.nik;
+
+  db.prepare(`
+    UPDATE employees
+    SET name = ?, email = ?, phone = ?, bankAccount = ?, avatar = COALESCE(?, avatar), data_json = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?;
+  `).run(
+    emp.name,
+    emp.email || null,
+    emp.phone || null,
+    emp.bankAccount ? JSON.stringify(emp.bankAccount) : null,
+    profileData.avatar || null,
+    JSON.stringify(emp),
+    emp.id
+  );
+
+  try {
+    db.prepare(`
+      UPDATE user_accounts
+      SET email = COALESCE(?, email), updated_at = CURRENT_TIMESTAMP
+      WHERE employee_id = ? OR id = ?;
+    `).run(emp.email || null, emp.id, emp.id);
+  } catch (errUa) {}
+
+  const actorName = operatorUser?.name || emp.name;
+  db.prepare(`
+    INSERT INTO audit_logs (action, entity, entityId, details)
+    VALUES (?, ?, ?, ?);
+  `).run('UPDATE_PROFILE', 'employees', emp.id, `Profil mandiri karyawan ${emp.name} (${emp.nik}) berhasil diperbarui oleh ${actorName}`);
+
+  return { success: true, message: 'Profil mandiri berhasil disimpan ke database', employee: emp };
+}
+
 export function deleteEmployee(employeeId: string, operatorUser: any = null) {
   const db = getDatabase();
   const cleanId = String(employeeId || '').trim();

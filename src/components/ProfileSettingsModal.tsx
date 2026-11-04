@@ -110,6 +110,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
   const [accountHolder, setAccountHolder] = useState(currentUser.bankAccount?.accountHolder || currentUser.name);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [profileSuccessMsg, setProfileSuccessMsg] = useState<string | null>(null);
+  const [profileErrorMsg, setProfileErrorMsg] = useState<string | null>(null);
 
   // Avatar State
   const [selectedAvatar, setSelectedAvatar] = useState(currentUser.avatar);
@@ -154,6 +155,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
       setPasswordError(null);
       setPasswordSuccessMsg(null);
       setProfileSuccessMsg(null);
+      setProfileErrorMsg(null);
       setAvatarSuccessMsg(null);
     }
   }, [isOpen, currentUser, initialTab]);
@@ -166,9 +168,10 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
     e.preventDefault();
     setIsSavingProfile(true);
     setProfileSuccessMsg(null);
+    setProfileErrorMsg(null);
 
-    const updatedEmployee: Employee = {
-      ...currentUser,
+    const profileData = {
+      id: currentUser.id,
       name: name.trim(),
       phone: phone.trim(),
       email: email.trim(),
@@ -180,7 +183,17 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
     };
 
     try {
-      await onUpdateEmployee(updatedEmployee);
+      // 1. Primary: Use dedicated lightweight resilient profile update (prevents large body payloads & TCP socket resets)
+      const res = await api.updateProfile(profileData);
+      if (res && res.employee) {
+        onUpdateEmployee(res.employee);
+      } else {
+        const updatedEmployee: Employee = {
+          ...currentUser,
+          ...profileData
+        };
+        onUpdateEmployee(updatedEmployee);
+      }
 
       api.logActivity({
         userName: currentUser.name,
@@ -199,8 +212,20 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
       setProfileSuccessMsg('Data profil Anda berhasil disimpan ke database!');
       setTimeout(() => setProfileSuccessMsg(null), 4000);
     } catch (err: any) {
-      console.error('Error saving profile:', err);
-      alert(`Gagal menyimpan profil ke database: ${err.message || 'Periksa koneksi'}`);
+      console.warn('Dedicated profile update failed, attempting onUpdateEmployee fallback:', err);
+      try {
+        const fallbackEmployee: Employee = {
+          ...currentUser,
+          ...profileData
+        };
+        await onUpdateEmployee(fallbackEmployee);
+        setProfileSuccessMsg('Data profil Anda berhasil disimpan ke database!');
+        setTimeout(() => setProfileSuccessMsg(null), 4000);
+      } catch (fallbackErr: any) {
+        console.error('All profile save methods failed:', fallbackErr);
+        const errMsg = fallbackErr?.message || err?.message || 'Periksa koneksi server';
+        setProfileErrorMsg(`Gagal menyimpan profil: ${errMsg}. Silakan periksa koneksi atau muat ulang halaman.`);
+      }
     } finally {
       setIsSavingProfile(false);
     }
@@ -396,6 +421,13 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                 <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs flex items-center gap-2.5 animate-in fade-in duration-200">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                   <span className="font-semibold">{profileSuccessMsg}</span>
+                </div>
+              )}
+
+              {profileErrorMsg && (
+                <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-900 text-xs flex items-center gap-2.5 animate-in fade-in duration-200">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span className="font-semibold">{profileErrorMsg}</span>
                 </div>
               )}
 

@@ -46,7 +46,8 @@ import {
   deleteAttendance,
   getAttendancePhoto,
   getEmployeeByIdentifier,
-  getEmployeeProjectSchedule
+  getEmployeeProjectSchedule,
+  updateUserProfile
 } from './db.js';
 import {
   getGatewayStatus,
@@ -1172,21 +1173,54 @@ const server = http.createServer(async (req, res) => {
         return sendJson(200, result);
       }
 
-      // 8. Save Employee with Broadcast (Permits Admin/HR/Superuser OR self-identity profile update)
-      if (cleanUrl === '/api/employee' && method === 'POST') {
-        const token = getAuthToken();
+      // 8-profile. Dedicated Self-Profile Update Endpoint (Lightweight, Anti-Socket-Reset, Resilient)
+      if ((cleanUrl === '/api/user/profile' || cleanUrl === '/api/profile') && method === 'POST') {
+        const body = await readBody(); // ALWAYS drain body first to prevent TCP socket resets
+        const token = getAuthToken() || body?._authToken || body?.token;
         const user = token ? getCurrentUserFromToken(token) : null;
         if (!user) {
-          return sendJson(401, { success: false, error: 'Unauthorized: Sesi tidak valid atau telah berakhir' });
+          return sendJson(401, { success: false, error: 'Unauthorized: Sesi tidak valid atau telah berakhir. Silakan login kembali.' });
         }
-        const body = await readBody();
+        const sysRole = String(user?.systemRole || '').toLowerCase();
+        const uRole = String(user?.role || '').toLowerCase();
+        const isPrivileged = ['admin', 'superuser', 'hr'].includes(sysRole) || uRole.includes('director') || uRole.includes('hr');
         const isSelf = Boolean(
           (user.employeeId && user.employeeId === body?.id) ||
           (user.id && user.id === body?.id) ||
           (user.username && body?.loginId === user.username) ||
+          (user.username && body?.nik === user.username) ||
+          (user.employee && user.employee.nik && body?.nik && user.employee.nik === body.nik) ||
           (user.email && body?.email && user.email.toLowerCase() === body.email.toLowerCase())
         );
-        const isPrivileged = ['admin', 'superuser', 'hr'].includes(user.systemRole);
+        if (!isPrivileged && !isSelf) {
+          return sendJson(403, { success: false, error: 'Forbidden: Anda hanya berwenang memperbarui profil akun Anda sendiri' });
+        }
+        const result = updateUserProfile(body, user);
+        if (result.success && result.employee) {
+          broadcastRealtimeEvent('EMPLOYEE_SAVED', result.employee);
+        }
+        return sendJson(200, result);
+      }
+
+      // 8. Save Employee with Broadcast (Permits Admin/HR/Superuser OR self-identity profile update)
+      if (cleanUrl === '/api/employee' && method === 'POST') {
+        const body = await readBody(); // ALWAYS drain body first
+        const token = getAuthToken() || body?._authToken || body?.token;
+        const user = token ? getCurrentUserFromToken(token) : null;
+        if (!user) {
+          return sendJson(401, { success: false, error: 'Unauthorized: Sesi tidak valid atau telah berakhir. Silakan login kembali.' });
+        }
+        const sysRole = String(user?.systemRole || '').toLowerCase();
+        const uRole = String(user?.role || '').toLowerCase();
+        const isPrivileged = ['admin', 'superuser', 'hr'].includes(sysRole) || uRole.includes('director') || uRole.includes('hr');
+        const isSelf = Boolean(
+          (user.employeeId && user.employeeId === body?.id) ||
+          (user.id && user.id === body?.id) ||
+          (user.username && body?.loginId === user.username) ||
+          (user.username && body?.nik === user.username) ||
+          (user.employee && user.employee.nik && body?.nik && user.employee.nik === body.nik) ||
+          (user.email && body?.email && user.email.toLowerCase() === body.email.toLowerCase())
+        );
         if (!isPrivileged && !isSelf) {
           return sendJson(403, { success: false, error: 'Forbidden: Hak akses Admin, HR, atau Superuser diperlukan' });
         }
