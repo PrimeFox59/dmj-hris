@@ -337,8 +337,10 @@ export const EmployeeTimesheetDetailModal: React.FC<EmployeeTimesheetDetailModal
           connectionType: 'Koreksi Disahkan HR'
         },
         note: `[KOREKSI HR] ${corrReason}`,
-        isLate: corrStatus === 'LATE' || (!corrWaiveLate && corrLateMinutes > 0),
-        lateMinutes: corrWaiveLate ? 0 : corrLateMinutes,
+        isLate: corrStatus === 'LATE' || corrLateMinutes > 0,
+        lateMinutes: corrLateMinutes,
+        deductionWaived: corrWaiveLate,
+        isLateDeductionWaived: corrWaiveLate,
         lateReason: corrLateMinutes > 0 ? corrReason : undefined,
         approvalStatus: 'APPROVED',
         approvedBy: currentUser.name,

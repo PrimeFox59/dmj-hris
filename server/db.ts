@@ -659,7 +659,8 @@ export function updateApproval(
   id: string,
   status: 'APPROVED' | 'REJECTED' | 'REVISION_REQUESTED',
   reviewNote?: string,
-  reviewedBy: string = 'Direksi / HR Lead'
+  reviewedBy: string = 'Direksi / HR Lead',
+  options: { waiveLateDeduction?: boolean; deductionWaived?: boolean } = {}
 ) {
   const db = getDatabase();
   const row = db.prepare('SELECT data_json FROM approvals WHERE id = ?;').get(id) as any;
@@ -701,7 +702,21 @@ export function updateApproval(
   item.reviewedBy = reviewedBy;
   item.reviewedAt = now;
 
+  const isLateType = item.type === 'LATE_JUSTIFICATION' || (item.lateMinutes && item.lateMinutes > 0);
+  let isWaived: boolean | undefined = undefined;
+  if (options && options.waiveLateDeduction !== undefined) {
+    isWaived = Boolean(options.waiveLateDeduction);
+  } else if (options && options.deductionWaived !== undefined) {
+    isWaived = Boolean(options.deductionWaived);
+  } else if (isLateType) {
+    isWaived = true;
+  }
+
   if (status === 'APPROVED') {
+    if (isWaived !== undefined) {
+      item.deductionWaived = isWaived;
+      item.waiveLateDeduction = isWaived;
+    }
     item.hrApprovedBy = reviewedBy;
     item.hrApprovedAt = now;
     item.hrReviewNote = reviewNote;
@@ -728,6 +743,10 @@ export function updateApproval(
       // Status keterlambatan tetap dipertahankan (LATE), approval hanya mencatat persetujuan
       if (status === 'APPROVED' && attRecord.isLate) {
         attRecord.approvalStatus = 'APPROVED';
+        if (isWaived !== undefined) {
+          attRecord.deductionWaived = isWaived;
+          attRecord.isLateDeductionWaived = isWaived;
+        }
       }
       if (status === 'APPROVED' && item.type === 'EARLY_CHECKOUT') {
         attRecord.isEarlyCheckOutApproved = true;

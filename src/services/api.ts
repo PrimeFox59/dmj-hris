@@ -289,12 +289,20 @@ export const api = {
     id: string,
     status: 'APPROVED' | 'REJECTED' | 'REVISION_REQUESTED',
     reviewNote?: string,
-    reviewedBy: string = 'Direksi / HR Lead'
+    reviewedBy: string = 'Direksi / HR Lead',
+    options?: { waiveLateDeduction?: boolean; deductionWaived?: boolean }
   ): Promise<{ success: boolean; item: ApprovalItem }> {
     const res = await fetch('/api/approval', {
       method: 'PUT',
       headers: api.getAuthHeaders(),
-      body: JSON.stringify({ id, status, reviewNote, reviewedBy })
+      body: JSON.stringify({
+        id,
+        status,
+        reviewNote,
+        reviewedBy,
+        waiveLateDeduction: options?.waiveLateDeduction,
+        deductionWaived: options?.deductionWaived !== undefined ? options.deductionWaived : options?.waiveLateDeduction
+      })
     });
     if (!res.ok) {
       const errData = await res.json().catch(() => null);

@@ -134,23 +134,31 @@ export function calculateEmployeePayroll(
   const unpaidLeaveDeduction = (unpaidLeaveDays * dailyBaseSalary) + alphaDeduction;
 
   // Calculate late statistics & deductions
-  const unapprovedLates = empAttendances.filter(a => a.isLate && a.approvalStatus !== 'APPROVED');
-  const approvedLates = empAttendances.filter(a => a.isLate && a.approvalStatus === 'APPROVED');
+  // Keterlambatan dianggap bebas denda (waived) jika disetujui HR tanpa potongan (deductionWaived === true),
+  // namun TETAP dihitung terlambat di statistik hari/menit keterlambatan (allLates).
+  const isLateWaived = (a: AttendanceRecord) => {
+    if (a.deductionWaived === true || a.isLateDeductionWaived === true) return true;
+    if (a.deductionWaived === false || a.isLateDeductionWaived === false) return false;
+    return a.approvalStatus === 'APPROVED';
+  };
+
   const allLates = empAttendances.filter(a => a.isLate);
+  const waivedLates = empAttendances.filter(a => a.isLate && isLateWaived(a));
+  const penalizedLates = empAttendances.filter(a => a.isLate && !isLateWaived(a));
   const lateDays = auditOverride?.lateDays !== undefined ? auditOverride.lateDays : allLates.length;
 
   let totalLateMinutes = 0;
-  let unapprovedLateMinutes = 0;
+  let penalizedLateMinutes = 0;
   allLates.forEach(late => {
     totalLateMinutes += (late.lateMinutes || 0);
   });
-  unapprovedLates.forEach(late => {
-    unapprovedLateMinutes += (late.lateMinutes || 0);
+  penalizedLates.forEach(late => {
+    penalizedLateMinutes += (late.lateMinutes || 0);
   });
 
   if (auditOverride?.lateMinutes !== undefined) {
     totalLateMinutes = auditOverride.lateMinutes;
-    unapprovedLateMinutes = auditOverride.lateMinutes;
+    penalizedLateMinutes = auditOverride.lateMinutes;
   }
 
   // Aturan Pemotongan Keterlambatan DMJ HRIS:
@@ -178,7 +186,7 @@ export function calculateEmployeePayroll(
       unapprovedLateDeduction = lateHours * officeHourlyPenalty;
       lateDeductionNote = `${lateHours} Jam Terlambat (${auditOverride.lateMinutes} mnt) @ Rp ${officeHourlyPenalty.toLocaleString('id-ID')}/jam`;
     } else {
-      unapprovedLates.forEach(late => {
+      penalizedLates.forEach(late => {
         const effectiveMinutes = Math.max(0, (late.lateMinutes || 0) - gracePeriod);
         if (effectiveMinutes > 0) {
           const hours = Math.ceil(effectiveMinutes / 60);
@@ -187,9 +195,9 @@ export function calculateEmployeePayroll(
         }
       });
       if (unapprovedLateDeduction > 0) {
-        lateDeductionNote = `${lateHours} Jam Terlambat (${unapprovedLateMinutes} mnt, ${unapprovedLates.length} hari) @ Rp ${officeHourlyPenalty.toLocaleString('id-ID')}/jam`;
-      } else if (approvedLates.length > 0) {
-        lateDeductionNote = `${approvedLates.length}x Terlambat (${totalLateMinutes} mnt) — Dispensasi PM/HR Disetujui`;
+        lateDeductionNote = `${lateHours} Jam Terlambat (${penalizedLateMinutes} mnt, ${penalizedLates.length} hari) @ Rp ${officeHourlyPenalty.toLocaleString('id-ID')}/jam${waivedLates.length > 0 ? ` • ${waivedLates.length}x Bebas Denda` : ''}`;
+      } else if (waivedLates.length > 0) {
+        lateDeductionNote = `${waivedLates.length}x Terlambat (${totalLateMinutes} mnt) — Disetujui HR Bebas Denda`;
       } else if (totalLateMinutes > 0 && totalLateMinutes <= gracePeriod) {
         lateDeductionNote = `Terlambat ${totalLateMinutes} mnt (Toleransi ${gracePeriod} mnt)`;
       } else {

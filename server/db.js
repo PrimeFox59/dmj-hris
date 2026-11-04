@@ -1316,7 +1316,7 @@ export function deleteAttendance(id, operatorUser = null) {
   };
 }
 
-export function updateApproval(id, status, reviewNote, reviewedBy = 'Direksi / HR Lead') {
+export function updateApproval(id, status, reviewNote, reviewedBy = 'Direksi / HR Lead', options = {}) {
   const db = getDatabase();
   const row = db.prepare('SELECT data_json FROM approvals WHERE id = ?;').get(id);
   if (!row) throw new Error(`Approval item with ID ${id} not found`);
@@ -1391,7 +1391,21 @@ export function updateApproval(id, status, reviewNote, reviewedBy = 'Direksi / H
   item.reviewedBy = reviewedBy;
   item.reviewedAt = now;
 
+  const isLateType = item.type === 'LATE_JUSTIFICATION' || (item.lateMinutes && item.lateMinutes > 0);
+  let isWaived = undefined;
+  if (options && options.waiveLateDeduction !== undefined) {
+    isWaived = Boolean(options.waiveLateDeduction);
+  } else if (options && options.deductionWaived !== undefined) {
+    isWaived = Boolean(options.deductionWaived);
+  } else if (isLateType) {
+    isWaived = true;
+  }
+
   if (status === 'APPROVED') {
+    if (isWaived !== undefined) {
+      item.deductionWaived = isWaived;
+      item.waiveLateDeduction = isWaived;
+    }
     if (isApplicantHr) {
       item.financeApprovedBy = reviewedBy;
       item.financeApprovedAt = now;
@@ -1442,6 +1456,10 @@ export function updateApproval(id, status, reviewNote, reviewedBy = 'Direksi / H
       // Status keterlambatan tetap dipertahankan (LATE), approval hanya mencatat persetujuan dispensasi/justifikasi
       if (status === 'APPROVED' && attRecord.isLate) {
         attRecord.approvalStatus = 'APPROVED';
+        if (isWaived !== undefined) {
+          attRecord.deductionWaived = isWaived;
+          attRecord.isLateDeductionWaived = isWaived;
+        }
       }
       if (status === 'APPROVED' && item.type === 'EARLY_CHECKOUT') {
         attRecord.isEarlyCheckOutApproved = true;
@@ -1557,6 +1575,11 @@ export function updateApproval(id, status, reviewNote, reviewedBy = 'Direksi / H
     }
   }
 
+  let modeDetails = '';
+  if (status === 'APPROVED' && isLateType && isWaived !== undefined) {
+    modeDetails = isWaived ? ' [Mode: Bebas Denda (Tanpa Potongan Gaji, Keterlambatan Tetap Dicatat)]' : ' [Mode: Tetap Dipotong Denda Keterlambatan Sesuai Jam]';
+  }
+
   addAuditLog({
     action: status === 'APPROVED' ? 'APPROVAL_APPROVED' : status === 'REJECTED' ? 'APPROVAL_REJECTED' : 'UPDATE_APPROVAL',
     entity: 'approvals',
@@ -1565,7 +1588,7 @@ export function updateApproval(id, status, reviewNote, reviewedBy = 'Direksi / H
     userRole: 'admin',
     module: 'APPROVALS',
     status: status === 'REJECTED' ? 'WARNING' : 'SUCCESS',
-    details: `Pengajuan [${item.type}] untuk ${item.employeeName} (${item.employeeNik}) diputuskan "${status}" oleh ${reviewedBy}.${reviewNote ? ` Catatan: "${reviewNote}"` : ''}`
+    details: `Pengajuan [${item.type}] untuk ${item.employeeName} (${item.employeeNik}) diputuskan "${status}" oleh ${reviewedBy}.${modeDetails}${reviewNote ? ` Catatan: "${reviewNote}"` : ''}`
   });
 
   return { success: true, item, updatedAttendance, updatedEmployee };

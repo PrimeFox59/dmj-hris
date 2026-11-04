@@ -41,7 +41,7 @@ interface NotificationApprovalModalProps {
   employees: Employee[];
   projects?: Project[];
   currentUser: Employee;
-  onApprove: (id: string, reviewerNote?: string) => void;
+  onApprove: (id: string, reviewerNote?: string, options?: { waiveLateDeduction?: boolean; deductionWaived?: boolean }) => void;
   onReject: (id: string, reviewerNote?: string) => void;
   onRequestRevision: (id: string, reviewerNote?: string) => void;
   onSubmitNewLeaveRequest: (item: ApprovalItem) => void;
@@ -135,6 +135,7 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
     action: 'APPROVE' | 'REJECT' | 'REVISE';
   } | null>(null);
   const [reviewerNote, setReviewerNote] = useState('');
+  const [waiveLateDeduction, setWaiveLateDeduction] = useState<boolean>(true);
 
   // Perhitungan Hak & Saldo Cuti Karyawan
   const annualLeaveQuota = typeof currentUser.leaveQuota === 'number' ? currentUser.leaveQuota : 12;
@@ -340,7 +341,8 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
         spread: 70,
         origin: { y: 0.6 }
       });
-      onApprove(item.id, reviewerNote || 'Disetujui.');
+      const isLateItem = item.type === 'LATE_JUSTIFICATION' || (item.lateMinutes && item.lateMinutes > 0);
+      onApprove(item.id, reviewerNote || 'Disetujui.', isLateItem ? { waiveLateDeduction, deductionWaived: waiveLateDeduction } : undefined);
     } else if (action === 'REJECT') {
       onReject(item.id, reviewerNote || 'Ditolak.');
     } else {
@@ -690,6 +692,66 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
                   <p className="text-xs text-slate-700">
                     Pemohon: <strong>{activeReviewAction.item.employeeName}</strong> - <em>"{activeReviewAction.item.title}"</em>
                   </p>
+
+                  {/* Kebijakan Denda Keterlambatan Khusus Persetujuan Keterlambatan */}
+                  {activeReviewAction.action === 'APPROVE' && (activeReviewAction.item.type === 'LATE_JUSTIFICATION' || (activeReviewAction.item.lateMinutes && activeReviewAction.item.lateMinutes > 0)) && (
+                    <div className="bg-white/90 border border-amber-200 rounded-xl p-3 space-y-2">
+                      <div className="flex items-center justify-between text-xs font-bold text-amber-950">
+                        <span className="flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                          <span>Kebijakan Denda ({activeReviewAction.item.lateMinutes || 0} Menit Terlambat)</span>
+                        </span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-100 text-amber-800">
+                          Wewenang HR
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setWaiveLateDeduction(true)}
+                          className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                            waiveLateDeduction
+                              ? 'bg-emerald-50 border-emerald-500 ring-2 ring-emerald-500/30'
+                              : 'bg-white border-slate-200 hover:border-slate-300'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5 font-bold text-xs text-emerald-900">
+                            <span className={`w-3 h-3 rounded-full border flex items-center justify-center shrink-0 ${
+                              waiveLateDeduction ? 'border-emerald-600 bg-emerald-600' : 'border-slate-300 bg-white'
+                            }`}>
+                              {waiveLateDeduction && <Check className="w-2 h-2 text-white" />}
+                            </span>
+                            <span>Tanpa Potongan</span>
+                          </div>
+                          <p className="text-[9.5px] text-emerald-700 mt-0.5 leading-snug">
+                            Bebas denda (Rp 0). <b>Tetap dihitung terlambat</b> di presensi & performa.
+                          </p>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setWaiveLateDeduction(false)}
+                          className={`p-2 rounded-lg border text-left transition-all cursor-pointer ${
+                            !waiveLateDeduction
+                              ? 'bg-amber-50 border-amber-500 ring-2 ring-amber-500/30'
+                              : 'bg-white border-slate-200 hover:border-slate-300'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5 font-bold text-xs text-amber-950">
+                            <span className={`w-3 h-3 rounded-full border flex items-center justify-center shrink-0 ${
+                              !waiveLateDeduction ? 'border-amber-600 bg-amber-600' : 'border-slate-300 bg-white'
+                            }`}>
+                              {!waiveLateDeduction && <Check className="w-2 h-2 text-white" />}
+                            </span>
+                            <span>Dengan Potongan</span>
+                          </div>
+                          <p className="text-[9.5px] text-amber-800 mt-0.5 leading-snug">
+                            Alasan diterima, denda keterlambatan <b>tetap dipotong</b> di payroll.
+                          </p>
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   <div>
                     <label className="text-[11px] font-bold text-slate-700 block mb-1">

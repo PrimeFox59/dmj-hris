@@ -88,7 +88,11 @@ export function sqliteApiPlugin(): Plugin {
           // 4. Update Approval Item
           if (cleanUrl === '/api/approval' && (method === 'PUT' || method === 'POST')) {
             const body = await readBody();
-            const result = updateApproval(body.id, body.status, body.reviewNote, body.reviewedBy);
+            const approvalOptions = {
+              waiveLateDeduction: body.waiveLateDeduction,
+              deductionWaived: body.deductionWaived !== undefined ? body.deductionWaived : body.waiveLateDeduction
+            };
+            const result = updateApproval(body.id, body.status, body.reviewNote, body.reviewedBy, approvalOptions);
             return sendJson(200, result);
           }
 

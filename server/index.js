@@ -1258,7 +1258,11 @@ const server = http.createServer(async (req, res) => {
           }
         }
         const reviewerTitle = body.reviewedBy || user.employee?.name || user.name || user.username || 'Direksi / HR Lead';
-        const result = updateApproval(body.id, body.status, body.reviewNote, reviewerTitle);
+        const approvalOptions = {
+          waiveLateDeduction: body.waiveLateDeduction,
+          deductionWaived: body.deductionWaived !== undefined ? body.deductionWaived : body.waiveLateDeduction
+        };
+        const result = updateApproval(body.id, body.status, body.reviewNote, reviewerTitle, approvalOptions);
         broadcastRealtimeEvent('APPROVAL_UPDATED', {
           id: body.id,
           status: body.status,

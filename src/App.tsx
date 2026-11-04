@@ -990,7 +990,7 @@ export function App() {
   };
 
   // Approval actions
-  const handleApprove = (id: string, reviewerNote?: string) => {
+  const handleApprove = (id: string, reviewerNote?: string, options?: { waiveLateDeduction?: boolean; deductionWaived?: boolean }) => {
     const targetItem = approvals.find(a => a.id === id);
     const applicantProj = (projects || []).find(p => 
       p.id === targetItem?.projectId || 
@@ -1014,7 +1014,7 @@ export function App() {
       ? `${currentUser.name} (Admin Proyek)`
       : `${currentUser.name} (${currentUser.role})`;
 
-    api.updateApproval(id, 'APPROVED', reviewerNote, approverTitle)
+    api.updateApproval(id, 'APPROVED', reviewerNote, approverTitle, options)
       .then(res => {
         if (res.item) {
           setApprovals(prev => prev.map(a => a.id === id ? res.item : a));
@@ -1162,11 +1162,20 @@ export function App() {
           }
 
           // If this is a late justification, mark the corresponding attendance as approved
-          if (item.attendanceRecordId) {
+          const isLateWaiver = options?.waiveLateDeduction !== undefined 
+            ? options.waiveLateDeduction 
+            : (options?.deductionWaived !== undefined ? options.deductionWaived : true);
+
+          if (item.attendanceRecordId || (item.employeeId && item.startDate && (item.type === 'LATE_JUSTIFICATION' || (item.lateMinutes && item.lateMinutes > 0)))) {
             setAttendances(attList =>
               attList.map(a => {
-                if (a.id === item.attendanceRecordId) {
-                  return { ...a, approvalStatus: 'APPROVED' };
+                if (a.id === item.attendanceRecordId || (a.employeeId === item.employeeId && a.date === item.startDate)) {
+                  return {
+                    ...a,
+                    approvalStatus: 'APPROVED',
+                    deductionWaived: isLateWaiver,
+                    isLateDeductionWaived: isLateWaiver
+                  };
                 }
                 return a;
               })
