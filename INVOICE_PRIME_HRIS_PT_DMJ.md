@@ -1,4 +1,4 @@
-# INVOICE RESMI (TAGIHAN TERMIN I)
+# INVOICE RESMI (TAGIHAN TERMIN I & KLAIM PELATIHAN)
 ## PENGEMBANGAN & IMPLEMENTASI SISTEM PRIME HRIS ENTERPRISE
 **PT PRIME INFINITY SYSTEMS (PRIME PROJECTX)**  
 Surabaya & Sidoarjo, Jawa Timur, Indonesia  
@@ -10,11 +10,12 @@ Email Resmi: `galih@primeprojectx.net`
 ### METADATA INVOICE
 
 * **Nomor Invoice:** `INV-008/PIS-DMJ/IX/2026`
-* **Tanggal Terbit:** Senin, 21 September 2026
+* **Tanggal Terbit:** Rabu, 04 November 2026
 * **Dasar Perjanjian:** Surat Perjanjian Kerja Sama (PKS) No. `008/PKS-IT/PIS-DMJ/IX/2026`
-* **Jatuh Tempo Pembayaran:** **7 (tujuh) Hari Kerja** sejak Berita Acara Progress 50% (BAP-50) ditandatangani dan invoice diserahkan (Pasal 2 Ayat 5 PKS)
-* **Status Tagihan:** **MENUNGGU PEMBAYARAN (PENDING TERMIN I)**
-* **Tautan Verifikasi Digital:** [primeprojectx.net/invoice?tab=invoices](https://primeprojectx.net/invoice?tab=invoices)
+* **Dasar Berita Acara:** Berita Acara Progres 50% (BAP-50) No. `008/BAP-50/PIS-DMJ/XI/2026`
+* **Jatuh Tempo Pembayaran:** **7 (tujuh) Hari Kerja** (11 November 2026) sesuai Pasal 2 Ayat 5 PKS
+* **Status Tagihan:** **MENUNGGU PEMBAYARAN (PENDING TERMIN I & PELATIHAN)**
+* **Tautan Verifikasi Digital:** [https://primeprojectx.net/invoice/3c3171e4-8795-49d3-84c2-b1d9e5ccd36d](https://primeprojectx.net/invoice/3c3171e4-8795-49d3-84c2-b1d9e5ccd36d)
 
 ---
 
@@ -32,46 +33,50 @@ Email Resmi: `galih@primeprojectx.net`
 
 ### RINCIAN TAGIHAN (ITEMIZED BILLING)
 
-| No | Deskripsi Pekerjaan & Ruang Lingkup Milestone | Bobot Tahap | Jumlah Tagihan (IDR) |
+| No | Deskripsi Pekerjaan & Ruang Lingkup Milestone | Tahap | Jumlah Tagihan (IDR) |
 | :---: | :--- | :---: | :---: |
-| **01** | **Pembayaran Termin I (Milestone Pencapaian Progress 50%)** <br><br> Pengadaan dan Implementasi Sistem Informasi Sumber Daya Manusia Terpadu (*Prime HRIS Enterprise - Paket Komplit Full Suite*). <br><br> **Capaian Milestone Terverifikasi Sesuai Pasal 2 Ayat 2 PKS:** <br> • Terselesaikannya konfigurasi modul presensi biometrik selfie & geotag watermark satelit native (anti-fake GPS). <br> • Live demonstration fungsionalitas sistem pada server cloud staging: `https://dmj.primeprojectx.net`. <br> • Penandatanganan Berita Acara Progress 50% (BAP-50) oleh perwakilan PARA PIHAK. | **50%** <br> *(dari Pokok Kontrak Rp 5.500.000,-)* | **Rp 2.750.000,-** |
-| | **Subtotal Tagihan Termin I** | | **Rp 2.750.000,-** |
+| **01** | **Pembayaran Termin I (Milestone Progress >50% Terverifikasi 73.0%)** <br><br> Pengadaan dan Implementasi Sistem Informasi Sumber Daya Manusia Terpadu (*Prime HRIS Enterprise - Paket Komplit Full Suite*). <br><br> **Capaian Milestone Terverifikasi Sesuai Pasal 2 Ayat 2 PKS & BAP-50:** <br> • Konfigurasi modul presensi biometrik selfie & geotag watermark satelit native (anti-fake GPS). <br> • Corporate WiFi BSSID/IP Gateway lock & presensi rute dinas luar mendadak. <br> • Multi-tier approval hub (cuti, izin sakit, lembur) & Mobile Version Android (PWA). <br> • Live demonstration fungsionalitas sistem pada server cloud staging: `https://dmj.primeprojectx.net`. <br> • Penerbitan Berita Acara Progress 50% (BAP-50) No. `008/BAP-50/PIS-DMJ/XI/2026`. | **Termin I (50%)** | **Rp 2.750.000,-** |
+| **02** | **Klaim Pelaksanaan 1x Sesi Pelatihan Operasional Sistem** <br><br> Pelatihan intensif tatap muka (*on-site training*) operasional sistem Prime HRIS Enterprise di kantor/workshop PT DMJ. <br><br> **Catatan Pelaksanaan:** <br> • Telah terlaksana secara tuntas pada tanggal 01/11/2026 atas permintaan manajemen PT DMJ (*by request*). <br> • Sesuai ketentuan Pasal 1 & Pasal 3 PKS No. `008/PKS-IT/PIS-DMJ/IX/2026`. | **Pelatihan (Selesai)** | **Rp 1.000.000,-** |
+| | **Subtotal Tagihan (Termin I + Pelatihan)** | | **Rp 3.750.000,-** |
 | | **Pajak / Potongan Lain (Netto Disepakati)** | | **Rp 0,-** |
-| | **TOTAL HARUS DIBAYAR (TERMIN I)** | | **Rp 2.750.000,-** |
-
-**Terbilang:** *Dua Juta Tujuh Ratus Lima Puluh Ribu Rupiah*
+| | **TOTAL HARUS DIBAYAR SAAT INI** | | **Rp 3.750.000,-** |
 
 ---
 
-### INSTRUKSI PEMBAYARAN & REKENING RESMI
+### JUMLAH TERBILANG
 
-Pembayaran wajib diselesaikan melalui transfer bank resmi ke rekening berikut:
-
-* **Nama Bank:** **BCA (Bank Central Asia)**
-* **Nomor Rekening:** `[Nomor Rekening Resmi PIS / Galih Primananda]`
-* **Atas Nama:** **Galih Primananda** / **PT Prime Infinity Systems**
-* **Berita Acara Transfer:** `INV-008 DMJ - Termin 1`
-* **Konfirmasi Bukti Transfer:** Kirimkan bukti transfer resmi ke email: `galih@primeprojectx.net`
+> **"Tiga Juta Tujuh Ratus Lima Puluh Ribu Rupiah"**  
+*(Netto tanpa potongan pajak pihak ketiga yang tidak disepakati)*
 
 ---
 
-### CATATAN KLAUSUL KONTRAK TERKAIT (PKS NO. 008/PKS-IT/PIS-DMJ/IX/2026)
+### INSTRUKSI PEMBAYARAN TRANSFER BANK RESMI
 
-1. **Klausul Termin II (Pelunasan Akhir 50% - Rp 2.750.000,-):**  
-   Dibayarkan oleh PIHAK KEDUA kepada PIHAK PERTAMA setelah seluruh pekerjaan selesai 100%, lolos User Acceptance Test (UAT batas maksimal 7 hari kerja), pelaksanaan 1 (satu) kali sesi pelatihan full team secara offline / tatap muka on-site di kantor/workshop PT DMJ, penyerahan paket aplikasi portable offline (`.exe`), dan penandatanganan Berita Acara Serah Terima (BAST).
-2. **Klausul Biaya Cloud Running Apps (Tipe Shared Environment):**  
-   Biaya pemeliharaan server cloud running apps sebesar **Rp 35.000,- (Tiga Puluh Lima Ribu Rupiah) per bulan** (arsitektur shared server 50–100 user aktif, 1 GB storage aktif + 10 GB dedicated backup) mulai ditagihkan berkala pada bulan kedua setelah sistem Go-Live resmi.
-3. **Klausul Add-On & Modul Tambahan:**  
-   Penambahan modul pelaporan khusus di luar Pasal 1 atau kebutuhan skalabilitas server/storage dapat diajukan mulai tarif **Rp 100.000,- s/d Rp 1.500.000,- per modul** dan dituangkan dalam Addendum PKS.
-4. **Garansi & Batasan Tanggung Jawab:**  
-   Sistem dilindungi Garansi 12 Bulan khusus perbaikan galat/bug program (*bug fixing only*). Sesuai Pasal 7 PKS, tidak ada biaya ganti rugi finansial dalam bentuk dan nominal apapun (*zero liability*), tanggung jawab terbatas hanya pada dukungan teknis perbaikan (*support perbaikan*).
-5. **Keabsahan Dokumen:**  
-   Invoice ini diterbitkan secara sah dan mengikat PARA PIHAK tanpa memerlukan meterai tempel fisik, serta didukung tautan verifikasi digital QR code.
+* **Bank Tujuan:** **Bank Central Asia (BCA)**
+* **Nomor Rekening:** `3251311097`
+* **Atas Nama:** **Galih Primananda** / PT Prime Infinity Systems
+* **Berita Transfer:** `Klaim BAP-50 Termin 1 & Pelatihan DMJ`
+* **Batas Waktu Pembayaran:** Selambat-lambatnya **7 (tujuh) hari kerja kalender** sejak penyerahan invoice dan BAP-50 (Jatuh Tempo: 11 November 2026).
+* **Konfirmasi Pembayaran:** Kirimkan bukti transfer melalui email resmi: `galih@primeprojectx.net`.
 
 ---
 
-### LEMBAR PENGESAHAN & AUTENTIKASI PENERBIT
+### CATATAN KLAUSUL KONTRAK TERKAIT (PKS 008)
 
-| QR CODE VERIFIKASI DIGITAL | PENERBIT TAGIHAN (VENDOR) |
-| :---: | :---: |
-| <br> **[Scan QR: Verifikasi Invoice Digital](https://primeprojectx.net/invoice?tab=invoices)** <br> *(Tautan: `https://primeprojectx.net/invoice?tab=invoices`)* <br> Otentikasi Status Tagihan Real-Time <br><br> | Surabaya, 18 September 2026 <br><br> **PT PRIME INFINITY SYSTEMS** <br><br><br><br> **GALIH PRIMANANDA, S.E.** <br> **Director & Lead Platform Architect** |
+1. **Sisa Kewajiban Termin II (Pelunasan Rp 1.750.000,-):** Ditagihkan setelah penyelesaian sisa 27% sistem, masa uji coba UAT komprehensif, penyerahan paket aplikasi mandiri offline portable (`.exe` by request), dan penandatanganan Berita Acara Serah Terima (BAST Final).
+2. **Biaya Berlangganan Cloud Server (Shared Environment):** Sebesar Rp 35.000,-/bulan (kapasitas 50-100 karyawan aktif, kuota penyimpanan 1 GB database + 10 GB cloud auto-backup) mulai ditagihkan pada bulan kedua pasca Go-Live resmi.
+3. **Change Request / Fitur Tambahan di Luar Kontrak Pokok:** Penambahan fitur baru di luar ruang lingkup Pasal 1 PKS disepakati dengan biaya add-on mulai Rp 100.000,- s/d Rp 1.500.000,- per modul (atau Rp 350.000,-/Man-Day).
+4. **Garansi 12 Bulan (Pasal 7 PKS):** PIHAK PERTAMA memberikan garansi perbaikan galat/bug program selama 12 bulan pasca-BAST tanpa batasan biaya perbaikan (*zero financial liability*).
+
+---
+
+### PENGESAHAN DOKUMEN DIGITAL RESMI
+
+Surabaya, 04 November 2026  
+**PT PRIME INFINITY SYSTEMS (PRIME PROJECTX)**  
+
+*(Tanda Tangan & Segel Digital Terverifikasi)*  
+**GALIH PRIMANANDA, S.E.**  
+Director & Lead Platform Architect  
+
+*Tautan Validasi Digital:* [https://primeprojectx.net/invoice/3c3171e4-8795-49d3-84c2-b1d9e5ccd36d](https://primeprojectx.net/invoice/3c3171e4-8795-49d3-84c2-b1d9e5ccd36d)
