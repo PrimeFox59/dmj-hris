@@ -271,6 +271,7 @@ try {
       details TEXT,
       userName TEXT DEFAULT 'System',
       userNik TEXT,
+      userLoginId TEXT,
       userRole TEXT DEFAULT 'system',
       module TEXT DEFAULT 'SYSTEM',
       ipAddress TEXT DEFAULT '127.0.0.1',
@@ -286,6 +287,7 @@ try {
     const newAuditCols = [
       { name: 'userName', def: "TEXT DEFAULT 'System'" },
       { name: 'userNik', def: "TEXT" },
+      { name: 'userLoginId', def: "TEXT" },
       { name: 'userRole', def: "TEXT DEFAULT 'system'" },
       { name: 'module', def: "TEXT DEFAULT 'SYSTEM'" },
       { name: 'ipAddress', def: "TEXT DEFAULT '127.0.0.1'" },
@@ -1018,16 +1020,19 @@ export function deleteAttendance(id, operatorUser = null) {
   }
 
   // 3. Add audit log
+  const operatorLogin = operatorUser?.username || operatorUser?.loginId || 'admin';
   addAuditLog({
     action: 'ATTENDANCE_DELETED',
     entity: 'attendances',
     entityId: targetId,
-    userName: operatorUser?.name || operatorUser?.username || 'Superuser',
-    userNik: operatorUser?.nik || 'SUPERUSER',
+    userName: operatorUser?.name || operatorLogin,
+    userNik: null,
+    userLoginId: operatorLogin,
     userRole: operatorUser?.systemRole || operatorUser?.role || 'superuser',
     module: 'ATTENDANCE',
+    ipAddress: operatorUser?.clientIp || '127.0.0.1',
     status: 'SUCCESS',
-    details: `Presensi ${existing.employeeName} (${existing.employeeNik}) tanggal ${existing.date} ID ${targetId} berhasil dihapus oleh Superuser.`
+    details: `Presensi ${existing.employeeName} tanggal ${existing.date} ID ${targetId} berhasil dihapus oleh ${operatorLogin}.`
   });
 
   return {
@@ -1711,16 +1716,19 @@ export function updateUserProfile(profileData, operatorUser = null) {
   }
 
   // Add audit log
+  const operatorLogin = operatorUser?.username || operatorUser?.loginId || emp.loginId || (emp.id === 'EMP-001' ? 'admin' : `d${String(emp.id.replace(/\D/g, '')).padStart(3, '0')}`);
   addAuditLog({
     action: 'UPDATE_PROFILE',
     entity: 'employees',
     entityId: emp.id,
     userName: operatorUser?.name || emp.name,
-    userNik: operatorUser?.nik || emp.nik,
+    userNik: null,
+    userLoginId: operatorLogin,
     userRole: operatorUser?.systemRole || emp.systemRole || 'staff',
     module: 'MASTER_DATA',
+    ipAddress: operatorUser?.clientIp || '127.0.0.1',
     status: 'SUCCESS',
-    details: `Profil mandiri karyawan ${emp.name} (${emp.nik}) berhasil diperbarui (No HP: ${emp.phone || '-'}, Rekening: ${emp.bankAccount?.bankName || '-'} ${emp.bankAccount?.accountNumber || '-'}).`
+    details: `Profil mandiri karyawan ${emp.name} (ID Login: ${operatorLogin}) berhasil diperbarui (No HP: ${emp.phone || '-'}, Rekening: ${emp.bankAccount?.bankName || '-'} ${emp.bankAccount?.accountNumber || '-'}).`
   });
 
   return { success: true, message: 'Profil mandiri berhasil disimpan ke database', employee: emp };
@@ -1780,16 +1788,19 @@ export function deleteEmployee(employeeId, operatorUser = null) {
   // 5. Delete from employees
   const res = db.prepare('DELETE FROM employees WHERE id = ? OR nik = ?;').run(targetId, targetNik);
 
+  const operatorLogin = operatorUser?.username || operatorUser?.loginId || (operatorUser?.systemRole === 'superuser' ? 'admin' : 'Admin HR');
   addAuditLog({
     action: 'DELETE_EMPLOYEE',
     entity: 'employees',
     entityId: targetId,
-    userName: operatorUser?.name || operatorUser?.username || 'Admin HR',
-    userNik: operatorUser?.nik || operatorUser?.userNik || null,
+    userName: operatorUser?.name || operatorLogin,
+    userNik: null,
+    userLoginId: operatorLogin,
     userRole: operatorUser?.systemRole || operatorUser?.role || 'admin',
     module: 'EMPLOYEES',
+    ipAddress: operatorUser?.clientIp || '127.0.0.1',
     status: 'SUCCESS',
-    details: `Data master karyawan ${targetName} (${targetNik}) berhasil dihapus permanen oleh ${operatorUser?.name || operatorUser?.username || 'Admin HR'}.`
+    details: `Data master karyawan ${targetName} (ID: ${cleanId}) berhasil dihapus permanen oleh ${operatorLogin}.`
   });
 
   return { success: true, id: targetId, name: targetName };
@@ -2166,9 +2177,11 @@ export function authenticateUser(identifier, password, ipAddress = '127.0.0.1') 
     entity: 'user_accounts',
     entityId: user.id,
     userName: employee?.name || user.username,
-    userNik: employee?.nik,
+    userNik: null,
+    userLoginId: user.username,
     userRole: user.system_role,
     module: 'AUTH',
+    ipAddress,
     status: 'SUCCESS',
     details: `Pengguna ${user.username} (${user.role} / ${user.system_role}) berhasil login ke sistem PRIME HRIS.`
   });
@@ -2322,7 +2335,7 @@ export function getCurrentUserFromToken(token) {
   };
 }
 
-export function changeUserPassword(userId, oldPassword, newPassword) {
+export function changeUserPassword(userId, oldPassword, newPassword, clientIp = '127.0.0.1', operatorUser = null) {
   const db = getDatabase();
   const user = db.prepare('SELECT * FROM user_accounts WHERE id = ?;').get(userId);
   if (!user) return { success: false, error: 'User tidak ditemukan' };
@@ -2345,8 +2358,10 @@ export function changeUserPassword(userId, oldPassword, newPassword) {
     entity: 'user_accounts',
     entityId: userId,
     userName: user.username,
+    userLoginId: user.username,
     userRole: user.system_role,
     module: 'AUTH',
+    ipAddress: clientIp || operatorUser?.clientIp || '127.0.0.1',
     status: 'SUCCESS',
     details: `Password akun pengguna ${user.username} berhasil diubah.`
   });
@@ -2354,7 +2369,7 @@ export function changeUserPassword(userId, oldPassword, newPassword) {
   return { success: true };
 }
 
-export function resetEmployeePassword(employeeId, newPassword = 'zzz', operatorUser = null) {
+export function resetEmployeePassword(employeeId, newPassword = 'zzz', operatorUser = null, clientIp = '127.0.0.1') {
   const db = getDatabase();
   const empRow = db.prepare('SELECT id, nik, name, data_json FROM employees WHERE id = ?;').get(employeeId);
   if (!empRow) {
@@ -2401,14 +2416,17 @@ export function resetEmployeePassword(employeeId, newPassword = 'zzz', operatorU
     db.prepare('UPDATE employees SET data_json = ? WHERE id = ?;').run(JSON.stringify(parsedEmp), employeeId);
   }
 
+  const operatorLogin = operatorUser?.username || operatorUser?.loginId || 'admin';
   addAuditLog({
     action: 'RESET_PASSWORD',
     entity: 'user_accounts',
     entityId: user.id,
-    userName: operatorUser?.name || operatorUser?.username || 'Admin HR',
-    userNik: operatorUser?.nik || 'ADMIN',
+    userName: operatorUser?.name || operatorLogin,
+    userNik: null,
+    userLoginId: operatorLogin,
     userRole: operatorUser?.systemRole || 'admin',
     module: 'AUTH',
+    ipAddress: operatorUser?.clientIp || clientIp || '127.0.0.1',
     status: 'SUCCESS',
     details: `Password akun untuk ${empRow.name} (ID Login: ${user.username || loginId}) berhasil di-reset menjadi default '${newPassword}'.`
   });
@@ -3031,21 +3049,50 @@ export function addAuditLog(entry) {
   const now = entry.timestamp || localNow;
   const metaStr = entry.metadata ? (typeof entry.metadata === 'string' ? entry.metadata : JSON.stringify(entry.metadata)) : null;
 
+  // Resolve userLoginId if not explicitly provided
+  let loginId = entry.userLoginId || null;
+  if (!loginId) {
+    if (entry.userName === 'admin' || entry.userNik === 'DMJ-2024-001' || (entry.userName && entry.userName.toLowerCase().includes('galih primananda'))) {
+      loginId = 'admin';
+    } else if (entry.userNik) {
+      try {
+        const u = db.prepare('SELECT u.username FROM user_accounts u JOIN employees e ON u.employee_id = e.id WHERE e.nik = ? OR e.id = ? LIMIT 1;').get(entry.userNik, entry.userNik);
+        if (u?.username) loginId = u.username;
+      } catch (e) {}
+    }
+    if (!loginId && entry.userName) {
+      try {
+        const u = db.prepare('SELECT username FROM user_accounts WHERE LOWER(username) = ? LIMIT 1;').get(entry.userName.toLowerCase());
+        if (u?.username) loginId = u.username;
+      } catch (e) {}
+    }
+    if (!loginId) {
+      loginId = entry.userName?.toLowerCase()?.includes('system') ? 'system' : (entry.userName || 'admin');
+    }
+  }
+
+  // Strip raw NIK from details to ensure complete privacy & prevent leaking NIK
+  let sanitizedDetails = entry.details || '';
+  if (entry.userNik && sanitizedDetails.includes(entry.userNik)) {
+    sanitizedDetails = sanitizedDetails.replace(new RegExp(`\\(?${entry.userNik}\\)?`, 'g'), `(ID: ${loginId})`).replace(/\s+/g, ' ');
+  }
+
   const stmt = db.prepare(`
     INSERT INTO audit_logs (
       action, entity, entityId, details,
-      userName, userNik, userRole, module,
+      userName, userNik, userLoginId, userRole, module,
       ipAddress, status, metadata, timestamp
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
   `);
 
   stmt.run(
     entry.action || 'ACTIVITY',
     entry.entity || 'SYSTEM',
     entry.entityId || null,
-    entry.details || '',
+    sanitizedDetails,
     entry.userName || 'System',
     entry.userNik || null,
+    loginId,
     entry.userRole || 'system',
     entry.module || 'SYSTEM',
     entry.ipAddress || '127.0.0.1',
@@ -3078,11 +3125,12 @@ export function getAuditLogsPaginated({
     whereClauses.push(`(
       LOWER(details) LIKE ? OR
       LOWER(userName) LIKE ? OR
+      LOWER(COALESCE(userLoginId, '')) LIKE ? OR
       LOWER(COALESCE(userNik, '')) LIKE ? OR
       LOWER(action) LIKE ? OR
       LOWER(COALESCE(ipAddress, '')) LIKE ?
     )`);
-    params.push(term, term, term, term, term);
+    params.push(term, term, term, term, term, term);
   }
 
   if (module && module !== 'ALL') {
@@ -3190,8 +3238,42 @@ export function getAuditLogsPaginated({
     LIMIT ? OFFSET ?;
   `).all(...params, safeLimit, offset);
 
+  const mappedRows = rows.map(r => {
+    let loginId = r.userLoginId;
+    if (!loginId) {
+      if (r.userName === 'admin' || r.userNik === 'DMJ-2024-001' || (r.userName && r.userName.toLowerCase().includes('galih primananda'))) {
+        loginId = 'admin';
+      } else if (r.userNik) {
+        try {
+          const u = db.prepare('SELECT u.username FROM user_accounts u JOIN employees e ON u.employee_id = e.id WHERE e.nik = ? OR e.id = ? LIMIT 1;').get(r.userNik, r.userNik);
+          if (u?.username) loginId = u.username;
+        } catch (e) {}
+      }
+      if (!loginId && r.userName) {
+        try {
+          const u = db.prepare('SELECT username FROM user_accounts WHERE LOWER(username) = ? LIMIT 1;').get(r.userName.toLowerCase());
+          if (u?.username) loginId = u.username;
+        } catch (e) {}
+      }
+      if (!loginId) {
+        loginId = r.userName?.toLowerCase()?.includes('system') ? 'system' : (r.userName || 'admin');
+      }
+    }
+
+    let sanitizedDetails = r.details || '';
+    if (r.userNik && sanitizedDetails.includes(r.userNik)) {
+      sanitizedDetails = sanitizedDetails.replace(new RegExp(`\\(?${r.userNik}\\)?`, 'g'), `(ID: ${loginId})`).replace(/\s+/g, ' ');
+    }
+
+    return {
+      ...r,
+      userLoginId: loginId,
+      details: sanitizedDetails
+    };
+  });
+
   return {
-    logs: rows,
+    logs: mappedRows,
     pagination: {
       page: safePage,
       limit: safeLimit,

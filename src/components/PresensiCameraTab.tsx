@@ -2356,45 +2356,66 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                 PRESENSI TERVERIFIKASI REALTIME
               </span>
               <h2 className="text-xl font-black text-slate-900">
-                Presensi Berhasil Diterima & Disimpan!
+                {submittedRecord.attendanceType === 'CHECK_OUT'
+                  ? 'Presensi Pulang Berhasil Dicatat!'
+                  : 'Presensi Masuk Berhasil Disimpan!'}
               </h2>
               <p className="text-xs text-slate-600">
-                Data kehadiran dan foto selfie resmi telah dicatat ke dalam database DMJ HRIS Enterprise.
+                {submittedRecord.attendanceType === 'CHECK_OUT'
+                  ? 'Data presensi kepulangan (check-out) dan foto selfie resmi telah dicatat ke dalam database.'
+                  : 'Data kehadiran dan foto selfie resmi telah dicatat ke dalam database DMJ HRIS Enterprise.'}
               </p>
             </div>
 
             {/* Photo Preview with Watermark */}
             <div className="relative aspect-4/3 rounded-2xl overflow-hidden border border-slate-200 shadow-md">
               <img
-                src={submittedRecord.photoUrl}
+                src={submittedRecord.attendanceType === 'CHECK_OUT' ? (submittedRecord.photoOutUrl || submittedRecord.photoUrl) : submittedRecord.photoUrl}
                 alt="Selfie Presensi Terverifikasi"
                 className="w-full h-full object-cover"
               />
               <div className="absolute top-2.5 right-2.5 bg-emerald-600 text-white text-[10px] font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-md">
                 <Check className="w-3 h-3" />
-                <span>Valid Audit Watermark</span>
+                <span>Valid Audit Watermark ({submittedRecord.attendanceType === 'CHECK_OUT' ? 'Pulang' : 'Masuk'})</span>
               </div>
             </div>
 
             {/* Attendance Details Card */}
             <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1.5 text-xs">
               <div className="flex justify-between items-center py-0.5 border-b border-slate-100">
+                <span className="text-slate-500">Tipe Presensi:</span>
+                <span className={`font-bold font-mono-code text-[11px] px-2 py-0.5 rounded ${
+                  submittedRecord.attendanceType === 'CHECK_OUT' ? 'bg-orange-100 text-orange-800' : 'bg-emerald-100 text-emerald-800'
+                }`}>
+                  {submittedRecord.attendanceType === 'CHECK_OUT' ? '🚪 ABSEN PULANG (CHECK-OUT)' : '🏢 ABSEN MASUK (CHECK-IN)'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-0.5 border-b border-slate-100">
                 <span className="text-slate-500">Nama Karyawan:</span>
-                <span className="font-bold text-slate-900">{submittedRecord.employeeName} ({submittedRecord.employeeNik})</span>
+                <span className="font-bold text-slate-900">{submittedRecord.employeeName}</span>
               </div>
               <div className="flex justify-between items-center py-0.5 border-b border-slate-100">
                 <span className="text-slate-500">Waktu Presensi:</span>
-                <span className="font-mono-code font-bold text-slate-900">{submittedRecord.checkInTime} WIB</span>
+                <span className="font-mono-code font-bold text-slate-900">
+                  {submittedRecord.attendanceType === 'CHECK_OUT'
+                    ? `${submittedRecord.checkOutTime || submittedRecord.checkInTime || '-'} WIB (Pulang)`
+                    : `${submittedRecord.checkInTime || '-'} WIB (Masuk)`}
+                </span>
               </div>
               <div className="flex justify-between items-center py-0.5 border-b border-slate-100">
                 <span className="text-slate-500">Status Kehadiran:</span>
-                <span className={`font-bold px-2 py-0.2 rounded-md font-mono-code text-[11px] ${submittedRecord.status === 'ON_TIME'
-                    ? 'bg-emerald-100 text-emerald-800'
-                    : 'bg-amber-100 text-amber-800'
-                  }`}>
-                  {submittedRecord.status === 'ON_TIME'
-                    ? 'TEPAT WAKTU (ON TIME)'
-                    : `TERLAMBAT (${submittedRecord.lateMinutes}m - PENGAJUAN DIAJUKAN KE HR)`}
+                <span className={`font-bold px-2 py-0.5 rounded-md font-mono-code text-[11px] ${
+                  submittedRecord.attendanceType === 'CHECK_OUT'
+                    ? (submittedRecord.isEarlyCheckOut ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800')
+                    : (submittedRecord.status === 'ON_TIME' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800')
+                }`}>
+                  {submittedRecord.attendanceType === 'CHECK_OUT'
+                    ? (submittedRecord.isEarlyCheckOut
+                        ? `PULANG LEBIH AWAL (${submittedRecord.earlyCheckOutMinutes}m - APPROVAL PM & HR)`
+                        : 'PULANG NORMAL (SELESAI KERJA)')
+                    : (submittedRecord.status === 'ON_TIME'
+                        ? 'TEPAT WAKTU (ON TIME)'
+                        : `TERLAMBAT (${submittedRecord.lateMinutes}m - PENGAJUAN DIAJUKAN KE HR)`)}
                 </span>
               </div>
               <div className="flex justify-between items-center py-0.5">

@@ -700,6 +700,7 @@ export interface AuditLogItem {
   timestamp: string;
   userName: string;
   userNik?: string;
+  userLoginId?: string;
   userRole: SystemRole | 'system';
   action: string;
   module: AuditModule;

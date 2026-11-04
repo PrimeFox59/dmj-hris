@@ -205,12 +205,11 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
   // Export Audit Trail to CSV
   const handleExportCsv = () => {
     if (logs.length === 0) return;
-    const headers = ['ID', 'Waktu', 'User', 'NIK', 'Role', 'Modul', 'Aksi', 'Status', 'IP Address', 'Keterangan'];
+    const headers = ['ID', 'Date Time', 'User (Login ID)', 'Role', 'Modul', 'Aksi', 'Status', 'IP Address', 'Keterangan'];
     const rows = logs.map(l => [
       l.id,
       `"${l.timestamp}"`,
-      `"${l.userName}"`,
-      `"${l.userNik || '-'}"`,
+      `"${l.userLoginId || (l.userName === 'admin' ? 'admin' : l.userName)}"`,
       `"${l.userRole}"`,
       `"${l.module}"`,
       `"${l.action}"`,
@@ -408,7 +407,7 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
             <input
               type="text"
-              placeholder="Cari user, NIK, aksi, IP..."
+              placeholder="Cari ID login, user, aksi, modul, IP..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/30 transition-all"
@@ -730,8 +729,10 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
                   <span className="font-bold text-slate-800">{selectedLog.userName}</span>
                 </div>
                 <div>
-                  <span className="text-slate-400 block text-[10px] uppercase">Nomor Induk (NIK)</span>
-                  <span className="font-bold text-slate-800">{selectedLog.userNik || '-'}</span>
+                  <span className="text-slate-400 block text-[10px] uppercase">ID Login Pengguna</span>
+                  <span className="font-mono-code font-bold text-slate-900 bg-slate-200/80 px-2 py-0.5 rounded inline-block mt-0.5">
+                    {selectedLog.userLoginId || (selectedLog.userName === 'admin' ? 'admin' : selectedLog.userName)}
+                  </span>
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[10px] uppercase">Hak Akses (Role)</span>

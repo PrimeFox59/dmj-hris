@@ -98,6 +98,19 @@ const MIME_TYPES = {
   '.webm': 'video/webm'
 };
 
+export function getClientIp(req) {
+  const cfIp = req.headers['cf-connecting-ip'];
+  if (cfIp) return String(cfIp).trim();
+  const xReal = req.headers['x-real-ip'];
+  if (xReal) return String(xReal).trim();
+  const xff = req.headers['x-forwarded-for'];
+  if (xff) {
+    const first = String(xff).split(',')[0].trim();
+    if (first) return first;
+  }
+  return req.socket?.remoteAddress || '127.0.0.1';
+}
+
 // ==========================================
 // REAL-TIME COMMUNICATION (WEBSOCKET & SSE ENGINE)
 // ==========================================
@@ -183,7 +196,8 @@ async function triggerAttendanceWaNotification(attendanceRecord) {
     // Resolve employee's project-specific schedule
     const projectSchedule = getEmployeeProjectSchedule(emp, salaryRules);
 
-    const isLate = attendanceRecord.status === 'LATE' || (attendanceRecord.lateMinutes && attendanceRecord.lateMinutes > 0);
+    const isCheckOut = attendanceRecord.attendanceType === 'CHECK_OUT';
+    const isLate = !isCheckOut && (attendanceRecord.status === 'LATE' || (attendanceRecord.lateMinutes && attendanceRecord.lateMinutes > 0));
     if (isLate && (waConfig?.notifyAttendanceLate !== false)) {
       await notifyAttendanceLate(emp, attendanceRecord, salaryRules, projectSchedule);
     } else if (!isLate && (waConfig?.notifyAttendanceSuccess !== false)) {
@@ -290,7 +304,8 @@ async function triggerAttendanceEmailNotification(attendanceRecord) {
     // Resolve employee's project-specific schedule
     const projectSchedule = getEmployeeProjectSchedule(emp, salaryRules);
 
-    const isLate = attendanceRecord.status === 'LATE' || (attendanceRecord.lateMinutes && attendanceRecord.lateMinutes > 0);
+    const isCheckOut = attendanceRecord.attendanceType === 'CHECK_OUT';
+    const isLate = !isCheckOut && (attendanceRecord.status === 'LATE' || (attendanceRecord.lateMinutes && attendanceRecord.lateMinutes > 0));
     if (isLate && (smtpConfig.notifyAttendanceLate !== false)) {
       await notifyAttendanceLateEmail(emp, attendanceRecord, salaryRules, projectSchedule);
     } else if (!isLate && (smtpConfig.notifyAttendanceSuccess !== false)) {
@@ -726,12 +741,13 @@ const server = http.createServer(async (req, res) => {
             entity: 'user_accounts',
             entityId: user.id,
             userName: user.employee?.name || user.username,
-            userNik: user.employee?.nik,
+            userNik: null,
+            userLoginId: user.username,
             userRole: user.systemRole,
             module: 'AUTH',
             ipAddress: clientIp,
             status: 'SUCCESS',
-            details: `Pengguna ${user.employee?.name || user.username} (${user.role} / ${user.systemRole}) keluar dari sistem PRIME HRIS.`
+            details: `Pengguna ${user.username} (${user.role} / ${user.systemRole}) keluar dari sistem PRIME HRIS.`
           });
         }
         return sendJson(200, { success: true, message: 'Berhasil logout' });
@@ -744,7 +760,8 @@ const server = http.createServer(async (req, res) => {
           return sendJson(401, { success: false, error: 'Unauthorized' });
         }
         const body = await readBody();
-        const result = changeUserPassword(user.id, body.oldPassword, body.newPassword);
+        const clientIp = getClientIp(req);
+        const result = changeUserPassword(user.id, body.oldPassword, body.newPassword, clientIp, user);
         return sendJson(result.success ? 200 : 400, result);
       }
 
@@ -767,7 +784,8 @@ const server = http.createServer(async (req, res) => {
         const match = cleanUrl.match(/^\/api\/employees\/([^\/]+)\/reset-password$/);
         const employeeId = match ? match[1] : body.employeeId;
         const newPassword = body.newPassword || 'zzz';
-        const result = resetEmployeePassword(employeeId, newPassword, user);
+        const clientIp = getClientIp(req);
+        const result = resetEmployeePassword(employeeId, newPassword, { ...user, clientIp }, clientIp);
         return sendJson(result.success ? 200 : 400, result);
       }
 
@@ -1063,7 +1081,8 @@ const server = http.createServer(async (req, res) => {
         if (!id) return sendJson(400, { success: false, error: 'ID presensi tidak valid' });
 
         try {
-          const result = deleteAttendance(id, user);
+          const clientIp = getClientIp(req);
+          const result = deleteAttendance(id, { ...user, clientIp });
           if (result.success) {
             broadcastRealtimeEvent('ATTENDANCE_DELETED', { id: result.id || id, linkedApprovalIds: result.linkedApprovalIds });
           }
@@ -1195,7 +1214,8 @@ const server = http.createServer(async (req, res) => {
         if (!isPrivileged && !isSelf) {
           return sendJson(403, { success: false, error: 'Forbidden: Anda hanya berwenang memperbarui profil akun Anda sendiri' });
         }
-        const result = updateUserProfile(body, user);
+        const clientIp = getClientIp(req);
+        const result = updateUserProfile(body, { ...user, clientIp });
         if (result.success && result.employee) {
           broadcastRealtimeEvent('EMPLOYEE_SAVED', result.employee);
         }
@@ -1224,7 +1244,8 @@ const server = http.createServer(async (req, res) => {
         if (!isPrivileged && !isSelf) {
           return sendJson(403, { success: false, error: 'Forbidden: Hak akses Admin, HR, atau Superuser diperlukan' });
         }
-        const result = saveEmployee(body, user);
+        const clientIp = getClientIp(req);
+        const result = saveEmployee(body, { ...user, clientIp });
         broadcastRealtimeEvent('EMPLOYEE_SAVED', result.employee || body);
         return sendJson(200, result);
       }
@@ -1255,7 +1276,8 @@ const server = http.createServer(async (req, res) => {
         }
 
         try {
-          const result = deleteEmployee(id, user);
+          const clientIp = getClientIp(req);
+          const result = deleteEmployee(id, { ...user, clientIp });
           if (result.success) {
             broadcastRealtimeEvent('EMPLOYEE_DELETED', { id: result.id || id });
           }

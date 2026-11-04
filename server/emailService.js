@@ -296,7 +296,8 @@ export async function sendEmailNotification(options) {
 export async function notifyAttendanceSuccessEmail(employee, record) {
   if (!employee || !employee.email) return null;
 
-  const timeStr = record.checkInTime || '08:00:00';
+  const isCheckOut = record.attendanceType === 'CHECK_OUT' || Boolean(record.checkOutTime && !record.checkInTime);
+  const timeStr = isCheckOut ? (record.checkOutTime || record.checkInTime || '17:00:00') : (record.checkInTime || '08:00:00');
   const dateStr = record.date || new Date().toISOString().substring(0, 10);
   const modeStr = record.mode === 'DINAS_LUAR' ? 'Dinas Luar Lapangan' : (record.mode === 'WFH' ? 'Work From Home' : 'Work From Office (WFO)');
   const locationStr = record.location?.address || 'Kantor Pusat / Site Proyek PRIME';
@@ -304,18 +305,19 @@ export async function notifyAttendanceSuccessEmail(employee, record) {
     ? `Biometrik Wajah Valid (${record.biometricVerification.matchScore}%)`
     : 'Presensi Digital Terverifikasi';
 
-  const subject = `[DMJ HRIS] Bukti Kehadiran Resmi - ${dateStr} - ${employee.name}`;
+  const typeLabel = isCheckOut ? 'Presensi Pulang' : 'Presensi Masuk';
+  const subject = `[DMJ HRIS] Bukti ${typeLabel} Resmi - ${dateStr} - ${employee.name}`;
 
   const html = `
     <div style="margin-bottom: 20px;">
-      <span style="display: inline-block; background-color: #ecfdf5; color: #047857; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 9999px; border: 1px solid #a7f3d0;">
-        PRESENSI BERHASIL
+      <span style="display: inline-block; background-color: ${isCheckOut ? '#eff6ff' : '#ecfdf5'}; color: ${isCheckOut ? '#1d4ed8' : '#047857'}; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 9999px; border: 1px solid ${isCheckOut ? '#bfdbfe' : '#a7f3d0'};">
+        ${isCheckOut ? 'PRESENSI PULANG BERHASIL' : 'PRESENSI MASUK BERHASIL'}
       </span>
       <h2 style="font-size: 18px; font-weight: 700; color: #0f172a; margin: 12px 0 6px 0;">
-        Konfirmasi Presensi Masuk
+        Konfirmasi ${typeLabel}
       </h2>
       <p style="margin: 0; color: #475569; font-size: 14px;">
-        Halo <strong>${employee.name}</strong> (${employee.id}), presensi kehadiran Anda telah resmi tercatat ke dalam sistem database HRIS:
+        Halo <strong>${employee.name}</strong> (${employee.id}), presensi ${isCheckOut ? 'kepulangan' : 'kehadiran'} Anda telah resmi tercatat ke dalam sistem database HRIS:
       </p>
     </div>
 
@@ -325,8 +327,8 @@ export async function notifyAttendanceSuccessEmail(employee, record) {
         <td style="font-weight: 600; color: #0f172a; border-bottom: 1px solid #e2e8f0;">${dateStr}</td>
       </tr>
       <tr>
-        <td style="color: #64748b; border-bottom: 1px solid #e2e8f0;">Waktu Check-In</td>
-        <td style="font-weight: 600; color: #047857; border-bottom: 1px solid #e2e8f0;">${timeStr} WIB</td>
+        <td style="color: #64748b; border-bottom: 1px solid #e2e8f0;">${isCheckOut ? 'Waktu Check-Out' : 'Waktu Check-In'}</td>
+        <td style="font-weight: 600; color: ${isCheckOut ? '#1d4ed8' : '#047857'}; border-bottom: 1px solid #e2e8f0;">${timeStr} WIB</td>
       </tr>
       <tr>
         <td style="color: #64748b; border-bottom: 1px solid #e2e8f0;">Mode Kerja</td>
@@ -343,7 +345,7 @@ export async function notifyAttendanceSuccessEmail(employee, record) {
     </table>
 
     <p style="margin: 0; color: #475569; font-size: 13px;">
-      Terima kasih atas kedisiplinan dan dedikasi Anda. Selamat menjalankan aktivitas kerja hari ini dengan optimal.
+      ${isCheckOut ? 'Terima kasih atas kerja keras dan dedikasi Anda hari ini. Hati-hati di perjalanan dan selamat beristirahat.' : 'Terima kasih atas kedisiplinan dan dedikasi Anda. Selamat menjalankan aktivitas kerja hari ini dengan optimal.'}
     </p>
   `;
 
@@ -352,9 +354,9 @@ export async function notifyAttendanceSuccessEmail(employee, record) {
     toName: employee.name,
     subject,
     html,
-    eventType: 'ATTENDANCE_SUCCESS',
+    eventType: isCheckOut ? 'ATTENDANCE_CHECKOUT' : 'ATTENDANCE_SUCCESS',
     recipientId: employee.id,
-    metadata: { attendanceId: record.id, date: dateStr, checkInTime: timeStr }
+    metadata: { attendanceId: record.id, date: dateStr, checkTime: timeStr, isCheckOut }
   });
 }
 

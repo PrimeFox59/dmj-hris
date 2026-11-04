@@ -180,6 +180,7 @@ function initializeSchema(db: DatabaseSync) {
       details TEXT,
       userName TEXT DEFAULT 'System',
       userNik TEXT,
+      userLoginId TEXT,
       userRole TEXT DEFAULT 'system',
       module TEXT DEFAULT 'SYSTEM',
       ipAddress TEXT DEFAULT '127.0.0.1',
@@ -1414,6 +1415,7 @@ export function addAuditLog(entry: {
   details: string;
   userName?: string;
   userNik?: string;
+  userLoginId?: string;
   userRole?: string;
   module?: string;
   ipAddress?: string;
@@ -1428,21 +1430,48 @@ export function addAuditLog(entry: {
   const now = entry.timestamp || localNow;
   const metaStr = entry.metadata ? (typeof entry.metadata === 'string' ? entry.metadata : JSON.stringify(entry.metadata)) : null;
 
+  let loginId = entry.userLoginId || null;
+  if (!loginId) {
+    if (entry.userName === 'admin' || entry.userNik === 'DMJ-2024-001' || (entry.userName && entry.userName.toLowerCase().includes('galih primananda'))) {
+      loginId = 'admin';
+    } else if (entry.userNik) {
+      try {
+        const u: any = db.prepare('SELECT u.username FROM user_accounts u JOIN employees e ON u.employee_id = e.id WHERE e.nik = ? OR e.id = ? LIMIT 1;').get(entry.userNik, entry.userNik);
+        if (u?.username) loginId = u.username;
+      } catch (e) {}
+    }
+    if (!loginId && entry.userName) {
+      try {
+        const u: any = db.prepare('SELECT username FROM user_accounts WHERE LOWER(username) = ? LIMIT 1;').get(entry.userName.toLowerCase());
+        if (u?.username) loginId = u.username;
+      } catch (e) {}
+    }
+    if (!loginId) {
+      loginId = entry.userName?.toLowerCase()?.includes('system') ? 'system' : (entry.userName || 'admin');
+    }
+  }
+
+  let sanitizedDetails = entry.details || '';
+  if (entry.userNik && sanitizedDetails.includes(entry.userNik)) {
+    sanitizedDetails = sanitizedDetails.replace(new RegExp(`\\(?${entry.userNik}\\)?`, 'g'), `(ID: ${loginId})`).replace(/\s+/g, ' ');
+  }
+
   const stmt = db.prepare(`
     INSERT INTO audit_logs (
       action, entity, entityId, details,
-      userName, userNik, userRole, module,
+      userName, userNik, userLoginId, userRole, module,
       ipAddress, status, metadata, timestamp
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
   `);
 
   stmt.run(
     entry.action || 'ACTIVITY',
     entry.entity || 'SYSTEM',
     entry.entityId || null,
-    entry.details || '',
+    sanitizedDetails,
     entry.userName || 'System',
     entry.userNik || null,
+    loginId,
     entry.userRole || 'system',
     entry.module || 'SYSTEM',
     entry.ipAddress || '127.0.0.1',
@@ -1480,11 +1509,12 @@ export function getAuditLogsPaginated({
     whereClauses.push(`(
       LOWER(details) LIKE ? OR
       LOWER(userName) LIKE ? OR
+      LOWER(COALESCE(userLoginId, '')) LIKE ? OR
       LOWER(COALESCE(userNik, '')) LIKE ? OR
       LOWER(action) LIKE ? OR
       LOWER(COALESCE(ipAddress, '')) LIKE ?
     )`);
-    params.push(term, term, term, term, term);
+    params.push(term, term, term, term, term, term);
   }
 
   if (module && module !== 'ALL') {
@@ -1515,8 +1545,42 @@ export function getAuditLogsPaginated({
     LIMIT ? OFFSET ?;
   `).all(...params, safeLimit, offset) as any[];
 
+  const mappedRows = rows.map((r: any) => {
+    let loginId = r.userLoginId;
+    if (!loginId) {
+      if (r.userName === 'admin' || r.userNik === 'DMJ-2024-001' || (r.userName && r.userName.toLowerCase().includes('galih primananda'))) {
+        loginId = 'admin';
+      } else if (r.userNik) {
+        try {
+          const u: any = db.prepare('SELECT u.username FROM user_accounts u JOIN employees e ON u.employee_id = e.id WHERE e.nik = ? OR e.id = ? LIMIT 1;').get(r.userNik, r.userNik);
+          if (u?.username) loginId = u.username;
+        } catch (e) {}
+      }
+      if (!loginId && r.userName) {
+        try {
+          const u: any = db.prepare('SELECT username FROM user_accounts WHERE LOWER(username) = ? LIMIT 1;').get(r.userName.toLowerCase());
+          if (u?.username) loginId = u.username;
+        } catch (e) {}
+      }
+      if (!loginId) {
+        loginId = r.userName?.toLowerCase()?.includes('system') ? 'system' : (r.userName || 'admin');
+      }
+    }
+
+    let sanitizedDetails = r.details || '';
+    if (r.userNik && sanitizedDetails.includes(r.userNik)) {
+      sanitizedDetails = sanitizedDetails.replace(new RegExp(`\\(?${r.userNik}\\)?`, 'g'), `(ID: ${loginId})`).replace(/\s+/g, ' ');
+    }
+
+    return {
+      ...r,
+      userLoginId: loginId,
+      details: sanitizedDetails
+    };
+  });
+
   return {
-    logs: rows,
+    logs: mappedRows,
     pagination: {
       page: safePage,
       limit: safeLimit,
