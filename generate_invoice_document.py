@@ -248,6 +248,7 @@ def build_invoice(docx_path=None):
         "Pengadaan & Implementasi Prime HRIS Enterprise (Paket Komplit Full Suite)\n"
         "• Modul Presensi Biometrik Selfie Geotag GPS Native Anti-Fake, Corporate WiFi Gate & Dinas Luar\n"
         "• Multi-Tier Approval Hub, Mobile Version Android (PWA), & Live Cloud Staging dmj.primeprojectx.net\n"
+        "• Note: Sisa pelunasan Termin II sebesar Rp 1.750.000,- ditagihkan pasca-UAT 100% & BAST Final\n"
         "• Evaluasi BAP-50 No. 008/BAP-50/PIS-DMJ/XI/2026 sesuai Pasal 2 Ayat 2 PKS"
     )
     r_t1_d.font.size = Pt(6.8)

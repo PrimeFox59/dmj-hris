@@ -333,6 +333,8 @@ export interface AttendanceRecord {
   approvedBy?: string;
   approvalDate?: string;
   approvalNote?: string;
+  deductionWaived?: boolean; // True jika disetujui HR tanpa potongan denda (tetap dihitung terlambat)
+  isLateDeductionWaived?: boolean;
   isEarlyCheckOut?: boolean;
   earlyCheckOutMinutes?: number;
   earlyCheckOutReason?: string;
@@ -421,6 +423,8 @@ export interface ApprovalItem {
   reviewedBy?: string;
   reviewedAt?: string;
   reviewNote?: string;
+  deductionWaived?: boolean; // Pilihan persetujuan keterlambatan: true = tanpa potongan denda, false = tetap dipotong
+  waiveLateDeduction?: boolean;
   coveredByQuotaDays?: number;
   unpaidLeaveDays?: number;
   isOverQuota?: boolean;
