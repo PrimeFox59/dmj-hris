@@ -54,15 +54,22 @@ function computeNextSequentialLoginId(empList: Employee[]): string {
   let maxD = 0;
   for (const emp of empList) {
     const rawId = emp.loginId || '';
-    const match = rawId.match(/^d(\d+)$/i);
+    const match = rawId.match(/^d(\d{1,4})$/i);
     if (match) {
       const num = parseInt(match[1], 10);
-      if (!isNaN(num) && num > maxD) {
+      if (!isNaN(num) && num > maxD && num < 1000) {
         maxD = num;
       }
     }
+    const matchEmp = emp.id.match(/^EMP-(\d{1,4})$/i);
+    if (matchEmp) {
+      const numEmp = parseInt(matchEmp[1], 10);
+      if (!isNaN(numEmp) && numEmp > maxD && numEmp < 1000) {
+        maxD = numEmp;
+      }
+    }
   }
-  const nextNum = maxD > 0 ? maxD + 1 : (empList.length > 0 ? empList.length + 1 : 1);
+  const nextNum = maxD > 0 ? maxD + 1 : 1;
   return `d${String(nextNum).padStart(3, '0')}`;
 }
 
@@ -257,7 +264,22 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
     setEditingEmployee(emp);
     const nextSuggested = computeNextSequentialLoginId(employees);
     setSuggestedLoginId(nextSuggested);
-    setLoginId(emp.loginId || (emp.id === 'EMP-001' ? 'admin' : `d${String(emp.id.replace(/\D/g, '')).padStart(3, '0')}`));
+    let fallbackLoginId = 'd001';
+    if (emp.loginId && emp.loginId.match(/^d\d{1,4}$/i)) {
+      fallbackLoginId = emp.loginId;
+    } else if (emp.loginId) {
+      fallbackLoginId = emp.loginId;
+    } else if (emp.id === 'EMP-001') {
+      fallbackLoginId = 'admin';
+    } else {
+      const matchEmpNum = emp.id.match(/^EMP-(\d{1,4})$/i);
+      if (matchEmpNum && Number(matchEmpNum[1]) < 1000) {
+        fallbackLoginId = `d${String(matchEmpNum[1]).padStart(3, '0')}`;
+      } else {
+        fallbackLoginId = nextSuggested;
+      }
+    }
+    setLoginId(fallbackLoginId);
     setLoginIdError(null);
     setSaveError(null);
     setNik(emp.nik);
@@ -302,8 +324,11 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
     setIsSaving(true);
     setSaveError(null);
 
+    const numMatch = cleanLoginId.match(/^d(\d{1,4})$/i);
+    const newEmpId = numMatch ? `EMP-${String(numMatch[1]).padStart(3, '0')}` : `EMP-${Date.now()}`;
+
     const empData: Employee = {
-      id: editingEmployee ? editingEmployee.id : `EMP-${Date.now()}`,
+      id: editingEmployee ? editingEmployee.id : newEmpId,
       loginId: cleanLoginId,
       nik,
       name,
@@ -1193,34 +1218,28 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
             </div>
 
             <form onSubmit={handleSave} className="space-y-4 text-xs">
-              {/* Alert Error Server / Duplikat */}
               {saveError && (
-                <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center gap-2 animate-in fade-in">
+                <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
                   <span className="font-semibold">{saveError}</span>
                 </div>
               )}
 
-              {/* 1. IDENTITAS & KREDENSIAL LOGIN */}
-              <div className="p-3.5 rounded-2xl bg-slate-50/80 border border-slate-200/80 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5 font-mono-code">
-                    <KeyRound className="w-3.5 h-3.5 text-indigo-600" />
-                    Identitas & Kredensial Akun
-                  </span>
-                  <span className="text-[10px] font-mono-code text-indigo-700 bg-indigo-50 border border-indigo-200/60 px-2 py-0.5 rounded-md font-bold">
-                    Otorisasi Terpusat
-                  </span>
+              {/* Seksi 1: Data Akun & Profil */}
+              <div className="space-y-2.5">
+                <div className="text-[11px] font-bold text-slate-800 pb-1.5 border-b border-slate-100 flex items-center gap-1.5">
+                  <KeyRound className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Data Akun & Profil</span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="text-[10px] font-bold text-slate-600 uppercase">Nomor Induk Karyawan (NIK)</label>
                     <input
                       type="text"
                       value={nik}
                       onChange={e => setNik(e.target.value)}
-                      className="w-full glass-input rounded-xl px-3 py-2 font-mono-code mt-1 text-slate-900 bg-white"
+                      className="w-full glass-input rounded-xl px-3 py-2 font-mono-code mt-1 text-slate-900 bg-white border border-slate-200"
                       placeholder="PRIME-2026-..."
                       required
                     />
@@ -1228,9 +1247,7 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
 
                   <div>
                     <div className="flex items-center justify-between">
-                      <label className="text-[10px] font-bold text-slate-700 uppercase flex items-center gap-1">
-                        <span>ID Login Akun</span>
-                      </label>
+                      <label className="text-[10px] font-bold text-slate-600 uppercase">ID Login Akun</label>
                       {suggestedLoginId && (
                         <button
                           type="button"
@@ -1238,8 +1255,8 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                             setLoginId(suggestedLoginId);
                             setLoginIdError(null);
                           }}
-                          className="text-[9.5px] font-mono-code font-bold text-indigo-700 bg-indigo-100 hover:bg-indigo-200 border border-indigo-300 px-2 py-0.5 rounded transition cursor-pointer"
-                          title="Klik untuk gunakan rekomendasi ID urutan berikutnya"
+                          className="text-[9.5px] font-mono-code font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-1.5 py-0.5 rounded transition cursor-pointer"
+                          title="Gunakan rekomendasi urutan sistem"
                         >
                           Saran: {suggestedLoginId}
                         </button>
@@ -1253,51 +1270,31 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                         setLoginId(val);
                         setLoginIdError(null);
                       }}
-                      placeholder={suggestedLoginId || 'contoh: d154'}
+                      placeholder={suggestedLoginId || 'd154'}
                       className={`w-full glass-input rounded-xl px-3 py-2 font-mono-code font-bold text-xs mt-1 bg-white ${
                         isLoginIdDuplicate || loginIdError
                           ? 'border-rose-400 bg-rose-50/40 text-rose-900 focus:border-rose-500'
-                          : 'border-slate-200 text-indigo-900 focus:border-indigo-500'
+                          : 'border-slate-200 text-slate-900 focus:border-indigo-500'
                       }`}
                       required
                     />
-                    {isLoginIdDuplicate ? (
-                      <p className="text-[10px] text-rose-600 font-semibold mt-1 flex items-center gap-1">
-                        <span>❌ ID '{loginId}' sudah terdaftar. Gunakan ID lain.</span>
-                      </p>
-                    ) : loginIdError ? (
-                      <p className="text-[10px] text-rose-600 font-semibold mt-1 flex items-center gap-1">
-                        <span>❌ {loginIdError}</span>
-                      </p>
-                    ) : loginId.trim() ? (
-                      <p className="text-[10px] text-emerald-600 font-medium mt-1 flex items-center gap-1">
-                        <span>✅ ID Login tersedia</span>
-                      </p>
-                    ) : null}
+                    {isLoginIdDuplicate && (
+                      <span className="text-[9.5px] text-rose-600 font-medium mt-1 block">
+                        ❌ ID '{loginId}' sudah terdaftar. Gunakan ID lain.
+                      </span>
+                    )}
                   </div>
+                </div>
 
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="text-[10px] font-bold text-slate-600 uppercase">Nama Lengkap & Gelar</label>
                     <input
                       type="text"
                       value={name}
                       onChange={e => setName(e.target.value)}
-                      className="w-full glass-input rounded-xl px-3 py-2 font-bold mt-1 text-slate-900 bg-white"
-                      placeholder="Nama lengkap & gelar"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-0.5">
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-600 uppercase">Email Perusahaan</label>
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={e => setEmail(e.target.value)}
-                      className="w-full glass-input rounded-xl px-3 py-2 mt-1 text-slate-900 bg-white"
-                      placeholder="nama@primeprojectx.net"
+                      className="w-full glass-input rounded-xl px-3 py-2 font-bold mt-1 text-slate-900 bg-white border border-slate-200"
+                      placeholder="Nama lengkap"
                       required
                     />
                   </div>
@@ -1307,55 +1304,58 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                       type="text"
                       value={phone}
                       onChange={e => setPhone(e.target.value)}
-                      className="w-full glass-input rounded-xl px-3 py-2 font-mono-code mt-1 text-slate-900 bg-white"
+                      className="w-full glass-input rounded-xl px-3 py-2 font-mono-code mt-1 text-slate-900 bg-white border border-slate-200"
                       placeholder="+62 8..."
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-600 uppercase">Email Perusahaan</label>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={e => setEmail(e.target.value)}
+                      className="w-full glass-input rounded-xl px-3 py-2 mt-1 text-slate-900 bg-white border border-slate-200"
+                      placeholder="nama@primeprojectx.net"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-600 uppercase">Departemen</label>
+                    <input
+                      type="text"
+                      value={department}
+                      onChange={e => setDepartment(e.target.value)}
+                      className="w-full glass-input rounded-xl px-3 py-2 mt-1 bg-white border border-slate-200 text-slate-900"
                       required
                     />
                   </div>
                 </div>
               </div>
 
-              {/* 2. JABATAN & HAK AKSES SISTEM (RBAC) */}
-              <div className="p-3.5 rounded-2xl bg-indigo-50/50 border border-indigo-200/80 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-indigo-950 uppercase tracking-wider flex items-center gap-1.5 font-mono-code">
-                    <Shield className="w-3.5 h-3.5 text-indigo-600" />
-                    Jabatan, Departemen & Hak Akses (RBAC)
-                  </span>
-                  <span className="text-[10px] font-black font-mono-code text-indigo-700 bg-white px-2 py-0.5 rounded-md border border-indigo-200">
-                    {systemRole === 'superuser' ? '👑 FULL ACCESS' : systemRole === 'finance' ? '💰 FINANCE' : (systemRole === 'admin' || systemRole === 'hr') ? '🛡️ HR & MANAGEMENT' : '👤 PERSONAL SCOPE'}
-                  </span>
+              {/* Seksi 2: Penugasan & Hak Akses */}
+              <div className="space-y-2.5 pt-1">
+                <div className="text-[11px] font-bold text-slate-800 pb-1.5 border-b border-slate-100 flex items-center gap-1.5">
+                  <Shield className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Penugasan & Hak Akses</span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="text-[10px] font-bold text-slate-700 uppercase">Departemen</label>
-                    <input
-                      type="text"
-                      value={department}
-                      onChange={e => setDepartment(e.target.value)}
-                      className="w-full glass-input rounded-xl px-3 py-2 mt-1 bg-white border border-indigo-200 text-slate-900"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-700 uppercase">Jabatan / Posisi</label>
+                    <label className="text-[10px] font-bold text-slate-600 uppercase">Jabatan / Posisi</label>
                     <input
                       type="text"
                       value={position}
                       onChange={e => setPosition(e.target.value)}
-                      className="w-full glass-input rounded-xl px-3 py-2 mt-1 bg-white border border-indigo-200 text-slate-900"
+                      className="w-full glass-input rounded-xl px-3 py-2 mt-1 bg-white border border-slate-200 text-slate-900"
                       required
                     />
                   </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="text-[10px] font-bold text-slate-700 uppercase flex items-center justify-between">
-                      <span>Tingkat Akses (RBAC)</span>
-                      <span className="text-[9px] font-mono-code text-indigo-600 font-semibold">Security Scope</span>
-                    </label>
+                    <label className="text-[10px] font-bold text-slate-600 uppercase">Tingkat Akses (RBAC)</label>
                     <select
                       value={systemRole === 'admin' ? 'hr' : systemRole}
                       onChange={e => {
@@ -1369,22 +1369,21 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                           setRole('HR_Manager');
                         }
                       }}
-                      className="w-full glass-input rounded-xl px-3 py-2 font-bold text-slate-900 mt-1 bg-white border border-indigo-200 focus:border-indigo-500"
+                      className="w-full glass-input rounded-xl px-3 py-2 font-bold text-slate-900 mt-1 bg-white border border-slate-200"
                     >
-                      <option value="staff">👤 Staff Biasa (Hanya Akses Data Sendiri)</option>
-                      <option value="hr">🛡️ HR (Karyawan, Presensi, Approval & Master Data)</option>
-                      <option value="finance">💰 Finance (Otoritas Penuh Penggajian & Payroll)</option>
+                      <option value="staff">👤 Staff Biasa</option>
+                      <option value="hr">🛡️ HR Manager</option>
+                      <option value="finance">💰 Finance & Payroll</option>
                       {(isSuperuser || editingEmployee?.systemRole === 'superuser') && (
-                        <option value="superuser">👑 Superuser (Direktur & Hak Akses Penuh)</option>
+                        <option value="superuser">👑 Superuser</option>
                       )}
                     </select>
                   </div>
+                </div>
 
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="text-[10px] font-bold text-slate-700 uppercase flex items-center justify-between">
-                      <span>Role Jabatan Organisasi</span>
-                      <span className="text-[9px] font-mono-code text-orange-600 font-semibold">Hierarchy</span>
-                    </label>
+                    <label className="text-[10px] font-bold text-slate-600 uppercase">Role Jabatan</label>
                     <select
                       value={role}
                       onChange={e => {
@@ -1396,83 +1395,75 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                           setSystemRole('finance');
                         }
                       }}
-                      className="w-full glass-input rounded-xl px-3 py-2 font-bold text-orange-600 mt-1 bg-white border border-indigo-200 focus:border-orange-500"
+                      className="w-full glass-input rounded-xl px-3 py-2 font-bold text-slate-900 mt-1 bg-white border border-slate-200"
                     >
-                      <option value="Employee">Employee (Staff / Teknis Lapangan)</option>
-                      <option value="Finance">Finance & Payroll Manager</option>
+                      <option value="Employee">Employee (Staff)</option>
+                      <option value="Finance">Finance Manager</option>
                       <option value="HR_Manager">HR Manager</option>
                       <option value="Project_Manager">Project Manager</option>
-                      <option value="Director">Director / Superadmin</option>
+                      <option value="Director">Director</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-600 uppercase">Status Akun</label>
+                    <select
+                      value={employeeStatus}
+                      disabled={editingEmployee?.id === 'EMP-001'}
+                      onChange={e => setEmployeeStatus(e.target.value as 'ACTIVE' | 'INACTIVE')}
+                      className="w-full glass-input rounded-xl px-3 py-2 font-bold text-slate-900 mt-1 bg-white border border-slate-200"
+                    >
+                      <option value="ACTIVE">🟢 Aktif</option>
+                      <option value="INACTIVE">🔴 Non-Aktif / Resign</option>
+                    </select>
+                  </div>
+                </div>
+
+                {employeeStatus === 'INACTIVE' && (
+                  <div>
+                    <label className="text-[10px] font-bold text-rose-700 uppercase">Alasan Non-Aktif</label>
+                    <input
+                      type="text"
+                      placeholder="Contoh: Resign resmi, Habis Kontrak, Mutasi..."
+                      value={inactiveReason}
+                      onChange={e => setInactiveReason(e.target.value)}
+                      className="w-full glass-input rounded-xl px-3 py-2 mt-1 bg-white border border-rose-300 text-slate-900"
+                    />
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-600 uppercase">Tipe Kontrak</label>
+                    <select
+                      value={employmentType}
+                      onChange={e => setEmploymentType(e.target.value as any)}
+                      className="w-full glass-input rounded-xl px-3 py-2 mt-1 bg-white border border-slate-200"
+                    >
+                      <option value="TETAP">Karyawan Tetap (PKWTT)</option>
+                      <option value="KONTRAK">Karyawan Kontrak (PKWT)</option>
+                      <option value="PROJECT_HIRE">Project-Based Hire</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-600 uppercase">Alokasi Proyek Utama</label>
+                    <select
+                      value={assignedProjectId}
+                      onChange={e => setAssignedProjectId(e.target.value)}
+                      className="w-full glass-input rounded-xl px-3 py-2 font-mono-code mt-1 bg-white border border-slate-200"
+                    >
+                      {projects.map(p => (
+                        <option key={p.id} value={p.id}>{p.code} - {p.name.substring(0, 22)}...</option>
+                      ))}
                     </select>
                   </div>
                 </div>
               </div>
 
-              {/* 3. PENUGASAN, STATUS & KONTRAK */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="text-[10px] font-bold text-slate-600 uppercase">Status Akun</label>
-                  <select
-                    value={employeeStatus}
-                    disabled={editingEmployee?.id === 'EMP-001'}
-                    onChange={e => setEmployeeStatus(e.target.value as 'ACTIVE' | 'INACTIVE')}
-                    className="w-full glass-input rounded-xl px-3 py-2 font-bold text-slate-900 mt-1 bg-white border"
-                  >
-                    <option value="ACTIVE">🟢 Aktif (Bisa Login & Presensi)</option>
-                    <option value="INACTIVE">🔴 Non-Aktif / Resign</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-bold text-slate-600 uppercase">Tipe Kontrak</label>
-                  <select
-                    value={employmentType}
-                    onChange={e => setEmploymentType(e.target.value as any)}
-                    className="w-full glass-input rounded-xl px-3 py-2 mt-1 bg-white border"
-                  >
-                    <option value="TETAP">Karyawan Tetap (PKWTT)</option>
-                    <option value="KONTRAK">Karyawan Kontrak (PKWT)</option>
-                    <option value="PROJECT_HIRE">Project-Based Hire</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-bold text-slate-600 uppercase">Alokasi Proyek Utama</label>
-                  <select
-                    value={assignedProjectId}
-                    onChange={e => setAssignedProjectId(e.target.value)}
-                    className="w-full glass-input rounded-xl px-3 py-2 font-mono-code mt-1 bg-white border"
-                  >
-                    {projects.map(p => (
-                      <option key={p.id} value={p.id}>{p.code} - {p.name.substring(0, 20)}...</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {employeeStatus === 'INACTIVE' && (
-                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200">
-                  <label className="text-[10px] font-bold text-rose-800 uppercase">Alasan Non-Aktif / Catatan Resign</label>
-                  <input
-                    type="text"
-                    placeholder="Contoh: Resign resmi, Habis Kontrak, Mutasi..."
-                    value={inactiveReason}
-                    onChange={e => setInactiveReason(e.target.value)}
-                    className="w-full glass-input rounded-xl px-3 py-2 mt-1 bg-white border border-rose-300 text-slate-900"
-                  />
-                </div>
-              )}
-
-              {/* 4. DOMISILI & CUTI */}
-              <div className="p-3.5 rounded-2xl bg-purple-50/50 border border-purple-200/80 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-purple-950 uppercase tracking-wider flex items-center gap-1.5 font-mono-code">
-                    <Plane className="w-3.5 h-3.5 text-purple-600" />
-                    Domisili Kerja & Hak Cuti
-                  </span>
-                  <span className="text-[10px] font-bold font-mono-code text-purple-700 bg-white px-2 py-0.5 rounded-md border border-purple-200">
-                    {workLocationTypeForm === 'NON_LOKAL' ? '✈️ NON-LOKAL (ROSTER)' : '📍 LOKAL (TAHUNAN)'}
-                  </span>
+              {/* Seksi 3: Kebijakan Cuti & Domisili */}
+              <div className="space-y-2.5 pt-1">
+                <div className="text-[11px] font-bold text-slate-800 pb-1.5 border-b border-slate-100 flex items-center gap-1.5">
+                  <Plane className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Kebijakan Cuti & Domisili</span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1481,10 +1472,10 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                     <select
                       value={workLocationTypeForm}
                       onChange={e => setWorkLocationTypeForm(e.target.value as WorkLocationType)}
-                      className="w-full glass-input rounded-xl px-3 py-2 font-bold text-slate-800 mt-1 bg-white"
+                      className="w-full glass-input rounded-xl px-3 py-2 font-bold text-slate-800 mt-1 bg-white border border-slate-200"
                     >
-                      <option value="LOKAL">📍 Lokal (Standar Cuti Tahunan)</option>
-                      <option value="NON_LOKAL">✈️ Non-Lokal (Jatah Cuti Roster 3 Bulanan)</option>
+                      <option value="LOKAL">📍 Lokal (Cuti Tahunan)</option>
+                      <option value="NON_LOKAL">✈️ Non-Lokal (Roster)</option>
                     </select>
                   </div>
                   <div>
@@ -1493,7 +1484,7 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                       type="number"
                       value={leaveQuota}
                       onChange={e => setLeaveQuota(Number(e.target.value))}
-                      className="w-full glass-input rounded-xl px-3 py-2 font-mono-code font-bold mt-1 bg-white"
+                      className="w-full glass-input rounded-xl px-3 py-2 font-mono-code font-bold mt-1 bg-white border border-slate-200"
                       min={0}
                       max={30}
                       required
@@ -1502,7 +1493,7 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                 </div>
 
                 {workLocationTypeForm === 'NON_LOKAL' && (
-                  <div className="grid grid-cols-3 gap-3 pt-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="text-[10px] font-bold text-slate-600 uppercase">Kuota Roster (Hari)</label>
                       <input
@@ -1511,7 +1502,7 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                         max={30}
                         value={rosterQuotaInput}
                         onChange={e => setRosterQuotaInput(Number(e.target.value))}
-                        className="w-full glass-input rounded-xl px-3 py-2 font-mono-code font-bold text-purple-900 mt-1 bg-white"
+                        className="w-full glass-input rounded-xl px-3 py-2 font-mono-code font-bold mt-1 bg-white border border-slate-200"
                       />
                     </div>
                     <div>
@@ -1522,108 +1513,88 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                         max={12}
                         value={rosterCycleMonthsInput}
                         onChange={e => setRosterCycleMonthsInput(Number(e.target.value))}
-                        className="w-full glass-input rounded-xl px-3 py-2 font-mono-code font-bold mt-1 bg-white"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-600 uppercase">Jadwal Cuti Berikutnya</label>
-                      <input
-                        type="date"
-                        value={rosterNextDateInput}
-                        onChange={e => setRosterNextDateInput(e.target.value)}
-                        className="w-full glass-input rounded-xl px-3 py-2 font-mono-code text-slate-800 mt-1 bg-white"
+                        className="w-full glass-input rounded-xl px-3 py-2 font-mono-code font-bold mt-1 bg-white border border-slate-200"
                       />
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* 5. PENGATURAN GAJI & REKENING (FINANCE / SUPERUSER) */}
-              {isFinanceOrSuper ? (
-                <div className="p-3.5 rounded-2xl bg-amber-50/50 border border-amber-200/80 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[11px] font-black text-amber-900 uppercase tracking-wider font-mono-code flex items-center gap-1.5">
-                      <Banknote className="w-3.5 h-3.5 text-amber-600" />
-                      Skema Gaji & Rekening Payroll
-                    </p>
-                    <span className="text-[9.5px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full font-mono-code">
-                      HAK AKSES RESMI FINANCE
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-600 uppercase">Gaji Pokok (IDR)</label>
-                      <input
-                        type="number"
-                        step={500000}
-                        value={baseSalary}
-                        onChange={e => setBaseSalary(Number(e.target.value))}
-                        className="w-full glass-input rounded-xl px-3 py-2 font-mono-code font-bold text-slate-900 mt-1 bg-white"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-600 uppercase">Tunjangan Tetap (IDR)</label>
-                      <input
-                        type="number"
-                        step={100000}
-                        value={fixedAllowance}
-                        onChange={e => setFixedAllowance(Number(e.target.value))}
-                        className="w-full glass-input rounded-xl px-3 py-2 font-mono-code mt-1 bg-white"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-600 uppercase">Uang Harian Makan/Transp</label>
-                      <input
-                        type="number"
-                        step={5000}
-                        value={dailyAllowance}
-                        onChange={e => setDailyAllowance(Number(e.target.value))}
-                        className="w-full glass-input rounded-xl px-3 py-2 font-mono-code mt-1 bg-white"
-                        required
-                      />
-                    </div>
-                  </div>
+              {/* Seksi 4: Rekening & Penggajian */}
+              <div className="space-y-2.5 pt-1">
+                <div className="text-[11px] font-bold text-slate-800 pb-1.5 border-b border-slate-100 flex items-center gap-1.5">
+                  <Banknote className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Rekening & Penggajian</span>
                 </div>
-              ) : (
-                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center gap-3 text-xs text-slate-500">
-                  <div className="w-7 h-7 rounded-lg bg-slate-200/80 flex items-center justify-center shrink-0 text-slate-500">
-                    <Lock className="w-3.5 h-3.5" />
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-600 uppercase">Nama Bank</label>
+                    <input
+                      type="text"
+                      value={bankName}
+                      onChange={e => setBankName(e.target.value)}
+                      className="w-full glass-input rounded-xl px-3 py-2 mt-1 bg-white border border-slate-200"
+                      required
+                    />
                   </div>
                   <div>
-                    <span className="font-bold text-slate-700 block">Kerahasiaan Data Penggajian Terproteksi</span>
-                    <span className="text-[10px] text-slate-500">
-                      Nominal gaji dan tunjangan hanya dapat diubah oleh otorisasi Keuangan (Finance).
-                    </span>
+                    <label className="text-[10px] font-bold text-slate-600 uppercase">Nomor Rekening</label>
+                    <input
+                      type="text"
+                      value={accountNumber}
+                      onChange={e => setAccountNumber(e.target.value)}
+                      className="w-full glass-input rounded-xl px-3 py-2 font-mono-code mt-1 bg-white border border-slate-200"
+                      required
+                    />
                   </div>
                 </div>
-              )}
 
-              {/* Rekening Bank Payroll */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[10px] font-bold text-slate-600 uppercase">Nama Bank</label>
-                  <input
-                    type="text"
-                    value={bankName}
-                    onChange={e => setBankName(e.target.value)}
-                    className="w-full glass-input rounded-xl px-3 py-2 mt-1 bg-white"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-slate-600 uppercase">Nomor Rekening</label>
-                  <input
-                    type="text"
-                    value={accountNumber}
-                    onChange={e => setAccountNumber(e.target.value)}
-                    className="w-full glass-input rounded-xl px-3 py-2 font-mono-code mt-1 bg-white"
-                    required
-                  />
-                </div>
+                {isFinanceOrSuper && (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-600 uppercase">Gaji Pokok (IDR)</label>
+                        <input
+                          type="number"
+                          step={500000}
+                          value={baseSalary}
+                          onChange={e => setBaseSalary(Number(e.target.value))}
+                          className="w-full glass-input rounded-xl px-3 py-2 font-mono-code font-bold mt-1 bg-white border border-slate-200"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-600 uppercase">Tunjangan Tetap (IDR)</label>
+                        <input
+                          type="number"
+                          step={100000}
+                          value={fixedAllowance}
+                          onChange={e => setFixedAllowance(Number(e.target.value))}
+                          className="w-full glass-input rounded-xl px-3 py-2 font-mono-code mt-1 bg-white border border-slate-200"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-600 uppercase">Uang Harian (IDR)</label>
+                        <input
+                          type="number"
+                          step={5000}
+                          value={dailyAllowance}
+                          onChange={e => setDailyAllowance(Number(e.target.value))}
+                          className="w-full glass-input rounded-xl px-3 py-2 font-mono-code mt-1 bg-white border border-slate-200"
+                          required
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
 
+              {/* Action Buttons */}
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"

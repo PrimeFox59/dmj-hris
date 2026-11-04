@@ -564,7 +564,16 @@ export function getAllData() {
     if (!emp.loginId) {
       if (emp.id === 'EMP-001') emp.loginId = 'admin';
       else if (userMap.has(emp.id)) emp.loginId = userMap.get(emp.id);
-      else emp.loginId = `d${String(emp.id.replace(/\D/g, '')).padStart(3, '0')}`;
+      else {
+        const m = emp.id.match(/^EMP-(\d{1,4})$/i);
+        if (m && Number(m[1]) < 1000) {
+          emp.loginId = `d${String(m[1]).padStart(3, '0')}`;
+        } else {
+          const nikDigits = String(emp.nik || '').replace(/\D/g, '');
+          const fallbackNum = nikDigits.slice(-3) || '001';
+          emp.loginId = `d${fallbackNum.padStart(3, '0')}`;
+        }
+      }
     }
     // REA Optimization: Strip heavy 4-pose base64 biometric samples from general bootstrap
     // Keep enrollment status and quality score. Samples are fetched on-demand via gallery API.
