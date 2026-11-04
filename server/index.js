@@ -1246,6 +1246,9 @@ const server = http.createServer(async (req, res) => {
         }
         const clientIp = getClientIp(req);
         const result = saveEmployee(body, { ...user, clientIp });
+        if (!result || result.success === false) {
+          return sendJson(400, result || { success: false, error: 'Gagal menyimpan data karyawan' });
+        }
         broadcastRealtimeEvent('EMPLOYEE_SAVED', result.employee || body);
         return sendJson(200, result);
       }

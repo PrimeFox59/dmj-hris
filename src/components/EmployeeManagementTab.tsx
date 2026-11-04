@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Users,
@@ -44,10 +44,26 @@ interface EmployeeManagementTabProps {
   currentUser?: Employee;
   employees: Employee[];
   projects: Project[];
-  onAddEmployee: (emp: Employee) => void;
-  onUpdateEmployee: (emp: Employee) => void;
+  onAddEmployee: (emp: Employee) => void | Promise<any>;
+  onUpdateEmployee: (emp: Employee) => void | Promise<any>;
   onDeleteEmployee: (id: string) => void;
   onImpersonateEmployee?: (emp: Employee) => void;
+}
+
+function computeNextSequentialLoginId(empList: Employee[]): string {
+  let maxD = 0;
+  for (const emp of empList) {
+    const rawId = emp.loginId || '';
+    const match = rawId.match(/^d(\d+)$/i);
+    if (match) {
+      const num = parseInt(match[1], 10);
+      if (!isNaN(num) && num > maxD) {
+        maxD = num;
+      }
+    }
+  }
+  const nextNum = maxD > 0 ? maxD + 1 : (empList.length > 0 ? empList.length + 1 : 1);
+  return `d${String(nextNum).padStart(3, '0')}`;
 }
 
 export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
@@ -165,6 +181,12 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
 
   // Form fields
   const [nik, setNik] = useState('');
+  const [loginId, setLoginId] = useState('');
+  const [suggestedLoginId, setSuggestedLoginId] = useState('');
+  const [loginIdError, setLoginIdError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('+62 8');
@@ -189,8 +211,21 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
   const [employeeStatus, setEmployeeStatus] = useState<'ACTIVE' | 'INACTIVE'>('ACTIVE');
   const [inactiveReason, setInactiveReason] = useState('');
 
+  // Real-time duplicate login ID detection
+  const isLoginIdDuplicate = useMemo(() => {
+    if (!loginId.trim()) return false;
+    const clean = loginId.trim().toLowerCase();
+    const currentId = editingEmployee?.id || '';
+    return employees.some(e => e.id !== currentId && (e.loginId?.trim().toLowerCase() === clean));
+  }, [loginId, editingEmployee, employees]);
+
   const openAddModal = () => {
     setEditingEmployee(null);
+    const nextSuggested = computeNextSequentialLoginId(employees);
+    setSuggestedLoginId(nextSuggested);
+    setLoginId(nextSuggested);
+    setLoginIdError(null);
+    setSaveError(null);
     setNik(`PRIME-2026-${String(employees.length + 1).padStart(3, '0')}`);
     setName('');
     setEmail('');
@@ -220,6 +255,11 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
 
   const openEditModal = (emp: Employee) => {
     setEditingEmployee(emp);
+    const nextSuggested = computeNextSequentialLoginId(employees);
+    setSuggestedLoginId(nextSuggested);
+    setLoginId(emp.loginId || (emp.id === 'EMP-001' ? 'admin' : `d${String(emp.id.replace(/\D/g, '')).padStart(3, '0')}`));
+    setLoginIdError(null);
+    setSaveError(null);
     setNik(emp.nik);
     setName(emp.name);
     setEmail(emp.email);
@@ -247,11 +287,24 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
     setModalOpen(true);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    const cleanLoginId = loginId.trim().toLowerCase();
+    if (!cleanLoginId) {
+      setLoginIdError('ID Login wajib diisi.');
+      return;
+    }
+    if (isLoginIdDuplicate) {
+      setLoginIdError(`ID Login '${loginId}' sudah terdaftar di sistem. Gunakan ID lain.`);
+      return;
+    }
+
+    setIsSaving(true);
+    setSaveError(null);
 
     const empData: Employee = {
       id: editingEmployee ? editingEmployee.id : `EMP-${Date.now()}`,
+      loginId: cleanLoginId,
       nik,
       name,
       email,
@@ -289,12 +342,18 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
       }
     };
 
-    if (editingEmployee) {
-      onUpdateEmployee(empData);
-    } else {
-      onAddEmployee(empData);
+    try {
+      if (editingEmployee) {
+        await onUpdateEmployee(empData);
+      } else {
+        await onAddEmployee(empData);
+      }
+      setModalOpen(false);
+    } catch (err: any) {
+      setSaveError(err.message || 'Gagal menyimpan data karyawan');
+    } finally {
+      setIsSaving(false);
     }
-    setModalOpen(false);
   };
 
   const handleCopyText = (text: string, key: string) => {
@@ -1134,92 +1193,168 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
             </div>
 
             <form onSubmit={handleSave} className="space-y-4 text-xs">
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="text-[10px] font-bold text-slate-600 uppercase">Nomor Induk Karyawan (NIK)</label>
-                  <input
-                    type="text"
-                    value={nik}
-                    onChange={e => setNik(e.target.value)}
-                    className="w-full glass-input rounded-xl px-3 py-2 font-mono-code"
-                    required
-                  />
+              {/* Alert Error Server / Duplikat */}
+              {saveError && (
+                <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center gap-2 animate-in fade-in">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span className="font-semibold">{saveError}</span>
                 </div>
-                <div className="sm:col-span-2">
-                  <label className="text-[10px] font-bold text-slate-600 uppercase">Nama Lengkap & Gelar</label>
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={e => setName(e.target.value)}
-                    className="w-full glass-input rounded-xl px-3 py-2 font-bold"
-                    required
-                  />
+              )}
+
+              {/* 1. IDENTITAS & KREDENSIAL LOGIN */}
+              <div className="p-3.5 rounded-2xl bg-slate-50/80 border border-slate-200/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5 font-mono-code">
+                    <KeyRound className="w-3.5 h-3.5 text-indigo-600" />
+                    Identitas & Kredensial Akun
+                  </span>
+                  <span className="text-[10px] font-mono-code text-indigo-700 bg-indigo-50 border border-indigo-200/60 px-2 py-0.5 rounded-md font-bold">
+                    Otorisasi Terpusat
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-600 uppercase">Nomor Induk Karyawan (NIK)</label>
+                    <input
+                      type="text"
+                      value={nik}
+                      onChange={e => setNik(e.target.value)}
+                      className="w-full glass-input rounded-xl px-3 py-2 font-mono-code mt-1 text-slate-900 bg-white"
+                      placeholder="PRIME-2026-..."
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] font-bold text-slate-700 uppercase flex items-center gap-1">
+                        <span>ID Login Akun</span>
+                      </label>
+                      {suggestedLoginId && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLoginId(suggestedLoginId);
+                            setLoginIdError(null);
+                          }}
+                          className="text-[9.5px] font-mono-code font-bold text-indigo-700 bg-indigo-100 hover:bg-indigo-200 border border-indigo-300 px-2 py-0.5 rounded transition cursor-pointer"
+                          title="Klik untuk gunakan rekomendasi ID urutan berikutnya"
+                        >
+                          Saran: {suggestedLoginId}
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      type="text"
+                      value={loginId}
+                      onChange={e => {
+                        const val = e.target.value.toLowerCase().replace(/\s+/g, '');
+                        setLoginId(val);
+                        setLoginIdError(null);
+                      }}
+                      placeholder={suggestedLoginId || 'contoh: d154'}
+                      className={`w-full glass-input rounded-xl px-3 py-2 font-mono-code font-bold text-xs mt-1 bg-white ${
+                        isLoginIdDuplicate || loginIdError
+                          ? 'border-rose-400 bg-rose-50/40 text-rose-900 focus:border-rose-500'
+                          : 'border-slate-200 text-indigo-900 focus:border-indigo-500'
+                      }`}
+                      required
+                    />
+                    {isLoginIdDuplicate ? (
+                      <p className="text-[10px] text-rose-600 font-semibold mt-1 flex items-center gap-1">
+                        <span>❌ ID '{loginId}' sudah terdaftar. Gunakan ID lain.</span>
+                      </p>
+                    ) : loginIdError ? (
+                      <p className="text-[10px] text-rose-600 font-semibold mt-1 flex items-center gap-1">
+                        <span>❌ {loginIdError}</span>
+                      </p>
+                    ) : loginId.trim() ? (
+                      <p className="text-[10px] text-emerald-600 font-medium mt-1 flex items-center gap-1">
+                        <span>✅ ID Login tersedia</span>
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-600 uppercase">Nama Lengkap & Gelar</label>
+                    <input
+                      type="text"
+                      value={name}
+                      onChange={e => setName(e.target.value)}
+                      className="w-full glass-input rounded-xl px-3 py-2 font-bold mt-1 text-slate-900 bg-white"
+                      placeholder="Nama lengkap & gelar"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-0.5">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-600 uppercase">Email Perusahaan</label>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={e => setEmail(e.target.value)}
+                      className="w-full glass-input rounded-xl px-3 py-2 mt-1 text-slate-900 bg-white"
+                      placeholder="nama@primeprojectx.net"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-600 uppercase">Nomor WhatsApp / HP</label>
+                    <input
+                      type="text"
+                      value={phone}
+                      onChange={e => setPhone(e.target.value)}
+                      className="w-full glass-input rounded-xl px-3 py-2 font-mono-code mt-1 text-slate-900 bg-white"
+                      placeholder="+62 8..."
+                      required
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[10px] font-bold text-slate-600 uppercase">Email Perusahaan</label>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    className="w-full glass-input rounded-xl px-3 py-2"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-slate-600 uppercase">Nomor WhatsApp / HP</label>
-                  <input
-                    type="text"
-                    value={phone}
-                    onChange={e => setPhone(e.target.value)}
-                    className="w-full glass-input rounded-xl px-3 py-2 font-mono-code"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[10px] font-bold text-slate-600 uppercase">Departemen</label>
-                  <input
-                    type="text"
-                    value={department}
-                    onChange={e => setDepartment(e.target.value)}
-                    className="w-full glass-input rounded-xl px-3 py-2"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] font-bold text-slate-600 uppercase">Jabatan / Posisi</label>
-                  <input
-                    type="text"
-                    value={position}
-                    onChange={e => setPosition(e.target.value)}
-                    className="w-full glass-input rounded-xl px-3 py-2"
-                    required
-                  />
-                </div>
-              </div>
-
-              {/* RBAC System Role & Functional Role Settings */}
-              <div className="p-3.5 rounded-2xl bg-indigo-50/70 border border-indigo-200 space-y-3">
+              {/* 2. JABATAN & HAK AKSES SISTEM (RBAC) */}
+              <div className="p-3.5 rounded-2xl bg-indigo-50/50 border border-indigo-200/80 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-bold text-indigo-950 uppercase tracking-wider flex items-center gap-1.5 font-mono-code">
                     <Shield className="w-3.5 h-3.5 text-indigo-600" />
-                    Hak Akses Sistem (RBAC) & Role Jabatan
+                    Jabatan, Departemen & Hak Akses (RBAC)
                   </span>
-                  <span className="text-[10px] font-black font-mono-code text-indigo-700 bg-white/80 px-2 py-0.5 rounded-md border border-indigo-200">
-                    {systemRole === 'superuser' ? '👑 FULL ACCESS' : systemRole === 'finance' ? '💰 FINANCE & PAYROLL' : (systemRole === 'admin' || systemRole === 'hr') ? '🛡️ HR & MANAGEMENT' : '👤 PERSONAL SCOPE'}
+                  <span className="text-[10px] font-black font-mono-code text-indigo-700 bg-white px-2 py-0.5 rounded-md border border-indigo-200">
+                    {systemRole === 'superuser' ? '👑 FULL ACCESS' : systemRole === 'finance' ? '💰 FINANCE' : (systemRole === 'admin' || systemRole === 'hr') ? '🛡️ HR & MANAGEMENT' : '👤 PERSONAL SCOPE'}
                   </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-700 uppercase">Departemen</label>
+                    <input
+                      type="text"
+                      value={department}
+                      onChange={e => setDepartment(e.target.value)}
+                      className="w-full glass-input rounded-xl px-3 py-2 mt-1 bg-white border border-indigo-200 text-slate-900"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-700 uppercase">Jabatan / Posisi</label>
+                    <input
+                      type="text"
+                      value={position}
+                      onChange={e => setPosition(e.target.value)}
+                      className="w-full glass-input rounded-xl px-3 py-2 mt-1 bg-white border border-indigo-200 text-slate-900"
+                      required
+                    />
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="text-[10px] font-bold text-slate-700 uppercase flex items-center justify-between">
                       <span>Tingkat Akses (RBAC)</span>
-                      <span className="text-[9px] font-mono-code text-indigo-600 font-semibold">Security Level</span>
+                      <span className="text-[9px] font-mono-code text-indigo-600 font-semibold">Security Scope</span>
                     </label>
                     <select
                       value={systemRole === 'admin' ? 'hr' : systemRole}
@@ -1243,18 +1378,12 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                         <option value="superuser">👑 Superuser (Direktur & Hak Akses Penuh)</option>
                       )}
                     </select>
-                    <p className="text-[10px] text-slate-500 mt-1 leading-snug">
-                      {systemRole === 'superuser' && '👑 Superuser memiliki otoritas mutlak seluruh sistem, bypass verifikasi, dan konfigurasi master.'}
-                      {systemRole === 'finance' && '💰 Finance memiliki wewenang penuh atas payroll perusahaan & master skema upah karyawan.'}
-                      {(systemRole === 'admin' || systemRole === 'hr') && '🛡️ HR mengelola data operasional karyawan, approval cuti/izin, timesheet, dan site proyek.'}
-                      {systemRole === 'staff' && '👤 Staff biasa dibatasi ketat hanya dapat melihat profil, absensi, cuti, dan slip gaji sendiri.'}
-                    </p>
                   </div>
 
                   <div>
                     <label className="text-[10px] font-bold text-slate-700 uppercase flex items-center justify-between">
                       <span>Role Jabatan Organisasi</span>
-                      <span className="text-[9px] font-mono-code text-orange-600 font-semibold">Title Hierarchy</span>
+                      <span className="text-[9px] font-mono-code text-orange-600 font-semibold">Hierarchy</span>
                     </label>
                     <select
                       value={role}
@@ -1275,154 +1404,116 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                       <option value="Project_Manager">Project Manager</option>
                       <option value="Director">Director / Superadmin</option>
                     </select>
-                    <p className="text-[10px] text-slate-500 mt-1 leading-snug">
-                      Menentukan titel hierarki fungsional jabatan dan rantai persetujuan berjenjang.
-                    </p>
                   </div>
                 </div>
               </div>
 
-              {/* Status Akun & Akses Login Sistem */}
-              <div className={`p-3.5 rounded-2xl border space-y-2.5 transition-all ${
-                employeeStatus === 'INACTIVE'
-                  ? 'bg-rose-50/70 border-rose-200'
-                  : 'bg-emerald-50/70 border-emerald-200'
-              }`}>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 font-mono-code text-[11px] font-bold">
-                    <Power className={`w-3.5 h-3.5 ${employeeStatus === 'INACTIVE' ? 'text-rose-600' : 'text-emerald-600'}`} />
-                    <span className={employeeStatus === 'INACTIVE' ? 'text-rose-950 uppercase' : 'text-emerald-950 uppercase'}>
-                      Status Keaktifan & Akses Login Sistem
-                    </span>
-                  </div>
-                  <span className={`text-[10px] font-mono-code font-black px-2 py-0.5 rounded-md border ${
-                    employeeStatus === 'INACTIVE'
-                      ? 'bg-rose-100 text-rose-800 border-rose-300'
-                      : 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                  }`}>
-                    {employeeStatus === 'INACTIVE' ? '🔴 NON-AKTIF / RESIGN' : '🟢 AKTIF'}
-                  </span>
+              {/* 3. PENUGASAN, STATUS & KONTRAK */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-600 uppercase">Status Akun</label>
+                  <select
+                    value={employeeStatus}
+                    disabled={editingEmployee?.id === 'EMP-001'}
+                    onChange={e => setEmployeeStatus(e.target.value as 'ACTIVE' | 'INACTIVE')}
+                    className="w-full glass-input rounded-xl px-3 py-2 font-bold text-slate-900 mt-1 bg-white border"
+                  >
+                    <option value="ACTIVE">🟢 Aktif (Bisa Login & Presensi)</option>
+                    <option value="INACTIVE">🔴 Non-Aktif / Resign</option>
+                  </select>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-700 uppercase">Status Akun</label>
-                    <select
-                      value={employeeStatus}
-                      disabled={editingEmployee?.id === 'EMP-001'}
-                      onChange={e => setEmployeeStatus(e.target.value as 'ACTIVE' | 'INACTIVE')}
-                      className="w-full glass-input rounded-xl px-3 py-2 font-bold text-slate-900 mt-1 bg-white border"
-                    >
-                      <option value="ACTIVE">🟢 Aktif (Bisa Login & Presensi)</option>
-                      <option value="INACTIVE">🔴 Non-Aktif / Resign (Terkunci dari Login)</option>
-                    </select>
-                    {editingEmployee?.id === 'EMP-001' && (
-                      <p className="text-[9.5px] text-amber-700 mt-1 font-mono-code">
-                        * Superuser Master tidak dapat dinonaktifkan.
-                      </p>
-                    )}
-                  </div>
-
-                  {employeeStatus === 'INACTIVE' && (
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-700 uppercase">Alasan Non-Aktif / Catatan</label>
-                      <input
-                        type="text"
-                        placeholder="Contoh: Resign resmi, Habis Kontrak, Mutasi..."
-                        value={inactiveReason}
-                        onChange={e => setInactiveReason(e.target.value)}
-                        className="w-full glass-input rounded-xl px-3 py-2 mt-1 bg-white border border-rose-300 text-slate-900"
-                      />
-                    </div>
-                  )}
-                </div>
-                <p className="text-[10px] text-slate-500 leading-snug">
-                  {employeeStatus === 'INACTIVE'
-                    ? '⚠️ Karyawan non-aktif tidak akan bisa login ke web maupun kios presensi biometrik. Seluruh riwayat presensi, slip gaji, dan data master tetap aman tersimpan untuk kebutuhan audit.'
-                    : 'Karyawan aktif berhak login, presensi biometrik, dan mengakses modul sesuai peran hak aksesnya.'}
-                </p>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="text-[10px] font-bold text-slate-600 uppercase">Tipe Kontrak</label>
                   <select
                     value={employmentType}
                     onChange={e => setEmploymentType(e.target.value as any)}
-                    className="w-full glass-input rounded-xl px-3 py-2"
+                    className="w-full glass-input rounded-xl px-3 py-2 mt-1 bg-white border"
                   >
                     <option value="TETAP">Karyawan Tetap (PKWTT)</option>
                     <option value="KONTRAK">Karyawan Kontrak (PKWT)</option>
                     <option value="PROJECT_HIRE">Project-Based Hire</option>
                   </select>
                 </div>
+
                 <div>
                   <label className="text-[10px] font-bold text-slate-600 uppercase">Alokasi Proyek Utama</label>
                   <select
                     value={assignedProjectId}
                     onChange={e => setAssignedProjectId(e.target.value)}
-                    className="w-full glass-input rounded-xl px-3 py-2 font-mono-code"
+                    className="w-full glass-input rounded-xl px-3 py-2 font-mono-code mt-1 bg-white border"
                   >
                     {projects.map(p => (
                       <option key={p.id} value={p.id}>{p.code} - {p.name.substring(0, 20)}...</option>
                     ))}
                   </select>
                 </div>
-                <div>
-                  <label className="text-[10px] font-bold text-slate-600 uppercase">Jatah Cuti Tahunan (Hari)</label>
-                  <input
-                    type="number"
-                    value={leaveQuota}
-                    onChange={e => setLeaveQuota(Number(e.target.value))}
-                    className="w-full glass-input rounded-xl px-3 py-2 font-mono-code font-bold"
-                    min={0}
-                    max={30}
-                    required
-                  />
-                </div>
               </div>
 
-              {/* Work Location & Non-Lokal Roster Leave Settings */}
-              <div className="p-3.5 rounded-2xl bg-purple-50/60 border border-purple-200 space-y-3">
+              {employeeStatus === 'INACTIVE' && (
+                <div className="p-3 rounded-xl bg-rose-50 border border-rose-200">
+                  <label className="text-[10px] font-bold text-rose-800 uppercase">Alasan Non-Aktif / Catatan Resign</label>
+                  <input
+                    type="text"
+                    placeholder="Contoh: Resign resmi, Habis Kontrak, Mutasi..."
+                    value={inactiveReason}
+                    onChange={e => setInactiveReason(e.target.value)}
+                    className="w-full glass-input rounded-xl px-3 py-2 mt-1 bg-white border border-rose-300 text-slate-900"
+                  />
+                </div>
+              )}
+
+              {/* 4. DOMISILI & CUTI */}
+              <div className="p-3.5 rounded-2xl bg-purple-50/50 border border-purple-200/80 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-bold text-purple-950 uppercase tracking-wider flex items-center gap-1.5 font-mono-code">
                     <Plane className="w-3.5 h-3.5 text-purple-600" />
-                    Domisili Kerja & Kebijakan Cuti Roster
+                    Domisili Kerja & Hak Cuti
                   </span>
                   <span className="text-[10px] font-bold font-mono-code text-purple-700 bg-white px-2 py-0.5 rounded-md border border-purple-200">
-                    {workLocationTypeForm === 'NON_LOKAL' ? '✈️ NON-LOKAL' : '📍 LOKAL'}
+                    {workLocationTypeForm === 'NON_LOKAL' ? '✈️ NON-LOKAL (ROSTER)' : '📍 LOKAL (TAHUNAN)'}
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="text-[10px] font-bold text-slate-600 uppercase">Status Domisili</label>
                     <select
                       value={workLocationTypeForm}
                       onChange={e => setWorkLocationTypeForm(e.target.value as WorkLocationType)}
-                      className="w-full glass-input rounded-xl px-3 py-2 font-bold text-slate-800"
+                      className="w-full glass-input rounded-xl px-3 py-2 font-bold text-slate-800 mt-1 bg-white"
                     >
                       <option value="LOKAL">📍 Lokal (Standar Cuti Tahunan)</option>
                       <option value="NON_LOKAL">✈️ Non-Lokal (Jatah Cuti Roster 3 Bulanan)</option>
                     </select>
                   </div>
-                  {workLocationTypeForm === 'NON_LOKAL' && (
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-600 uppercase">Jatah Cuti Tahunan (Hari)</label>
+                    <input
+                      type="number"
+                      value={leaveQuota}
+                      onChange={e => setLeaveQuota(Number(e.target.value))}
+                      className="w-full glass-input rounded-xl px-3 py-2 font-mono-code font-bold mt-1 bg-white"
+                      min={0}
+                      max={30}
+                      required
+                    />
+                  </div>
+                </div>
+
+                {workLocationTypeForm === 'NON_LOKAL' && (
+                  <div className="grid grid-cols-3 gap-3 pt-1">
                     <div>
-                      <label className="text-[10px] font-bold text-slate-600 uppercase">Jatah Kuota Roster (Hari)</label>
+                      <label className="text-[10px] font-bold text-slate-600 uppercase">Kuota Roster (Hari)</label>
                       <input
                         type="number"
                         min={1}
                         max={30}
                         value={rosterQuotaInput}
                         onChange={e => setRosterQuotaInput(Number(e.target.value))}
-                        className="w-full glass-input rounded-xl px-3 py-2 font-mono-code font-bold text-purple-900"
+                        className="w-full glass-input rounded-xl px-3 py-2 font-mono-code font-bold text-purple-900 mt-1 bg-white"
                       />
                     </div>
-                  )}
-                </div>
-
-                {workLocationTypeForm === 'NON_LOKAL' && (
-                  <div className="grid grid-cols-2 gap-3 pt-1">
                     <div>
                       <label className="text-[10px] font-bold text-slate-600 uppercase">Siklus Roster (Bulan)</label>
                       <input
@@ -1431,7 +1522,7 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                         max={12}
                         value={rosterCycleMonthsInput}
                         onChange={e => setRosterCycleMonthsInput(Number(e.target.value))}
-                        className="w-full glass-input rounded-xl px-3 py-2 font-mono-code font-bold"
+                        className="w-full glass-input rounded-xl px-3 py-2 font-mono-code font-bold mt-1 bg-white"
                       />
                     </div>
                     <div>
@@ -1440,23 +1531,23 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                         type="date"
                         value={rosterNextDateInput}
                         onChange={e => setRosterNextDateInput(e.target.value)}
-                        className="w-full glass-input rounded-xl px-3 py-2 font-mono-code text-slate-800"
+                        className="w-full glass-input rounded-xl px-3 py-2 font-mono-code text-slate-800 mt-1 bg-white"
                       />
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* Salary Section: ONLY for Finance & Superuser */}
+              {/* 5. PENGATURAN GAJI & REKENING (FINANCE / SUPERUSER) */}
               {isFinanceOrSuper ? (
-                <div className="p-3.5 rounded-2xl bg-orange-50/50 border border-orange-200/80 space-y-3">
+                <div className="p-3.5 rounded-2xl bg-amber-50/50 border border-amber-200/80 space-y-3">
                   <div className="flex items-center justify-between">
-                    <p className="text-[11px] font-black text-[#FF6B00] uppercase tracking-wider font-mono-code flex items-center gap-1.5">
-                      <Banknote className="w-3.5 h-3.5 text-[#FF6B00]" />
-                      Pengaturan Skema Gaji & Tunjangan (Otoritas Finance)
+                    <p className="text-[11px] font-black text-amber-900 uppercase tracking-wider font-mono-code flex items-center gap-1.5">
+                      <Banknote className="w-3.5 h-3.5 text-amber-600" />
+                      Skema Gaji & Rekening Payroll
                     </p>
                     <span className="text-[9.5px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full font-mono-code">
-                      HAK AKSES RESMI
+                      HAK AKSES RESMI FINANCE
                     </span>
                   </div>
                   <div className="grid grid-cols-3 gap-3">
@@ -1467,7 +1558,7 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                         step={500000}
                         value={baseSalary}
                         onChange={e => setBaseSalary(Number(e.target.value))}
-                        className="w-full glass-input rounded-xl px-3 py-2 font-mono-code font-bold text-slate-900"
+                        className="w-full glass-input rounded-xl px-3 py-2 font-mono-code font-bold text-slate-900 mt-1 bg-white"
                         required
                       />
                     </div>
@@ -1478,7 +1569,7 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                         step={100000}
                         value={fixedAllowance}
                         onChange={e => setFixedAllowance(Number(e.target.value))}
-                        className="w-full glass-input rounded-xl px-3 py-2 font-mono-code"
+                        className="w-full glass-input rounded-xl px-3 py-2 font-mono-code mt-1 bg-white"
                         required
                       />
                     </div>
@@ -1489,21 +1580,21 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                         step={5000}
                         value={dailyAllowance}
                         onChange={e => setDailyAllowance(Number(e.target.value))}
-                        className="w-full glass-input rounded-xl px-3 py-2 font-mono-code"
+                        className="w-full glass-input rounded-xl px-3 py-2 font-mono-code mt-1 bg-white"
                         required
                       />
                     </div>
                   </div>
                 </div>
               ) : (
-                <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 flex items-center gap-3 text-xs text-slate-500">
-                  <div className="w-8 h-8 rounded-xl bg-slate-200/80 flex items-center justify-center shrink-0 text-slate-500">
-                    <Lock className="w-4 h-4" />
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center gap-3 text-xs text-slate-500">
+                  <div className="w-7 h-7 rounded-lg bg-slate-200/80 flex items-center justify-center shrink-0 text-slate-500">
+                    <Lock className="w-3.5 h-3.5" />
                   </div>
                   <div>
                     <span className="font-bold text-slate-700 block">Kerahasiaan Data Penggajian Terproteksi</span>
-                    <span className="text-[11px] text-slate-500">
-                      Informasi dan nominal gaji pokok serta tunjangan hanya dapat dilihat dan diubah oleh akun divisi <strong>Keuangan (Finance)</strong>.
+                    <span className="text-[10px] text-slate-500">
+                      Nominal gaji dan tunjangan hanya dapat diubah oleh otorisasi Keuangan (Finance).
                     </span>
                   </div>
                 </div>
@@ -1517,7 +1608,7 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                     type="text"
                     value={bankName}
                     onChange={e => setBankName(e.target.value)}
-                    className="w-full glass-input rounded-xl px-3 py-2"
+                    className="w-full glass-input rounded-xl px-3 py-2 mt-1 bg-white"
                     required
                   />
                 </div>
@@ -1527,7 +1618,7 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                     type="text"
                     value={accountNumber}
                     onChange={e => setAccountNumber(e.target.value)}
-                    className="w-full glass-input rounded-xl px-3 py-2 font-mono-code"
+                    className="w-full glass-input rounded-xl px-3 py-2 font-mono-code mt-1 bg-white"
                     required
                   />
                 </div>
@@ -1543,9 +1634,14 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2 rounded-xl btn-orange text-white text-xs font-bold cursor-pointer"
+                  disabled={isLoginIdDuplicate || isSaving}
+                  className={`px-6 py-2 rounded-xl text-white text-xs font-bold transition-all ${
+                    isLoginIdDuplicate || isSaving
+                      ? 'bg-slate-300 cursor-not-allowed opacity-60'
+                      : 'btn-orange cursor-pointer'
+                  }`}
                 >
-                  Simpan Data Karyawan
+                  {isSaving ? 'Menyimpan...' : 'Simpan Data Karyawan'}
                 </button>
               </div>
             </form>

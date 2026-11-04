@@ -1555,6 +1555,39 @@ export function saveEmployee(emp, operatorUser = null) {
   }
   emp.systemRole = targetSysRole;
 
+  // Validate Custom Login ID & Enforce Global Uniqueness
+  const cleanLoginId = emp.loginId ? String(emp.loginId).trim().toLowerCase() : null;
+  if (cleanLoginId) {
+    const existingUser = db.prepare(`
+      SELECT id, employee_id, username 
+      FROM user_accounts 
+      WHERE LOWER(username) = ? AND employee_id != ? AND id != ?
+      LIMIT 1;
+    `).get(cleanLoginId, emp.id, emp.id);
+
+    if (existingUser) {
+      return {
+        success: false,
+        error: `ID Login '${emp.loginId}' sudah terdaftar untuk pengguna lain di sistem. Silakan gunakan ID lain.`
+      };
+    }
+
+    const allEmpRows = db.prepare('SELECT id, data_json FROM employees WHERE id != ?;').all(emp.id);
+    for (const er of allEmpRows) {
+      try {
+        const parsed = JSON.parse(er.data_json);
+        if (parsed.loginId && String(parsed.loginId).trim().toLowerCase() === cleanLoginId) {
+          return {
+            success: false,
+            error: `ID Login '${emp.loginId}' sudah terdaftar untuk karyawan lain di sistem. Silakan gunakan ID lain.`
+          };
+        }
+      } catch (e) {}
+    }
+
+    emp.loginId = cleanLoginId;
+  }
+
   db.prepare(`
     INSERT OR REPLACE INTO employees (
       id, nik, name, email, phone, role, department, position,
@@ -1573,9 +1606,9 @@ export function saveEmployee(emp, operatorUser = null) {
   try {
     const res = db.prepare(`
       UPDATE user_accounts 
-      SET email = COALESCE(?, email), system_role = ?, role = ?, status = ?, updated_at = CURRENT_TIMESTAMP 
+      SET username = COALESCE(?, username), email = COALESCE(?, email), system_role = ?, role = ?, status = ?, updated_at = CURRENT_TIMESTAMP 
       WHERE employee_id = ? OR id = ?;
-    `).run(emp.email || null, targetSysRole, targetRole, userAccountStatus, emp.id, emp.id);
+    `).run(cleanLoginId || null, emp.email || null, targetSysRole, targetRole, userAccountStatus, emp.id, emp.id);
 
     // Sync project manager name across projects if this employee is a PM
     try {
@@ -1622,11 +1655,13 @@ export function saveEmployee(emp, operatorUser = null) {
     action: 'SAVE_EMPLOYEE',
     entity: 'employees',
     entityId: emp.id,
-    userName: 'Admin HR',
-    userRole: 'admin',
+    userName: operatorUser?.name || 'Admin HR',
+    userLoginId: operatorUser?.loginId || operatorUser?.username || 'admin',
+    userRole: operatorUser?.systemRole || 'admin',
+    userIp: operatorUser?.clientIp || '127.0.0.1',
     module: 'EMPLOYEES',
     status: 'SUCCESS',
-    details: `Data master karyawan ${emp.name} (${emp.nik}) - Jabatan ${emp.position} di departemen ${emp.department} diperbarui (Status: ${emp.status || 'ACTIVE'}).`
+    details: `Data master karyawan ${emp.name} (ID: ${emp.loginId || emp.nik}) - Jabatan ${emp.position} di departemen ${emp.department} diperbarui (Status: ${emp.status || 'ACTIVE'}).`
   });
 
   return { success: true, employee: emp };

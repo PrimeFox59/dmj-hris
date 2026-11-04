@@ -1413,12 +1413,18 @@ export function App() {
   };
 
   // Employee CRUD (User Management)
-  const handleAddEmployee = (emp: Employee) => {
-    setEmployees(prev => [...prev, emp]);
-    api.saveEmployee(emp).catch(err => {
+  const handleAddEmployee = async (emp: Employee) => {
+    try {
+      const res = await api.saveEmployee(emp);
+      const savedEmp = res?.employee || emp;
+      setEmployees(prev => [...prev.filter(e => e.id !== savedEmp.id), savedEmp]);
+      showLiveToast(`Karyawan ${savedEmp.name} (ID: ${savedEmp.loginId || savedEmp.nik}) berhasil didaftarkan!`, 'success');
+      return savedEmp;
+    } catch (err: any) {
       console.error('Failed to save employee to SQLite', err);
-      showLiveToast('Gagal menambahkan karyawan ke server: ' + (err.message || err), 'warn');
-    });
+      showLiveToast('Gagal menambahkan karyawan: ' + (err.message || err), 'warn');
+      throw err;
+    }
   };
 
   const handleUpdateEmployee = async (emp: Employee) => {
