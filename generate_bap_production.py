@@ -306,17 +306,18 @@ def build_perfect_2page_bap():
         r.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
 
     matrix_data = [
-        ("01", "Dashboard & Web Admin Enterprise", "Live monitoring kehadiran real-time, visual headcount card, analitik multi-role.", "10.0%", "10.0%", "100% VERIFIED", True),
-        ("02", "Presensi Biometrik Selfie & Geotag", "Kamera live kontur wajah, validasi GPS satelit native anti-fake, stempel watermark.", "15.0%", "15.0%", "100% VERIFIED", True),
-        ("03", "Sequential Corporate WiFi Gate", "Validasi jaringan BSSID/SSID Access Point resmi kantor/workshop PT DMJ.", "5.0%", "5.0%", "100% VERIFIED", True),
-        ("04", "Fleksibilitas Dinas Luar Mendadak", "Rute presensi khusus tim teknisi lapangan di site tanpa WiFi kantor, auto-approval.", "5.0%", "5.0%", "100% VERIFIED", True),
-        ("05", "Deteksi Telat & Catatan Aktivitas", "Cut-off jam kerja otomatis, kalkulasi menit telat, form dispensasi & logbook staf.", "5.0%", "5.0%", "100% VERIFIED", True),
-        ("06", "Multi-Tier Approval Hub", "Pengajuan digital berjenjang: cuti tahunan, izin sakit (surat dokter), dispensasi & lembur.", "8.0%", "8.0%", "100% VERIFIED", True),
-        ("07", "Database SQLite WAL & Cloud Staging", "Mesin node:sqlite WAL concurrency tinggi, REST API, deployment live di dmj.primeprojectx.net.", "12.0%", "12.0%", "100% VERIFIED", True),
-        ("08", "Mesin Penggajian Depnaker (Payroll)", "Formula lembur Depnaker (Gaji/173), kalkulasi tunjangan, integrasi slip gaji QR code.", "15.0%", "5.0%", "33% ON-PROGRESS", False),
-        ("09", "Project Cost Accounting & Labor Forecast", "Distribusi pembebanan jam kerja teknisi ke pos akun proyek konstruksi DMJ & EAC.", "10.0%", "0.0%", "TAHAP TERMIN II", False),
-        ("10", "Paket Aplikasi Mandiri Portable (.exe)", "Installer portable executable (.exe) mandiri dan sistem pencadangan database lokal.", "5.0%", "0.0%", "TAHAP TERMIN II", False),
-        ("11", "Full Team Training On-Site & BAST Final", "1x sesi pelatihan intensif tatap muka seluruh divisi di workshop DMJ dan serah terima BAST.", "10.0%", "0.0%", "TAHAP TERMIN II", False),
+        ("01", "Dashboard & Web Admin Enterprise", "Pusat komando presensi real-time, grafik kehadiran harian, analitik multi-role.", "10.0%", "10.0%", "100% VERIFIED", True),
+        ("02", "Presensi Biometrik Selfie & Geotag", "Kamera live kontur wajah, deteksi satelit GPS native anti-fake, stempel watermark.", "15.0%", "15.0%", "100% VERIFIED", True),
+        ("03", "Sequential Corporate WiFi Gate", "Penguncian presensi WFO via validasi Access Point WiFi resmi kantor/workshop DMJ.", "5.0%", "5.0%", "100% VERIFIED", True),
+        ("04", "Fleksibilitas Dinas Luar Mendadak", "Rute presensi khusus teknisi site proyek tanpa mampir kantor, auto-routing approval.", "5.0%", "5.0%", "100% VERIFIED", True),
+        ("05", "Deteksi Telat & Catatan Aktivitas", "Cut-off jam kerja otomatis, kalkulasi menit telat, form dispensasi & logbook harian.", "5.0%", "5.0%", "100% VERIFIED", True),
+        ("06", "Multi-Tier Approval Hub", "Persetujuan berjenjang: cuti tahunan, izin sakit (surat dokter), dispensasi & lembur.", "8.0%", "8.0%", "100% VERIFIED", True),
+        ("07", "Mesin Penggajian Depnaker (Payroll Engine)", "Formula lembur Depnaker (Gaji/173), kalkulasi tunjangan, integrasi slip gaji QR code.", "15.0%", "5.0%", "33% ON-PROGRESS", False),
+        ("08", "Project Cost Accounting & Labor Forecast", "Distribusi pembebanan jam kerja teknisi ke pos akun proyek konstruksi DMJ & EAC.", "10.0%", "0.0%", "TAHAP TERMIN II", False),
+        ("09", "Mobile Version Smartphone Responsive", "Antarmuka web responsif penuh untuk seluruh smartphone karyawan & PWA ultra-ringan.", "7.0%", "7.0%", "100% VERIFIED", True),
+        ("10", "Paket Aplikasi Mandiri Offline Portable (.exe)", "Installer portable executable (.exe) mandiri dan sistem pencadangan database lokal.", "5.0%", "0.0%", "TAHAP TERMIN II", False),
+        ("11", "Pelatihan Penuh Seluruh Tim (Full Team) 1x", "1x sesi pelatihan intensif tatap muka seluruh divisi di workshop DMJ dan BAST Final.", "10.0%", "0.0%", "TAHAP TERMIN II", False),
+        ("12", "Garansi Perbaikan Bug 12 Bulan (Purna Jual)", "Jaminan bug fixing kode program 1 tahun penuh pasca-BAST sesuai SLA Pasal 7 PKS.", "5.0%", "0.0%", "AKTIF PASCA-BAST", False),
     ]
 
     for item in matrix_data:
