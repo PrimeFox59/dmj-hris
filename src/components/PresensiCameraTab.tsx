@@ -423,7 +423,10 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
     return calculateDistanceMeters(coords.lat, coords.lng, numLat, numLng);
   }, [tempOfficeLat, tempOfficeLng, coords.lat, coords.lng]);
 
-  // HANYA proyek-proyek di mana karyawan ini terdaftar atau ditugaskan
+  // Multi-Project Selector Override State
+  const [selectedProjectIdOverride, setSelectedProjectIdOverride] = useState<string | null>(null);
+
+  // Seluruh proyek di mana karyawan ini terdaftar, ditugaskan, atau terlibat (termasuk Kantor Pusat)
   const userAuthorizedProjects = useMemo(() => {
     const currentEmpId = currentUser.id || (currentUser as any).employee?.id;
     const currentAssignedId = currentUser.assignedProjectId || (currentUser as any).employee?.assignedProjectId;
@@ -431,18 +434,38 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
       ? currentUser.assignedProjectIds
       : (Array.isArray((currentUser as any).employee?.assignedProjectIds) ? (currentUser as any).employee?.assignedProjectIds : []);
 
-    return projects.filter(p => {
+    const list = projects.filter(p => {
       if (currentAssignedId && p.id === currentAssignedId) return true;
       if (assignedIds.includes(p.id)) return true;
       if (p.assignedEmployeeIds && currentEmpId && p.assignedEmployeeIds.includes(currentEmpId)) return true;
       return false;
     });
+
+    // Kantor Pusat PRJ-001 selalu tersedia sebagai basis kantor perusahaan
+    const hOffice = projects.find(p => p.id === 'PRJ-001' || p.code === 'PRJ-001' || p.name.toUpperCase().includes('KANTOR PUSAT'));
+    if (hOffice && !list.some(p => p.id === hOffice.id)) {
+      list.push(hOffice);
+    }
+    return list;
   }, [projects, currentUser]);
 
-  // Cek apakah posisi GPS saat ini cocok dengan salah satu proyek penugasan karyawan
+  // Evaluasi apakah posisi GPS saat ini berada dalam radius salah satu proyek resmi penugasan karyawan
   const matchingAuthorizedProject = useMemo(() => {
     if (!coords.lat || !coords.lng) return null;
+
+    // 1. Cek apakah ada di Kantor Pusat
+    if (isGpsLocked && realGeofenceDistance <= (salaryRules?.officeGeofence?.radiusMeters || 350)) {
+      const hOffice = projects.find(p => p.id === 'PRJ-001' || p.code === 'PRJ-001' || p.name.toUpperCase().includes('KANTOR PUSAT'));
+      if (hOffice) {
+        return { project: hOffice, distance: realGeofenceDistance, radius: salaryRules?.officeGeofence?.radiusMeters || 350 };
+      }
+    }
+
+    // 2. Cek setiap proyek yang ditugaskan
     for (const proj of userAuthorizedProjects) {
+      const isHO = Boolean(proj.isHeadOffice || proj.code === 'PRJ-001' || proj.name.toUpperCase().includes('KANTOR PUSAT'));
+      if (isHO) continue;
+
       const pGeo = getProjectCoordinates(proj);
       if (pGeo) {
         const d = calculateDistanceMeters(coords.lat, coords.lng, pGeo.lat, pGeo.lng);
@@ -452,10 +475,14 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
       }
     }
     return null;
-  }, [userAuthorizedProjects, coords.lat, coords.lng]);
+  }, [isGpsLocked, realGeofenceDistance, salaryRules?.officeGeofence?.radiusMeters, projects, userAuthorizedProjects, coords.lat, coords.lng]);
 
-  // Target Lokasi Penugasan Resmi Karyawan (Prioritaskan proyek yang posisinya cocok, atau assigned default)
-  const assignedProject = useMemo(() => {
+  // Proyek aktif yang ditentukan: Prioritas 1: Pilihan manual user, Prioritas 2: Cocok GPS otomatis, Prioritas 3: Default penugasan
+  const activeProject = useMemo(() => {
+    if (selectedProjectIdOverride) {
+      const manual = userAuthorizedProjects.find(p => p.id === selectedProjectIdOverride);
+      if (manual) return manual;
+    }
     if (matchingAuthorizedProject) {
       return matchingAuthorizedProject.project;
     }
@@ -464,20 +491,26 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
       return userAuthorizedProjects.find(p => p.id === projId) || projects.find(p => p.id === projId) || null;
     }
     return userAuthorizedProjects[0] || null;
-  }, [matchingAuthorizedProject, userAuthorizedProjects, projects, currentUser]);
-
-  const activeProject = assignedProject;
+  }, [selectedProjectIdOverride, matchingAuthorizedProject, userAuthorizedProjects, projects, currentUser]);
 
   // Jarak fisik nyata dari GPS ke lokasi kerja resmi
   const activeProjectDist = useMemo(() => {
     if (!activeProject || !coords.lat || !coords.lng) return null;
+    const isHO = Boolean(activeProject.isHeadOffice || activeProject.code === 'PRJ-001' || activeProject.name.toUpperCase().includes('KANTOR PUSAT'));
+    if (isHO) {
+      return realGeofenceDistance;
+    }
     const pGeo = getProjectCoordinates(activeProject);
     if (!pGeo) return null;
     return calculateDistanceMeters(coords.lat, coords.lng, pGeo.lat, pGeo.lng);
-  }, [activeProject, coords.lat, coords.lng]);
+  }, [activeProject, coords.lat, coords.lng, realGeofenceDistance]);
 
   const activeProjectRadius = useMemo(() => {
     if (!activeProject) return salaryRules?.officeGeofence?.radiusMeters || 350;
+    const isHO = Boolean(activeProject.isHeadOffice || activeProject.code === 'PRJ-001' || activeProject.name.toUpperCase().includes('KANTOR PUSAT'));
+    if (isHO) {
+      return salaryRules?.officeGeofence?.radiusMeters || 350;
+    }
     const pGeo = getProjectCoordinates(activeProject);
     return pGeo?.radius || 350;
   }, [activeProject, salaryRules?.officeGeofence?.radiusMeters]);
@@ -489,8 +522,8 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
 
   // Karyawan valid secara fisik jika:
   // 1. Berada di area Kantor Pusat (Kantor Pusat berlaku universal untuk semua staf perusahaan yang hadir di HQ)
-  // 2. ATAU berada di area proyek yang ditugaskan / terpilih
-  // 3. ATAU berada di salah satu proyek yang ditugaskan kepada karyawan
+  // 2. ATAU berada di area proyek yang saat ini dipilih
+  // 3. ATAU berada di salah satu lokasi proyek yang terdaftar/terlibat
   const isPhysicallyInGeofence = isGpsLocked && (
     isInOfficeGeofence ||
     isInSelectedProjectGeofence ||
@@ -499,20 +532,20 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
 
   // Status Geofence Menyeluruh
   const isWithinAnyAuthorizedGeofence = isGpsLocked ? (mode === 'WFH' || mode === 'DINAS_LUAR' ? true : isPhysicallyInGeofence) : false;
-  const assignedProjectDist = isInOfficeGeofence ? realGeofenceDistance : (activeProjectDist !== null ? activeProjectDist : realGeofenceDistance);
-  const effectiveTargetDistance = isInOfficeGeofence ? realGeofenceDistance : (matchingAuthorizedProject ? matchingAuthorizedProject.distance : (activeProjectDist !== null ? activeProjectDist : realGeofenceDistance));
+  const assignedProjectDist = activeProjectDist !== null ? activeProjectDist : realGeofenceDistance;
+  const effectiveTargetDistance = activeProjectDist !== null ? activeProjectDist : (matchingAuthorizedProject ? matchingAuthorizedProject.distance : realGeofenceDistance);
 
   // Nama lokasi resmi penugasan karyawan
   const activeLocationTitle = useMemo(() => {
-    if (isInOfficeGeofence) {
-      return salaryRules?.officeGeofence?.name || 'Kantor Pusat & Operasional';
-    }
     if (activeProject) {
       const isHeadOffice = Boolean(activeProject.isHeadOffice || activeProject.code === 'PRJ-001' || activeProject.name.toUpperCase().includes('KANTOR PUSAT'));
       return isHeadOffice ? activeProject.name : `Site ${activeProject.name}`;
     }
+    if (isInOfficeGeofence) {
+      return salaryRules?.officeGeofence?.name || 'Kantor Pusat & Operasional';
+    }
     return salaryRules?.officeGeofence?.name || 'Kantor Pusat & Operasional';
-  }, [isInOfficeGeofence, activeProject, salaryRules?.officeGeofence?.name]);
+  }, [activeProject, isInOfficeGeofence, salaryRules?.officeGeofence?.name]);
 
   const handleSaveGeofence = async () => {
     const numLat = typeof tempOfficeLat === 'string' ? parseFloat(tempOfficeLat) : tempOfficeLat;
@@ -640,7 +673,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
   // Geofence-First Camera Gatekeeper (Wajib cek lokasi sebelum buka kamera biometrik)
   const handleOpenBiometricCamera = () => {
     if (mode === 'WFO' && !isWithinAnyAuthorizedGeofence) {
-      const assignedName = assignedProject ? assignedProject.name : salaryRules.officeGeofence?.name || 'Kantor Pusat & Innovation Hub';
+      const assignedName = activeProject ? activeProject.name : salaryRules.officeGeofence?.name || 'Kantor Pusat & Innovation Hub';
       const effectiveDistance = assignedProjectDist !== null ? assignedProjectDist : realGeofenceDistance;
       const distStr = effectiveDistance >= 1000 ? `${(effectiveDistance / 1000).toFixed(1)} km` : `${effectiveDistance} meter`;
 
@@ -1381,11 +1414,9 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
         inGeofence: mode === 'WFO' ? isPhysicallyInGeofence : true,
         distanceMeters: effectiveTargetDistance
       },
-      projectId: isInOfficeGeofence ? 'OFFICE' : (matchingAuthorizedProject ? matchingAuthorizedProject.project.id : (activeProject?.id || 'OFFICE')),
-      projectCode: isInOfficeGeofence ? 'HO' : (matchingAuthorizedProject ? matchingAuthorizedProject.project.code : (activeProject?.code || 'HO')),
-      projectName: isInOfficeGeofence
-        ? (salaryRules?.officeGeofence?.name || 'Kantor Pusat & Operasional')
-        : (matchingAuthorizedProject ? matchingAuthorizedProject.project.name : (activeProject && isInProjectGeofence ? activeProject.name : (coords.address ? coords.address.replace(' (GPS HP Asli)', '') : 'Presensi Luar Area'))),
+      projectId: activeProject ? activeProject.id : (isInOfficeGeofence ? 'OFFICE' : 'OFFICE'),
+      projectCode: activeProject ? activeProject.code : (isInOfficeGeofence ? 'HO' : 'HO'),
+      projectName: activeProject ? activeProject.name : (salaryRules?.officeGeofence?.name || 'Kantor Pusat & Operasional'),
       networkAudit: {
         ipAddress: activeIp,
         connectionType: isInOfficeGeofence || isInProjectGeofence ? 'Geofence Valid' : 'GPS Mobile'
@@ -1780,6 +1811,72 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                     </div>
                   )}
                 </div>
+
+                {/* Multi-Project Selector (Hadir jika karyawan terdaftar / terlibat dalam > 1 proyek) */}
+                {userAuthorizedProjects.length > 1 && (
+                  <div className="p-3.5 rounded-2xl bg-gradient-to-r from-teal-50/80 via-emerald-50/50 to-slate-50 border border-teal-200/80 shadow-xs space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-teal-950">
+                        <Briefcase className="w-4 h-4 text-teal-600 shrink-0" />
+                        <span>Penugasan Proyek ({userAuthorizedProjects.length} Proyek Terdaftar)</span>
+                      </div>
+                      {matchingAuthorizedProject && !selectedProjectIdOverride && (
+                        <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 font-mono-code flex items-center gap-1">
+                          <Sparkles className="w-3 h-3 text-emerald-600" />
+                          Terdeteksi Otomatis
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                      <div className="relative flex-1">
+                        <select
+                          value={selectedProjectIdOverride || ''}
+                          onChange={e => setSelectedProjectIdOverride(e.target.value ? e.target.value : null)}
+                          className="w-full py-2 px-3 pr-8 rounded-xl bg-white border border-teal-200 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500 shadow-xs cursor-pointer"
+                        >
+                          <option value="">
+                            {matchingAuthorizedProject
+                              ? `✨ Otomatis: ${matchingAuthorizedProject.project.code} - ${matchingAuthorizedProject.project.name} (Dalam Radius)`
+                              : `✨ Otomatis (Proyek Aktif: ${activeProject ? activeProject.code : 'Kantor Pusat'})`}
+                          </option>
+                          {userAuthorizedProjects.map(p => {
+                            const isHO = Boolean(p.isHeadOffice || p.code === 'PRJ-001' || p.name.toUpperCase().includes('KANTOR PUSAT'));
+                            const pGeo = isHO
+                              ? { lat: -7.293144, lng: 112.775337, radius: 350 }
+                              : getProjectCoordinates(p);
+                            const dist = pGeo && coords.lat && coords.lng
+                              ? calculateDistanceMeters(coords.lat, coords.lng, pGeo.lat, pGeo.lng)
+                              : null;
+                            const distLabel = dist !== null
+                              ? (dist <= (pGeo?.radius || 350) ? ' • [Dalam Radius Valid]' : ` • [${formatDistanceKm(dist)}]`)
+                              : '';
+                            return (
+                              <option key={p.id} value={p.id}>
+                                {p.code} - {p.name}{distLabel}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </div>
+
+                      {selectedProjectIdOverride && (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedProjectIdOverride(null)}
+                          className="px-2.5 py-1.5 rounded-xl bg-slate-200/80 hover:bg-slate-300 text-slate-700 text-[11px] font-bold transition-all shrink-0 cursor-pointer"
+                          title="Kembalikan ke Deteksi Otomatis GPS"
+                        >
+                          Reset Otomatis
+                        </button>
+                      )}
+                    </div>
+
+                    <p className="text-[10.5px] text-teal-800/90 leading-tight">
+                      Sistem memvalidasi kehadiran Anda dari lokasi proyek manapun yang ditugaskan. Presensi akan dicatat ke <strong>{activeProject?.name}</strong>.
+                    </p>
+                  </div>
+                )}
 
                 {/* Live GPS Coordinates Status Banner */}
                 <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/90 flex items-center justify-between gap-3 text-xs">

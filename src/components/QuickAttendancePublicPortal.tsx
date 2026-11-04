@@ -369,7 +369,10 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
     );
   }, [gpsLocation, targetGeofence, isGpsLocked]);
 
-  const isInsideRadius = isGpsLocked && currentDistanceMeters <= (targetGeofence.radiusMeters || 500);
+  const isInsideRadius = isGpsLocked && (
+    currentDistanceMeters <= (targetGeofence.radiusMeters || 500) ||
+    calculateDistanceMeters(gpsLocation.lat, gpsLocation.lng, officeGeofence.lat, officeGeofence.lng) <= (officeGeofence.radiusMeters || 500)
+  );
 
   // Dynamic Shift Schedule Helper
   const activeSchedule = useMemo(() => {
