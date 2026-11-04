@@ -764,8 +764,26 @@ export function saveAttendance(record) {
       if (finalCheckIn) finalCheckIn = finalCheckIn.replace(/\./g, ':');
       finalCheckOut = (record.checkOutTime || record.checkInTime || '').replace(/\./g, ':') || null;
 
+      // Evaluasi Pulang Lebih Awal (sebelum jam selesai kerja shift proyek / kantor)
+      const sched = getEmployeeProjectSchedule(record.employeeId);
+      const [outH, outM] = (finalCheckOut || '').split(':').map(Number);
+      const [schedOutH, schedOutM] = (sched.checkOutTime || '17:00').split(':').map(Number);
+      const outMins = (outH || 0) * 60 + (outM || 0);
+      const schedOutMins = (schedOutH || 0) * 60 + (schedOutM || 0);
+
+      let isEarlyOut = Boolean(record.isEarlyCheckOut);
+      let earlyOutMins = record.earlyCheckOutMinutes || 0;
+      if (finalCheckOut && outMins < schedOutMins) {
+        isEarlyOut = true;
+        earlyOutMins = Math.max(1, schedOutMins - outMins);
+      }
+
       if (!finalCheckIn) {
         finalStatus = 'ALPA';
+        finalApprovalStatus = 'PENDING';
+      } else if (isEarlyOut) {
+        // Pulang lebih awal memerlukan persetujuan PKM dan HR
+        finalStatus = existing.status || (record.status === 'LATE' ? 'LATE' : 'ON_TIME');
         finalApprovalStatus = 'PENDING';
       } else {
         finalStatus = existing.status || (record.status === 'LATE' ? 'ON_TIME' : record.status);
@@ -785,6 +803,10 @@ export function saveAttendance(record) {
         isLate: Boolean(finalIsLate),
         lateMinutes: finalLateMinutes,
         lateReason: finalLateReason,
+        isEarlyCheckOut: isEarlyOut,
+        earlyCheckOutMinutes: earlyOutMins,
+        earlyCheckOutReason: record.earlyCheckOutReason || record.note || prevData.earlyCheckOutReason || 'Izin pulang lebih awal sebelum jam selesai kerja',
+        scheduledCheckOutTime: sched.checkOutTime || '17:00',
         approvalStatus: finalApprovalStatus,
         photoUrl: prevData.photoUrl || prevData.checkInPhotoUrl || record.photoUrl,
         checkInPhotoUrl: prevData.photoUrl || prevData.checkInPhotoUrl,
@@ -837,60 +859,77 @@ export function saveAttendance(record) {
     const isMissingCheckIn = !record.checkInTime && Boolean(record.checkOutTime);
     const isDinasLuar = record.mode === 'DINAS_LUAR';
     const isOutOfGeofence = record.status === 'OUT_OF_GEOFENCE';
-    // Absen Pulang (CHECK_OUT) hanya skip jika itu adalah keterlambatan biasa
-    if (!isDinasLuar && !isOutOfGeofence && !isMissingCheckIn && attType === 'CHECK_OUT') {
-      // Skip late justification approval saat absen pulang normal
+    const isEarlyCheckOut = Boolean(mergedData.isEarlyCheckOut || record.isEarlyCheckOut);
+
+    // Absen Pulang (CHECK_OUT) hanya skip jika itu adalah keterlambatan biasa dan bukan early check-out
+    if (!isDinasLuar && !isOutOfGeofence && !isMissingCheckIn && !isEarlyCheckOut && attType === 'CHECK_OUT') {
+      // Skip late justification approval saat absen pulang normal tepat waktu
     } else {
-    const approvalId = `APPR-${record.id}`;
-    const approvalType = isMissingCheckIn
-      ? 'ATTENDANCE_CORRECTION'
-      : isDinasLuar
-      ? 'DINAS_LUAR'
-      : isOutOfGeofence
-      ? 'OUT_OF_GEOFENCE'
-      : 'LATE_JUSTIFICATION';
-    const distText = record.location?.distanceMeters ? ` (${record.location.distanceMeters >= 1000 ? (record.location.distanceMeters / 1000).toFixed(1) + ' km' : record.location.distanceMeters + 'm'})` : '';
-    const approvalTitle = isMissingCheckIn
-      ? `Persetujuan Presensi Tanpa Absen Masuk - ${record.employeeName}`
-      : isDinasLuar
-      ? `Pengajuan Dinas Luar Mendadak: ${record.dinasLuarDetails?.clientName || 'Klien Luar'}`
-      : isOutOfGeofence
-      ? `Persetujuan Presensi Luar Area${distText}`
-      : `Justifikasi Keterlambatan (${record.lateMinutes} Menit)`;
-    const approvalDesc = isMissingCheckIn
-      ? `Karyawan melakukan Absen Pulang pukul ${record.checkOutTime} WIB tanpa rekam Absen Masuk pada tanggal ${record.date}. Status saat ini Tidak Absen (Alpa) dan memerlukan peninjauan kehadiran oleh PM terkait kemudian HR Manager.`
-      : isDinasLuar
-      ? `Tujuan: ${record.dinasLuarDetails?.destination} | Alasan: ${record.dinasLuarDetails?.purpose}`
-      : isOutOfGeofence
-      ? `Catatan Luar Area${distText}: ${record.outOfRangeReason || record.note || 'Presensi di luar radius resmi'}`
-      : `Alasan Keterlambatan: ${record.lateReason || 'Keterlambatan operasional'}`;
+      const approvalId = isEarlyCheckOut ? `APPR-EARLY-${record.id}` : `APPR-${record.id}`;
+      const approvalType = isEarlyCheckOut
+        ? 'EARLY_CHECKOUT'
+        : isMissingCheckIn
+        ? 'ATTENDANCE_CORRECTION'
+        : isDinasLuar
+        ? 'DINAS_LUAR'
+        : isOutOfGeofence
+        ? 'OUT_OF_GEOFENCE'
+        : 'LATE_JUSTIFICATION';
 
-    const projInfo = resolveEmployeeProjectAndPm(record.employeeId);
-    const hasPm = Boolean(projInfo?.projectManagerId && !projInfo.isEmployeeThePm);
-    const hasAdmin = Boolean(projInfo?.projectAdminIds && projInfo.projectAdminIds.length > 0);
+      const sched = getEmployeeProjectSchedule(record.employeeId);
+      const earlyMins = mergedData.earlyCheckOutMinutes || record.earlyCheckOutMinutes || 0;
+      const schedOut = mergedData.scheduledCheckOutTime || sched.checkOutTime || '17:00';
 
-    const approvalItem = {
-      id: approvalId,
-      type: approvalType,
-      employeeId: record.employeeId,
-      employeeName: record.employeeName,
-      employeeNik: record.employeeNik,
-      department: record.department,
-      title: approvalTitle,
-      description: approvalDesc,
-      startDate: record.date,
-      lateMinutes: isOutOfGeofence ? 0 : (record.lateMinutes || 0),
-      attendanceRecordId: record.id,
-      proofAttachment: record.photoUrl,
-      status: 'PENDING',
-      submittedAt: `${record.date} ${record.checkInTime}`,
-      projectId: projInfo?.projectId || record.projectId || null,
-      projectCode: projInfo?.projectCode || record.projectCode || null,
-      projectName: projInfo?.projectName || record.projectName || null,
-      projectManagerId: projInfo?.projectManagerId || null,
-      projectManagerName: projInfo?.projectManagerName || null,
-      projectAdminIds: projInfo?.projectAdminIds || [],
-      projectAdminNames: projInfo?.projectAdminNames || [],
+      const distText = record.location?.distanceMeters ? ` (${record.location.distanceMeters >= 1000 ? (record.location.distanceMeters / 1000).toFixed(1) + ' km' : record.location.distanceMeters + 'm'})` : '';
+      const approvalTitle = isEarlyCheckOut
+        ? `Persetujuan Pulang Lebih Awal (${earlyMins} Menit Sebelum ${schedOut} WIB) - ${record.employeeName}`
+        : isMissingCheckIn
+        ? `Persetujuan Presensi Tanpa Absen Masuk - ${record.employeeName}`
+        : isDinasLuar
+        ? `Pengajuan Dinas Luar Mendadak: ${record.dinasLuarDetails?.clientName || 'Klien Luar'}`
+        : isOutOfGeofence
+        ? `Persetujuan Presensi Luar Area${distText}`
+        : `Justifikasi Keterlambatan (${record.lateMinutes} Menit)`;
+
+      const approvalDesc = isEarlyCheckOut
+        ? `Karyawan melakukan Absen Pulang pukul ${finalCheckOut} WIB sebelum jam selesai operasional (${schedOut} WIB, selisih ${earlyMins} menit). Alasan: ${mergedData.earlyCheckOutReason || 'Izin pulang mendahului jam operasional proyek/kantor'}. Memerlukan persetujuan berjenjang PKM dan HR.`
+        : isMissingCheckIn
+        ? `Karyawan melakukan Absen Pulang pukul ${record.checkOutTime} WIB tanpa rekam Absen Masuk pada tanggal ${record.date}. Status saat ini Tidak Absen (Alpa) dan memerlukan peninjauan kehadiran oleh PM terkait kemudian HR Manager.`
+        : isDinasLuar
+        ? `Tujuan: ${record.dinasLuarDetails?.destination} | Alasan: ${record.dinasLuarDetails?.purpose}`
+        : isOutOfGeofence
+        ? `Catatan Luar Area${distText}: ${record.outOfRangeReason || record.note || 'Presensi di luar radius resmi'}`
+        : `Alasan Keterlambatan: ${record.lateReason || 'Keterlambatan operasional'}`;
+
+      const projInfo = resolveEmployeeProjectAndPm(record.employeeId);
+      const hasPm = Boolean(projInfo?.projectManagerId && !projInfo.isEmployeeThePm);
+      const hasAdmin = Boolean(projInfo?.projectAdminIds && projInfo.projectAdminIds.length > 0);
+
+      const approvalItem = {
+        id: approvalId,
+        type: approvalType,
+        employeeId: record.employeeId,
+        employeeName: record.employeeName,
+        employeeNik: record.employeeNik,
+        department: record.department,
+        title: approvalTitle,
+        description: approvalDesc,
+        startDate: record.date,
+        lateMinutes: isOutOfGeofence || isEarlyCheckOut ? 0 : (record.lateMinutes || 0),
+        earlyCheckOutMinutes: isEarlyCheckOut ? earlyMins : undefined,
+        scheduledCheckOutTime: isEarlyCheckOut ? schedOut : undefined,
+        targetCheckOutTime: isEarlyCheckOut ? finalCheckOut : undefined,
+        attendanceRecordId: record.id,
+        proofAttachment: isEarlyCheckOut ? (record.photoOutUrl || record.photoUrl) : record.photoUrl,
+        status: 'PENDING',
+        submittedAt: `${record.date} ${isEarlyCheckOut ? (finalCheckOut || '') : (record.checkInTime || '')}`,
+        projectId: projInfo?.projectId || record.projectId || null,
+        projectCode: projInfo?.projectCode || record.projectCode || null,
+        projectName: projInfo?.projectName || record.projectName || null,
+        projectManagerId: projInfo?.projectManagerId || null,
+        projectManagerName: projInfo?.projectManagerName || null,
+        projectAdminIds: projInfo?.projectAdminIds || [],
+        projectAdminNames: projInfo?.projectAdminNames || [],
       targetApproverRole: (hasPm || hasAdmin) ? 'PM' : 'HR',
       stage: (hasPm || hasAdmin) ? 'PM' : 'HR',
       requiresHrApproval: true
@@ -1094,6 +1133,9 @@ export function updateApproval(id, status, reviewNote, reviewedBy = 'Direksi / H
       // Status keterlambatan tetap dipertahankan (LATE), approval hanya mencatat persetujuan dispensasi/justifikasi
       if (status === 'APPROVED' && attRecord.isLate) {
         attRecord.approvalStatus = 'APPROVED';
+      }
+      if (status === 'APPROVED' && item.type === 'EARLY_CHECKOUT') {
+        attRecord.isEarlyCheckOutApproved = true;
       }
       db.prepare(`UPDATE attendances SET approvalStatus = ?, status = ?, data_json = ? WHERE id = ?;`)
         .run(status, attRecord.status, JSON.stringify(attRecord), item.attendanceRecordId);

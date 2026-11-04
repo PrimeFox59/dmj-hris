@@ -1057,6 +1057,49 @@ export function App() {
       setApprovals(prev => [incompleteApproval, ...prev]);
       api.submitApproval(incompleteApproval).catch(err => console.error('Failed to submit missing check-in approval to SQLite', err));
     }
+
+    // 4. Pulang Lebih Awal (Early Check-Out): Wajib approval berjenjang PKM (Project Manager) kemudian HR
+    const isEarlyCheckOut = Boolean(record.isEarlyCheckOut || (
+      record.attendanceType === 'CHECK_OUT' &&
+      record.checkOutTime &&
+      record.scheduledCheckOutTime &&
+      record.checkOutTime < record.scheduledCheckOutTime
+    ));
+
+    if (isEarlyCheckOut) {
+      const schedTime = record.scheduledCheckOutTime || '17:00';
+      const earlyMins = record.earlyCheckOutMinutes || 0;
+      const earlyApproval: ApprovalItem = {
+        id: `APP-EARLY-${Date.now()}`,
+        type: 'EARLY_CHECKOUT',
+        employeeId: record.employeeId,
+        employeeName: record.employeeName,
+        employeeNik: record.employeeNik,
+        department: record.department,
+        title: `Persetujuan Pulang Lebih Awal (${earlyMins} Menit Sebelum ${schedTime} WIB) - ${record.employeeName}`,
+        description: `Karyawan melakukan Absen Pulang pukul ${record.checkOutTime} WIB sebelum jam selesai operasional (${schedTime} WIB, selisih ${earlyMins} menit). Alasan Karyawan: ${record.earlyCheckOutReason || record.note || 'Izin pulang mendahului jam kerja'}. Memerlukan persetujuan berjenjang PKM dan HR.`,
+        startDate: record.date,
+        targetCheckOutTime: record.checkOutTime,
+        scheduledCheckOutTime: schedTime,
+        earlyCheckOutMinutes: earlyMins,
+        attendanceRecordId: record.id,
+        status: 'PENDING',
+        stage: pmEmp ? 'PM' : 'HR',
+        targetApproverRole: pmEmp ? 'PM' : 'HR',
+        requiresHrApproval: true,
+        submittedAt: `${record.date} ${record.checkOutTime}`,
+        projectId: userProj?.id,
+        projectCode: userProj?.code,
+        projectName: userProj?.name,
+        projectManagerId: pmEmp?.id,
+        projectManagerName: pmEmp?.name,
+        projectAdminIds: userProj?.projectAdminIds,
+        projectAdminNames: userProj?.projectAdminNames
+      };
+
+      setApprovals(prev => [earlyApproval, ...prev]);
+      api.submitApproval(earlyApproval).catch(err => console.error('Failed to submit early checkout approval to SQLite', err));
+    }
   };
 
   // Handle attendance correction / update from HR Manager

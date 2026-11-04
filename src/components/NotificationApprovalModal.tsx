@@ -637,7 +637,7 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
               {/* Filter Pills for Review items */}
               <div className="flex items-center justify-between gap-2 flex-wrap pb-1">
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  {['ALL', 'LEAVE', 'ATTENDANCE_CORRECTION', 'LATE_JUSTIFICATION', 'OUT_OF_GEOFENCE', 'DINAS_LUAR'].map(ft => (
+                  {['ALL', 'LEAVE', 'ATTENDANCE_CORRECTION', 'LATE_JUSTIFICATION', 'EARLY_CHECKOUT', 'OUT_OF_GEOFENCE', 'DINAS_LUAR'].map(ft => (
                     <button
                       key={ft}
                       onClick={() => setFilterType(ft)}
@@ -655,6 +655,8 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
                         ? 'Koreksi Absensi'
                         : ft === 'LATE_JUSTIFICATION'
                         ? 'Keterlambatan'
+                        : ft === 'EARLY_CHECKOUT'
+                        ? 'Pulang Awal'
                         : ft === 'OUT_OF_GEOFENCE'
                         ? 'Luar Geofence'
                         : 'Dinas Luar'}
@@ -783,6 +785,8 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
                                 ? 'Cuti / Izin'
                                 : item.type === 'LATE_JUSTIFICATION'
                                 ? 'Keterlambatan'
+                                : item.type === 'EARLY_CHECKOUT'
+                                ? 'Pulang Awal'
                                 : item.type === 'OUT_OF_GEOFENCE'
                                 ? 'Luar Geofence'
                                 : 'Dinas Luar'}
@@ -802,7 +806,7 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
                                 📅 DI LUAR JADWAL
                               </span>
                             )}
-                            {(item.type === 'ATTENDANCE_CORRECTION' || item.type === 'OUT_OF_GEOFENCE') && item.targetApproverRole === 'PM' && (
+                            {(item.type === 'ATTENDANCE_CORRECTION' || item.type === 'OUT_OF_GEOFENCE' || item.type === 'EARLY_CHECKOUT') && item.targetApproverRole === 'PM' && (
                               <span className="px-1.5 py-0.5 rounded text-[9px] font-mono-code font-bold bg-blue-50 text-blue-700 border border-blue-200">
                                 PM APPROVAL
                               </span>

@@ -538,48 +538,75 @@ export function saveAttendance(record: AttendanceRecord): { success: boolean; re
     JSON.stringify(record)
   );
 
-  // If this attendance needs approval (Dinas Luar or Late), create approval item in SQLite
-  if (record.approvalStatus === 'PENDING' && record.attendanceType !== 'CHECK_OUT') {
+  // If this attendance needs approval (Dinas Luar, Late, or Early Check-Out), create approval item in SQLite
+  if (record.approvalStatus === 'PENDING') {
+    const isEarlyCheckOut = Boolean(record.isEarlyCheckOut);
+    const isMissingCheckIn = !record.checkInTime && Boolean(record.checkOutTime);
     const isDinasLuar = record.mode === 'DINAS_LUAR';
     const isOutOfGeofence = record.status === 'OUT_OF_GEOFENCE';
-    const approvalId = `APPR-${record.id}`;
-    const projInfo = resolveEmployeeProjectAndPm(record.employeeId);
-    const hasPm = Boolean(projInfo?.projectManagerId && !projInfo.isEmployeeThePm);
 
-    const approvalItem: ApprovalItem = {
-      id: approvalId,
-      type: isDinasLuar ? 'DINAS_LUAR' : isOutOfGeofence ? 'OUT_OF_GEOFENCE' : 'LATE_JUSTIFICATION',
-      employeeId: record.employeeId,
-      employeeName: record.employeeName,
-      employeeNik: record.employeeNik,
-      department: record.department,
-      title: isDinasLuar
-        ? `Pengajuan Dinas Luar Mendadak: ${record.dinasLuarDetails?.clientName || 'Klien Luar'}`
-        : isOutOfGeofence
-        ? `Persetujuan Presensi Luar Area`
-        : `Justifikasi Keterlambatan (${record.lateMinutes} Menit)`,
-      description: isDinasLuar
-        ? `Tujuan: ${record.dinasLuarDetails?.destination} | Alasan: ${record.dinasLuarDetails?.purpose}`
-        : isOutOfGeofence
-        ? `Presensi di luar radius resmi: ${record.note || ''}`
-        : `Alasan Keterlambatan: ${record.lateReason}`,
-      startDate: record.date,
-      lateMinutes: record.lateMinutes,
-      attendanceRecordId: record.id,
-      proofAttachment: record.photoUrl,
-      status: 'PENDING',
-      submittedAt: `${record.date} ${record.checkInTime}`,
-      projectId: projInfo?.projectId || record.projectId,
-      projectCode: projInfo?.projectCode || record.projectCode,
-      projectName: projInfo?.projectName || record.projectName,
-      projectManagerId: projInfo?.projectManagerId,
-      projectManagerName: projInfo?.projectManagerName,
-      projectAdminIds: projInfo?.projectAdminIds || [],
-      projectAdminNames: projInfo?.projectAdminNames || [],
-      targetApproverRole: (hasPm || (projInfo?.projectAdminIds && projInfo.projectAdminIds.length > 0)) ? 'PM' : 'HR',
-      stage: (hasPm || (projInfo?.projectAdminIds && projInfo.projectAdminIds.length > 0)) ? 'PM' : 'HR',
-      requiresHrApproval: true
-    };
+    if (!isDinasLuar && !isOutOfGeofence && !isMissingCheckIn && !isEarlyCheckOut && record.attendanceType === 'CHECK_OUT') {
+      // Skip late justification approval saat absen pulang normal tepat waktu
+    } else {
+      const approvalId = isEarlyCheckOut ? `APPR-EARLY-${record.id}` : `APPR-${record.id}`;
+      const projInfo = resolveEmployeeProjectAndPm(record.employeeId);
+      const hasPm = Boolean(projInfo?.projectManagerId && !projInfo.isEmployeeThePm);
+      const earlyMins = record.earlyCheckOutMinutes || 0;
+      const schedOut = record.scheduledCheckOutTime || '17:00';
+
+      const approvalItem: ApprovalItem = {
+        id: approvalId,
+        type: isEarlyCheckOut
+          ? 'EARLY_CHECKOUT'
+          : isDinasLuar
+          ? 'DINAS_LUAR'
+          : isOutOfGeofence
+          ? 'OUT_OF_GEOFENCE'
+          : isMissingCheckIn
+          ? 'ATTENDANCE_CORRECTION'
+          : 'LATE_JUSTIFICATION',
+        employeeId: record.employeeId,
+        employeeName: record.employeeName,
+        employeeNik: record.employeeNik,
+        department: record.department,
+        title: isEarlyCheckOut
+          ? `Persetujuan Pulang Lebih Awal (${earlyMins} Menit Sebelum ${schedOut} WIB) - ${record.employeeName}`
+          : isDinasLuar
+          ? `Pengajuan Dinas Luar Mendadak: ${record.dinasLuarDetails?.clientName || 'Klien Luar'}`
+          : isOutOfGeofence
+          ? `Persetujuan Presensi Luar Area`
+          : isMissingCheckIn
+          ? `Persetujuan Presensi Tanpa Absen Masuk - ${record.employeeName}`
+          : `Justifikasi Keterlambatan (${record.lateMinutes} Menit)`,
+        description: isEarlyCheckOut
+          ? `Karyawan melakukan Absen Pulang pukul ${record.checkOutTime} WIB sebelum jam selesai operasional (${schedOut} WIB, selisih ${earlyMins} menit). Alasan: ${record.earlyCheckOutReason || record.note || 'Izin pulang mendahului jam operasional proyek/kantor'}. Memerlukan persetujuan berjenjang PKM dan HR.`
+          : isDinasLuar
+          ? `Tujuan: ${record.dinasLuarDetails?.destination} | Alasan: ${record.dinasLuarDetails?.purpose}`
+          : isOutOfGeofence
+          ? `Presensi di luar radius resmi: ${record.note || ''}`
+          : isMissingCheckIn
+          ? `Karyawan melakukan Absen Pulang pukul ${record.checkOutTime} WIB tanpa rekam Absen Masuk pada tanggal ${record.date}. Status saat ini Tidak Absen (Alpa) dan memerlukan peninjauan kehadiran oleh PM terkait kemudian HR Manager.`
+          : `Alasan Keterlambatan: ${record.lateReason}`,
+        startDate: record.date,
+        lateMinutes: (isOutOfGeofence || isEarlyCheckOut) ? 0 : record.lateMinutes,
+        earlyCheckOutMinutes: isEarlyCheckOut ? earlyMins : undefined,
+        scheduledCheckOutTime: isEarlyCheckOut ? schedOut : undefined,
+        targetCheckOutTime: isEarlyCheckOut ? record.checkOutTime : undefined,
+        attendanceRecordId: record.id,
+        proofAttachment: isEarlyCheckOut ? (record.photoOutUrl || record.photoUrl) : record.photoUrl,
+        status: 'PENDING',
+        submittedAt: `${record.date} ${isEarlyCheckOut ? (record.checkOutTime || '') : (record.checkInTime || '')}`,
+        projectId: projInfo?.projectId || record.projectId,
+        projectCode: projInfo?.projectCode || record.projectCode,
+        projectName: projInfo?.projectName || record.projectName,
+        projectManagerId: projInfo?.projectManagerId,
+        projectManagerName: projInfo?.projectManagerName,
+        projectAdminIds: projInfo?.projectAdminIds || [],
+        projectAdminNames: projInfo?.projectAdminNames || [],
+        targetApproverRole: (hasPm || (projInfo?.projectAdminIds && projInfo.projectAdminIds.length > 0)) ? 'PM' : 'HR',
+        stage: (hasPm || (projInfo?.projectAdminIds && projInfo.projectAdminIds.length > 0)) ? 'PM' : 'HR',
+        requiresHrApproval: true
+      };
 
     const insertAppr = db.prepare(`
       INSERT OR REPLACE INTO approvals (
@@ -608,6 +635,7 @@ export function saveAttendance(record: AttendanceRecord): { success: boolean; re
       null,
       JSON.stringify(approvalItem)
     );
+    }
   }
 
   // Audit log
@@ -692,6 +720,9 @@ export function updateApproval(
       // Status keterlambatan tetap dipertahankan (LATE), approval hanya mencatat persetujuan
       if (status === 'APPROVED' && attRecord.isLate) {
         attRecord.approvalStatus = 'APPROVED';
+      }
+      if (status === 'APPROVED' && item.type === 'EARLY_CHECKOUT') {
+        attRecord.isEarlyCheckOutApproved = true;
       }
 
       db.prepare(`

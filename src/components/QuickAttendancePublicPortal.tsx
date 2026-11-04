@@ -662,8 +662,13 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
       const isLate = isClockIn && (nowH * 60 + nowM) > (cutoffH * 60 + cutoffM);
       const lateMinutes = isLate ? (nowH * 60 + nowM) - (cutoffH * 60 + cutoffM) : 0;
 
+      // Evaluasi Pulang Lebih Awal (sebelum jam selesai kerja shift proyek / kantor)
+      const [schedOutH, schedOutM] = (activeSchedule.checkOutTime || '17:00').split(':').map(Number);
+      const isEarlyCheckOut = !isClockIn && ((nowH * 60 + nowM) < (schedOutH * 60 + schedOutM));
+      const earlyCheckOutMinutes = isEarlyCheckOut ? ((schedOutH * 60 + schedOutM) - (nowH * 60 + nowM)) : 0;
+
       const defaultNote = isInsideRadius
-        ? 'Presensi Otomatis Kiosk Wajah'
+        ? (isEarlyCheckOut ? `[Pulang Lebih Awal ${earlyCheckOutMinutes} Mnt Sebelum ${activeSchedule.checkOutTime} WIB] Butuh Approval PKM & HR` : 'Presensi Otomatis Kiosk Wajah')
         : `Presensi Kiosk Luar Radius (${currentDistanceMeters}m)`;
 
       const record: Partial<AttendanceRecord> = {
@@ -689,9 +694,15 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
         },
         isLate,
         lateMinutes,
-        approvalStatus: (!isClockIn && !existingToday?.checkInTime) ? 'PENDING' : 'NOT_REQUIRED',
+        isEarlyCheckOut,
+        earlyCheckOutMinutes,
+        earlyCheckOutReason: isEarlyCheckOut ? (customNote.trim() || `Pulang ${earlyCheckOutMinutes} menit lebih awal melalui Kiosk Publik`) : undefined,
+        scheduledCheckOutTime: activeSchedule.checkOutTime || '17:00',
+        approvalStatus: (!isClockIn && (!existingToday?.checkInTime || isEarlyCheckOut)) ? 'PENDING' : 'NOT_REQUIRED',
         note: (!isClockIn && !existingToday?.checkInTime)
           ? '[Tidak Absen Masuk] Hanya Absen Pulang - Memerlukan Approval PM & HR'
+          : isEarlyCheckOut
+          ? `[Pulang Lebih Awal ${earlyCheckOutMinutes} Mnt]: Memerlukan Approval PKM & HR`
           : (customNote.trim() || defaultNote),
         biometricVerification: {
           isVerified: true,

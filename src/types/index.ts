@@ -319,6 +319,11 @@ export interface AttendanceRecord {
   approvedBy?: string;
   approvalDate?: string;
   approvalNote?: string;
+  isEarlyCheckOut?: boolean;
+  earlyCheckOutMinutes?: number;
+  earlyCheckOutReason?: string;
+  scheduledCheckOutTime?: string;
+  isEarlyCheckOutApproved?: boolean;
   biometricVerification?: BiometricVerificationResult;
   photoOutUrl?: string;
   isHrCorrected?: boolean;
@@ -379,7 +384,7 @@ export interface KasbonRecord {
 
 export interface ApprovalItem {
   id: string;
-  type: 'LEAVE' | 'PERMIT' | 'LATE_JUSTIFICATION' | 'DINAS_LUAR' | 'ATTENDANCE_CORRECTION' | 'OUT_OF_GEOFENCE' | 'KASBON' | 'SLIP_ACCESS';
+  type: 'LEAVE' | 'PERMIT' | 'LATE_JUSTIFICATION' | 'DINAS_LUAR' | 'ATTENDANCE_CORRECTION' | 'OUT_OF_GEOFENCE' | 'KASBON' | 'SLIP_ACCESS' | 'EARLY_CHECKOUT';
   employeeId: string;
   employeeName: string;
   employeeNik: string;
@@ -390,6 +395,8 @@ export interface ApprovalItem {
   endDate?: string;
   daysCount?: number;
   lateMinutes?: number;
+  earlyCheckOutMinutes?: number;
+  scheduledCheckOutTime?: string;
   leaveType?: LeaveType;
   isEarlySubmission?: boolean;
   earlyReason?: string;

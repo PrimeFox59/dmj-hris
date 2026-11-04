@@ -724,6 +724,9 @@ export const HrisTimelineChart: React.FC<HrisTimelineChartProps> = ({
                           <p className="font-bold text-[#FF6B00]">{employee.name} ({employee.nik})</p>
                           <p className="text-slate-300">Proyek: <span className="font-bold text-white">{item.schedule.projectName}</span></p>
                           <p>Masuk: <span className="font-bold">{attendance?.checkInTime} WIB</span> ({status === 'ON_TIME' ? 'Tepat Waktu' : status === 'LATE' ? `Terlambat (Batas: ${item.schedule.cutoffTime})` : status})</p>
+                          {attendance?.checkOutTime && (
+                            <p>Pulang: <span className="font-bold">{attendance.checkOutTime} WIB</span> {attendance.isEarlyCheckOut ? `(Pulang Lebih Awal ${attendance.earlyCheckOutMinutes || ''}m - Butuh Approval PM/HR)` : '(Selesai Shift)'}</p>
+                          )}
                           <p className="text-slate-400">Jadwal Shift: {item.schedule.checkInTime} - {item.schedule.checkOutTime} WIB</p>
                           {typeof attendance?.location?.distanceMeters === 'number' && !isNaN(attendance.location.distanceMeters) && <p className="text-slate-400">Geofence: {(attendance.location.distanceMeters / 1000).toFixed(1)} km</p>}
                         </div>

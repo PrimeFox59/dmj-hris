@@ -463,6 +463,7 @@ export async function notifyApprovalSubmitted(approvalItem, employee, targetAppr
   const typeLabels = {
     OUT_OF_GEOFENCE: '📍 Persetujuan Presensi Luar Radius',
     LATE_JUSTIFICATION: '⏰ Justifikasi Keterlambatan',
+    EARLY_CHECKOUT: '🚪 Persetujuan Pulang Lebih Awal',
     DINAS_LUAR: '🚗 Persetujuan Dinas Luar Mendadak',
     ATTENDANCE_CORRECTION: '📝 Koreksi Absensi Mandiri',
     LEAVE: '🌴 Pengajuan Cuti',

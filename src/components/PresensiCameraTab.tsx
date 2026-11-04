@@ -297,6 +297,9 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
   const [isLate, setIsLate] = useState(false);
   const [lateMinutes, setLateMinutes] = useState(0);
   const [lateReason, setLateReason] = useState('');
+  const [isEarlyCheckOut, setIsEarlyCheckOut] = useState(false);
+  const [earlyCheckOutMinutes, setEarlyCheckOutMinutes] = useState(0);
+  const [earlyCheckOutReason, setEarlyCheckOutReason] = useState('');
   const [outOfRangeReason, setOutOfRangeReason] = useState('');
 
   const [coords, setCoords] = useState<{ lat: number; lng: number; accuracy: number; address: string }>({
@@ -632,19 +635,38 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
     return getEmployeeProjectSchedule(effectiveEmployeeForSchedule, projects, salaryRules.cutoffTime);
   }, [effectiveEmployeeForSchedule, projects, salaryRules.cutoffTime]);
 
-  // Cutoff calculation: status keterlambatan hanya berlaku untuk Absen Masuk (CHECK_IN)
+  // Cutoff & Pulang Lebih Awal calculation
   useEffect(() => {
-    const checkLateStatus = () => {
-      // Absen Pulang (CHECK_OUT) TIDAK PERNAH dianggap terlambat
+    const checkScheduleStatus = () => {
+      const now = rtcService.getServerNow();
+
       if (attendanceAction === 'CHECK_OUT') {
         setIsLate(false);
         setLateMinutes(0);
+
+        // Deteksi Pulang Lebih Awal: Jika check-out sebelum jadwal selesai kerja proyek / kantor
+        const [schedH, schedM] = (userSchedule.checkOutTime || '17:00').split(':').map(Number);
+        const schedDate = new Date(now);
+        schedDate.setHours(schedH, schedM, 0, 0);
+
+        if (now < schedDate) {
+          const diffMs = schedDate.getTime() - now.getTime();
+          const diffMins = Math.max(1, Math.ceil(diffMs / 60000));
+          setIsEarlyCheckOut(true);
+          setEarlyCheckOutMinutes(diffMins);
+        } else {
+          setIsEarlyCheckOut(false);
+          setEarlyCheckOutMinutes(0);
+        }
         return;
       }
 
-      const now = new Date();
+      // Absen Masuk (CHECK_IN): Clear status pulang lebih awal dan evaluasi keterlambatan
+      setIsEarlyCheckOut(false);
+      setEarlyCheckOutMinutes(0);
+
       const [cutoffH, cutoffM] = userSchedule.cutoffTime.split(':').map(Number);
-      const cutoffDate = new Date();
+      const cutoffDate = new Date(now);
       cutoffDate.setHours(cutoffH, cutoffM, 0, 0);
 
       if (now > cutoffDate) {
@@ -657,22 +679,42 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
         setLateMinutes(0);
       }
     };
-    checkLateStatus();
-    const timer = setInterval(checkLateStatus, 30000);
+    checkScheduleStatus();
+    const timer = setInterval(checkScheduleStatus, 30000);
     return () => clearInterval(timer);
-  }, [userSchedule.cutoffTime, attendanceAction]);
+  }, [userSchedule.cutoffTime, userSchedule.checkOutTime, attendanceAction]);
 
-  // Handler toggle jenis presensi Masuk / Pulang dengan auto-clear keterlambatan
+  // Handler toggle jenis presensi Masuk / Pulang dengan auto-clear keterlambatan & pulang awal
   const handleToggleAttendanceAction = (action: 'CHECK_IN' | 'CHECK_OUT') => {
     setAttendanceAction(action);
+    const now = rtcService.getServerNow();
+
     if (action === 'CHECK_OUT') {
       setIsLate(false);
       setLateMinutes(0);
       setLateReason('');
+
+      // Evaluasi langsung status pulang lebih awal
+      const [schedH, schedM] = (userSchedule.checkOutTime || '17:00').split(':').map(Number);
+      const schedDate = new Date(now);
+      schedDate.setHours(schedH, schedM, 0, 0);
+
+      if (now < schedDate) {
+        const diffMs = schedDate.getTime() - now.getTime();
+        const diffMins = Math.max(1, Math.ceil(diffMs / 60000));
+        setIsEarlyCheckOut(true);
+        setEarlyCheckOutMinutes(diffMins);
+      } else {
+        setIsEarlyCheckOut(false);
+        setEarlyCheckOutMinutes(0);
+      }
     } else {
-      const now = new Date();
+      setIsEarlyCheckOut(false);
+      setEarlyCheckOutMinutes(0);
+      setEarlyCheckOutReason('');
+
       const [cutoffH, cutoffM] = userSchedule.cutoffTime.split(':').map(Number);
-      const cutoffDate = new Date();
+      const cutoffDate = new Date(now);
       cutoffDate.setHours(cutoffH, cutoffM, 0, 0);
       if (now > cutoffDate) {
         const diffMs = now.getTime() - cutoffDate.getTime();
@@ -1240,6 +1282,20 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
       finalCheckOutTime = existingToday?.checkOutTime || undefined;
     }
 
+    // Deteksi jika karyawan melakukan Pulang Lebih Awal (sebelum jam selesai kerja proyek/kantor)
+    let effectiveIsEarlyOut = false;
+    let effectiveEarlyMinutes = 0;
+    if (!isCheckIn && finalCheckOutTime) {
+      const [outH, outM] = finalCheckOutTime.split(':').map(Number);
+      const [schedOutH, schedOutM] = (userSchedule.checkOutTime || '17:00').split(':').map(Number);
+      const outMins = (outH || 0) * 60 + (outM || 0);
+      const schedOutMins = (schedOutH || 0) * 60 + (schedOutM || 0);
+      if (outMins < schedOutMins) {
+        effectiveIsEarlyOut = true;
+        effectiveEarlyMinutes = schedOutMins - outMins;
+      }
+    }
+
     let finalStatus: AttendanceStatus = 'ON_TIME';
     let finalApprovalStatus: 'NOT_REQUIRED' | 'PENDING' | 'APPROVED' | 'REJECTED' = 'NOT_REQUIRED';
 
@@ -1254,15 +1310,19 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
       finalApprovalStatus = 'PENDING';
     } else if (mode === 'WFH') {
       finalStatus = effectiveIsLate ? 'LATE' : 'WFH_APPROVED';
-      finalApprovalStatus = effectiveIsLate ? 'PENDING' : 'NOT_REQUIRED';
+      finalApprovalStatus = (effectiveIsLate || effectiveIsEarlyOut) ? 'PENDING' : 'NOT_REQUIRED';
     } else if (!isPhysicallyInGeofence) {
       finalStatus = 'OUT_OF_GEOFENCE';
       finalApprovalStatus = 'PENDING';
     } else if (effectiveIsLate) {
       finalStatus = 'LATE';
       finalApprovalStatus = 'PENDING';
+    } else if (effectiveIsEarlyOut) {
+      finalStatus = existingToday?.status || 'ON_TIME';
+      finalApprovalStatus = 'PENDING';
+      noteToUse = `[Pulang Lebih Awal ${effectiveEarlyMinutes} Mnt Sebelum ${userSchedule.checkOutTime} WIB]: ${earlyCheckOutReason.trim() || 'Izin pulang lebih awal'}`;
     } else {
-      finalStatus = 'ON_TIME';
+      finalStatus = existingToday?.status || 'ON_TIME';
       finalApprovalStatus = 'NOT_REQUIRED';
     }
 
@@ -1278,6 +1338,10 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
       attendanceType: attendanceAction,
       mode: mode,
       status: finalStatus,
+      isEarlyCheckOut: effectiveIsEarlyOut,
+      earlyCheckOutMinutes: effectiveEarlyMinutes,
+      earlyCheckOutReason: effectiveIsEarlyOut ? (earlyCheckOutReason.trim() || 'Izin pulang lebih awal') : undefined,
+      scheduledCheckOutTime: userSchedule.checkOutTime || '17:00',
       photoUrl: isCheckIn ? photoToUse : (existingToday?.photoUrl || photoToUse),
       photoOutUrl: !isCheckIn ? photoToUse : (existingToday?.photoOutUrl || undefined),
       location: {
@@ -1751,6 +1815,32 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                       onChange={e => setLateReason(e.target.value)}
                       placeholder="Tuliskan catatan alasan kenapa Anda terlambat (wajib diisi mandiri)..."
                       className="w-full glass-input rounded-xl px-3 py-2 text-xs text-slate-800 placeholder-slate-400 border border-rose-300 focus:ring-2 focus:ring-rose-500/30 bg-white shadow-2xs font-medium"
+                    />
+                  </div>
+                )}
+
+                {/* Status Pulang Lebih Awal: Warning & Alasan (Wajib diisi & Memerlukan Approval PKM dan HR) */}
+                {attendanceAction === 'CHECK_OUT' && isEarlyCheckOut && (
+                  <div className="p-3.5 rounded-2xl bg-amber-50/95 border border-amber-400 shadow-xs space-y-2 motion-fade-in-up">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 text-amber-950 font-bold text-xs">
+                        <Clock className="w-4 h-4 text-amber-600 shrink-0 animate-pulse" />
+                        <span>Pulang Lebih Awal ({earlyCheckOutMinutes} Menit Sebelum {userSchedule.checkOutTime} WIB)</span>
+                      </div>
+                      <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-amber-200 text-amber-900 font-mono-code uppercase tracking-wider shrink-0">
+                        Wajib Approval PKM & HR
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-amber-800 leading-relaxed font-medium">
+                      Jam operasional selesai shift adalah <strong>{userSchedule.checkOutTime} WIB</strong> ({userSchedule.projectName}). Pulang sebelum jam selesai kerja memerlukan persetujuan berjenjang dari <strong>PKM (Project Manager)</strong> dan <strong>HR Manager</strong>.
+                    </p>
+                    <input
+                      type="text"
+                      required
+                      value={earlyCheckOutReason}
+                      onChange={e => setEarlyCheckOutReason(e.target.value)}
+                      placeholder="Tuliskan alasan jelas izin pulang lebih awal (wajib diisi)..."
+                      className="w-full glass-input rounded-xl px-3 py-2 text-xs text-slate-800 placeholder-slate-400 border border-amber-300 focus:ring-2 focus:ring-amber-500/30 bg-white shadow-2xs font-medium"
                     />
                   </div>
                 )}

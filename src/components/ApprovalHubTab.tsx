@@ -34,7 +34,8 @@ import {
   Shield,
   ShieldCheck,
   CreditCard,
-  Lock
+  Lock,
+  LogOut
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Employee, ApprovalItem, LeaveType, SystemRole, getEffectiveSystemRole, Project } from '../types';
@@ -736,6 +737,7 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
             { id: 'PERMIT', label: 'Izin Sakit / Pribadi' },
             { id: 'ATTENDANCE_CORRECTION', label: 'Koreksi Absensi Mandiri' },
             { id: 'LATE_JUSTIFICATION', label: 'Keterlambatan' },
+            { id: 'EARLY_CHECKOUT', label: 'Pulang Lebih Awal' },
             { id: 'OUT_OF_GEOFENCE', label: 'Presensi Luar Area' },
             { id: 'DINAS_LUAR', label: 'Dinas Luar Mendadak' },
             { id: 'KASBON', label: 'Kasbon Pribadi' },
@@ -1007,6 +1009,13 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                               className="w-7 h-7 rounded-lg bg-rose-100 text-rose-700 border border-rose-200/90 flex items-center justify-center shadow-2xs hover:scale-110 transition-transform cursor-help"
                             >
                               <Clock className="w-3.5 h-3.5 text-rose-600" />
+                            </div>
+                          ) : item.type === 'EARLY_CHECKOUT' ? (
+                            <div
+                              title={`Tipe: Pulang Lebih Awal (${item.earlyCheckOutMinutes || 0} Menit)`}
+                              className="w-7 h-7 rounded-lg bg-amber-100 text-amber-800 border border-amber-300 flex items-center justify-center shadow-2xs hover:scale-110 transition-transform cursor-help"
+                            >
+                              <LogOut className="w-3.5 h-3.5 text-amber-700" />
                             </div>
                           ) : item.type === 'LEAVE' ? (
                             <div
@@ -2104,7 +2113,9 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
             {/* Badges Bar */}
             <div className="flex items-center gap-2 flex-wrap">
               <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide uppercase font-mono-code ${
-                detailModalItem.type === 'OUT_OF_GEOFENCE'
+                detailModalItem.type === 'EARLY_CHECKOUT'
+                  ? 'bg-amber-100 text-amber-900 border border-amber-400 font-bold'
+                  : detailModalItem.type === 'OUT_OF_GEOFENCE'
                   ? 'bg-orange-100 text-orange-800 border border-orange-300'
                   : detailModalItem.type === 'DINAS_LUAR'
                   ? 'bg-amber-100 text-amber-800'
@@ -2116,7 +2127,7 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                   ? 'bg-teal-100 text-teal-800 border border-teal-300'
                   : 'bg-emerald-100 text-emerald-800'
               }`}>
-                {detailModalItem.type.replace('_', ' ')}
+                {detailModalItem.type === 'EARLY_CHECKOUT' ? 'PULANG LEBIH AWAL' : detailModalItem.type.replace('_', ' ')}
               </span>
 
               {detailModalItem.leaveType === 'CUTI_ROSTER_NON_LOKAL' && (
@@ -2185,6 +2196,36 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                 <div className="text-xs pt-1 text-slate-700 flex items-center justify-between flex-wrap gap-2">
                   <span>
                     Rute Otorisasi: <b>{detailModalItem.targetApproverRole === 'PM' ? `PM (${detailModalItem.projectManagerName || 'Site'}) / HR Manager` : 'HR Manager Saja'}</b>
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Detail Spesifik Pulang Lebih Awal */}
+            {detailModalItem.type === 'EARLY_CHECKOUT' && (
+              <div className="p-4 rounded-2xl bg-amber-50/90 border border-amber-300 text-amber-950 space-y-3">
+                <div className="flex items-center justify-between text-xs font-bold border-b border-amber-200/80 pb-2">
+                  <span className="flex items-center gap-1.5 text-amber-900 font-mono-code">
+                    <Clock className="w-4 h-4 text-amber-600" />
+                    Presensi Tanggal: {formatIndonesianDateDisplay(detailModalItem.startDate)}
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded-md text-[10.5px] font-mono-code font-bold bg-amber-200 text-amber-900 border border-amber-300">
+                    Pulang {detailModalItem.earlyCheckOutMinutes || 0} Menit Lebih Awal
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-xs font-mono-code">
+                  <div className="p-2.5 rounded-xl bg-white border border-amber-100">
+                    <span className="text-[10px] text-slate-400 block uppercase">Jam Pulang Aktual</span>
+                    <b className="text-amber-900 text-sm">{detailModalItem.targetCheckOutTime ? `${detailModalItem.targetCheckOutTime} WIB` : '-'}</b>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-white border border-amber-100">
+                    <span className="text-[10px] text-slate-400 block uppercase">Jadwal Selesai Shift</span>
+                    <b className="text-slate-800 text-sm">{detailModalItem.scheduledCheckOutTime ? `${detailModalItem.scheduledCheckOutTime} WIB` : '17:00 WIB'}</b>
+                  </div>
+                </div>
+                <div className="text-xs pt-1 text-slate-700 flex items-center justify-between flex-wrap gap-2">
+                  <span>
+                    Rute Otorisasi: <b>{detailModalItem.targetApproverRole === 'PM' ? `Tahap 1: PKM (${detailModalItem.projectManagerName || 'Site'}) ➔ Tahap 2: HR Manager` : 'HR Manager'}</b>
                   </span>
                 </div>
               </div>
