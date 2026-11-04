@@ -418,7 +418,7 @@ export interface ApprovalItem {
   // Metadata Koreksi Absensi Mandiri & Penugasan Proyek
   targetCheckInTime?: string;
   targetCheckOutTime?: string;
-  targetStatus?: 'ON_TIME' | 'LATE' | 'DINAS_LUAR';
+  targetStatus?: 'ON_TIME' | 'LATE' | 'DINAS_LUAR' | 'OUT_OF_GEOFENCE' | AttendanceStatus;
   projectId?: string;
   projectCode?: string;
   projectName?: string;

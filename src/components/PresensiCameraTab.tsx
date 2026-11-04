@@ -427,21 +427,44 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
   const userAuthorizedProjects = useMemo(() => {
     const currentEmpId = currentUser.id || (currentUser as any).employee?.id;
     const currentAssignedId = currentUser.assignedProjectId || (currentUser as any).employee?.assignedProjectId;
+    const assignedIds: string[] = Array.isArray(currentUser.assignedProjectIds)
+      ? currentUser.assignedProjectIds
+      : (Array.isArray((currentUser as any).employee?.assignedProjectIds) ? (currentUser as any).employee?.assignedProjectIds : []);
+
     return projects.filter(p => {
       if (currentAssignedId && p.id === currentAssignedId) return true;
+      if (assignedIds.includes(p.id)) return true;
       if (p.assignedEmployeeIds && currentEmpId && p.assignedEmployeeIds.includes(currentEmpId)) return true;
       return false;
     });
   }, [projects, currentUser]);
 
-  // Target Lokasi Penugasan Resmi Karyawan (Tanpa Auto-Detect, Terkunci ke Penugasan Karyawan)
+  // Cek apakah posisi GPS saat ini cocok dengan salah satu proyek penugasan karyawan
+  const matchingAuthorizedProject = useMemo(() => {
+    if (!coords.lat || !coords.lng) return null;
+    for (const proj of userAuthorizedProjects) {
+      const pGeo = getProjectCoordinates(proj);
+      if (pGeo) {
+        const d = calculateDistanceMeters(coords.lat, coords.lng, pGeo.lat, pGeo.lng);
+        if (d <= (pGeo.radius || 350)) {
+          return { project: proj, distance: d, radius: pGeo.radius || 350 };
+        }
+      }
+    }
+    return null;
+  }, [userAuthorizedProjects, coords.lat, coords.lng]);
+
+  // Target Lokasi Penugasan Resmi Karyawan (Prioritaskan proyek yang posisinya cocok, atau assigned default)
   const assignedProject = useMemo(() => {
+    if (matchingAuthorizedProject) {
+      return matchingAuthorizedProject.project;
+    }
     const projId = currentUser.assignedProjectId || (currentUser as any).employee?.assignedProjectId;
     if (projId && projId !== 'OFFICE') {
       return userAuthorizedProjects.find(p => p.id === projId) || projects.find(p => p.id === projId) || null;
     }
     return userAuthorizedProjects[0] || null;
-  }, [userAuthorizedProjects, projects, currentUser]);
+  }, [matchingAuthorizedProject, userAuthorizedProjects, projects, currentUser]);
 
   const activeProject = assignedProject;
 
@@ -464,26 +487,32 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
   const isInSelectedProjectGeofence = isGpsLocked && activeProjectDist !== null && activeProjectDist <= activeProjectRadius;
   const isInProjectGeofence = isInSelectedProjectGeofence;
 
-  // Jika karyawan ditugaskan di proyek site -> validasi terhadap geofence proyek tersebut.
-  // Jika kantor pusat -> validasi terhadap geofence kantor pusat.
-  const isPhysicallyInGeofence = isGpsLocked && (activeProject ? isInSelectedProjectGeofence : isInOfficeGeofence);
+  // Karyawan valid secara fisik jika:
+  // 1. Berada di area Kantor Pusat (Kantor Pusat berlaku universal untuk semua staf perusahaan yang hadir di HQ)
+  // 2. ATAU berada di area proyek yang ditugaskan / terpilih
+  // 3. ATAU berada di salah satu proyek yang ditugaskan kepada karyawan
+  const isPhysicallyInGeofence = isGpsLocked && (
+    isInOfficeGeofence ||
+    isInSelectedProjectGeofence ||
+    Boolean(matchingAuthorizedProject)
+  );
 
   // Status Geofence Menyeluruh
   const isWithinAnyAuthorizedGeofence = isGpsLocked ? (mode === 'WFH' || mode === 'DINAS_LUAR' ? true : isPhysicallyInGeofence) : false;
-  const assignedProjectDist = activeProjectDist;
-  const effectiveTargetDistance = activeProjectDist !== null ? activeProjectDist : realGeofenceDistance;
+  const assignedProjectDist = isInOfficeGeofence ? realGeofenceDistance : (activeProjectDist !== null ? activeProjectDist : realGeofenceDistance);
+  const effectiveTargetDistance = isInOfficeGeofence ? realGeofenceDistance : (matchingAuthorizedProject ? matchingAuthorizedProject.distance : (activeProjectDist !== null ? activeProjectDist : realGeofenceDistance));
 
   // Nama lokasi resmi penugasan karyawan
   const activeLocationTitle = useMemo(() => {
+    if (isInOfficeGeofence) {
+      return salaryRules?.officeGeofence?.name || 'Kantor Pusat & Operasional';
+    }
     if (activeProject) {
       const isHeadOffice = Boolean(activeProject.isHeadOffice || activeProject.code === 'PRJ-001' || activeProject.name.toUpperCase().includes('KANTOR PUSAT'));
       return isHeadOffice ? activeProject.name : `Site ${activeProject.name}`;
     }
-    if (isInOfficeGeofence) {
-      return salaryRules?.officeGeofence?.name || 'Kantor Pusat & Operasional';
-    }
     return salaryRules?.officeGeofence?.name || 'Kantor Pusat & Operasional';
-  }, [activeProject, isInOfficeGeofence, salaryRules?.officeGeofence?.name]);
+  }, [isInOfficeGeofence, activeProject, salaryRules?.officeGeofence?.name]);
 
   const handleSaveGeofence = async () => {
     const numLat = typeof tempOfficeLat === 'string' ? parseFloat(tempOfficeLat) : tempOfficeLat;
@@ -1352,11 +1381,11 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
         inGeofence: mode === 'WFO' ? isPhysicallyInGeofence : true,
         distanceMeters: effectiveTargetDistance
       },
-      projectId: isInOfficeGeofence ? 'OFFICE' : (activeProject?.id || 'OFFICE'),
-      projectCode: isInOfficeGeofence ? 'HO' : (activeProject?.code || 'HO'),
+      projectId: isInOfficeGeofence ? 'OFFICE' : (matchingAuthorizedProject ? matchingAuthorizedProject.project.id : (activeProject?.id || 'OFFICE')),
+      projectCode: isInOfficeGeofence ? 'HO' : (matchingAuthorizedProject ? matchingAuthorizedProject.project.code : (activeProject?.code || 'HO')),
       projectName: isInOfficeGeofence
-        ? (salaryRules?.officeGeofence?.name || assignedProject?.name || 'Kantor Pusat & Operasional')
-        : (activeProject && isInProjectGeofence ? activeProject.name : (coords.address ? coords.address.replace(' (GPS HP Asli)', '') : 'Presensi Luar Area')),
+        ? (salaryRules?.officeGeofence?.name || 'Kantor Pusat & Operasional')
+        : (matchingAuthorizedProject ? matchingAuthorizedProject.project.name : (activeProject && isInProjectGeofence ? activeProject.name : (coords.address ? coords.address.replace(' (GPS HP Asli)', '') : 'Presensi Luar Area'))),
       networkAudit: {
         ipAddress: activeIp,
         connectionType: isInOfficeGeofence || isInProjectGeofence ? 'Geofence Valid' : 'GPS Mobile'

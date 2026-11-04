@@ -2165,8 +2165,42 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
               </p>
             </div>
 
+            {/* Detail Spesifik Presensi Luar Radius / Geofence */}
+            {detailModalItem.type === 'OUT_OF_GEOFENCE' && (
+              <div className="p-4 rounded-2xl bg-amber-50/90 border border-amber-300 text-amber-950 space-y-3">
+                <div className="flex items-center justify-between text-xs font-bold border-b border-amber-200/80 pb-2">
+                  <span className="flex items-center gap-1.5 text-amber-900 font-mono-code">
+                    <MapPin className="w-4 h-4 text-amber-600" />
+                    Presensi Luar Radius Tanggal: {formatIndonesianDateDisplay(detailModalItem.startDate)}
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded-md text-[10.5px] font-mono-code font-bold bg-amber-200 text-amber-900 border border-amber-300">
+                    Luar Radius / Geofence
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-3 text-xs font-mono-code">
+                  <div className="p-2.5 rounded-xl bg-white border border-amber-100">
+                    <span className="text-[10px] text-slate-400 block uppercase">Jam Masuk (Check-In)</span>
+                    <b className="text-amber-900 text-sm">
+                      {detailModalItem.targetCheckInTime
+                        ? `${detailModalItem.targetCheckInTime} WIB`
+                        : (detailModalItem.submittedAt ? `${detailModalItem.submittedAt.split(' ')[1] || ''} WIB` : '-')}
+                    </b>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-white border border-amber-100">
+                    <span className="text-[10px] text-slate-400 block uppercase">Status Lokasi</span>
+                    <b className="text-amber-900 text-sm">{detailModalItem.projectCode || detailModalItem.projectName || 'Luar Area Proyek'}</b>
+                  </div>
+                </div>
+                <div className="text-xs pt-1 text-slate-700 flex items-center justify-between flex-wrap gap-2">
+                  <span>
+                    Rute Otorisasi: <b>{detailModalItem.targetApproverRole === 'PM' ? `PM (${detailModalItem.projectManagerName || 'Site'}) / HR Manager` : 'HR Manager Saja'}</b>
+                  </span>
+                </div>
+              </div>
+            )}
+
             {/* Detail Spesifik Koreksi Absensi Mandiri */}
-            {(detailModalItem.type === 'ATTENDANCE_CORRECTION' || detailModalItem.type === 'OUT_OF_GEOFENCE') && (
+            {detailModalItem.type === 'ATTENDANCE_CORRECTION' && (
               <div className="p-4 rounded-2xl bg-teal-50/80 border border-teal-200 text-teal-950 space-y-3">
                 <div className="flex items-center justify-between text-xs font-bold border-b border-teal-200/60 pb-2">
                   <span className="flex items-center gap-1.5 text-teal-900 font-mono-code">
@@ -2180,7 +2214,7 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                       ? 'bg-rose-100 text-rose-800'
                       : 'bg-blue-100 text-blue-800'
                   }`}>
-                    {detailModalItem.targetStatus === 'ON_TIME' ? 'Tepat Waktu' : detailModalItem.targetStatus === 'LATE' ? 'Terlambat' : 'Dinas Luar'}
+                    {detailModalItem.targetStatus === 'ON_TIME' ? 'Tepat Waktu' : detailModalItem.targetStatus === 'LATE' ? 'Terlambat' : 'Koreksi Absensi'}
                   </span>
                 </div>
                 <div className="grid grid-cols-2 gap-3 text-xs font-mono-code">
