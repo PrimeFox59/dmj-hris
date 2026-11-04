@@ -31,7 +31,7 @@ import {
   INITIAL_APPROVALS,
   INITIAL_SALARY_RULES
 } from './data/mockData';
-import { Employee, AttendanceRecord, AttendanceMode, AttendanceStatus, ApprovalItem, Project, SalaryRuleConfig, getEffectiveSystemRole, AuthUser, canAccessProjectModule, isProjectManager, AnnualWorkCalendarConfig } from './types';
+import { Employee, AttendanceRecord, AttendanceMode, AttendanceStatus, ApprovalItem, Project, SalaryRuleConfig, getEffectiveSystemRole, isHrEmployee, isFinanceEmployee, AuthUser, canAccessProjectModule, isProjectManager, AnnualWorkCalendarConfig } from './types';
 import { api } from './services/api';
 import { rtcService } from './services/rtcService';
 
@@ -1177,6 +1177,10 @@ export function App() {
       });
 
     if (isPmStage) {
+      const applicant = employees.find(e => e.id === targetItem?.employeeId);
+      const isApplicantHr = isHrEmployee(applicant) || targetItem?.employeeId === 'EMP-022';
+      const nextTargetRole = isApplicantHr ? 'FINANCE' : 'HR';
+
       setApprovals(prev =>
         prev.map(item => {
           if (item.id === id) {
@@ -1185,16 +1189,17 @@ export function App() {
               pmApprovedBy: approverTitle,
               pmApprovedAt: new Date().toISOString().replace('T', ' ').substring(0, 19),
               pmReviewNote: reviewerNote,
-              targetApproverRole: 'HR',
-              stage: 'HR',
+              targetApproverRole: nextTargetRole,
+              stage: nextTargetRole,
               status: 'PENDING',
-              requiresHrApproval: true
+              requiresHrApproval: !isApplicantHr,
+              requiresFinanceApproval: isApplicantHr
             };
           }
           return item;
         })
       );
-      showLiveToast(`Persetujuan Tahap 1 (${isUserProjectAdmin && !isPm ? 'Admin Proyek' : 'PM'}) Berhasil. Pengajuan diteruskan ke HR Manager untuk otorisasi akhir.`, 'success');
+      showLiveToast(`Persetujuan Tahap 1 (${isUserProjectAdmin && !isPm ? 'Admin Proyek' : 'PM'}) Berhasil. Pengajuan diteruskan ke ${isApplicantHr ? 'Finance Manager' : 'HR Manager'} untuk otorisasi akhir.`, 'success');
       return;
     }
 
@@ -1335,12 +1340,21 @@ export function App() {
             };
           }
 
+          const applicant = employees.find(e => e.id === item.employeeId);
+          const isApplicantHr = isHrEmployee(applicant) || item.employeeId === 'EMP-022';
+          const nowStr = new Date().toISOString().replace('T', ' ').substring(0, 19);
+
           return {
             ...item,
             status: 'APPROVED',
-            reviewedBy: `${currentUser.name} (${currentUser.role})`,
-            reviewedAt: new Date().toISOString().replace('T', ' ').substring(0, 19),
-            reviewNote: reviewerNote || 'Disetujui.'
+            stage: 'FINAL',
+            hrApprovedBy: isApplicantHr ? item.hrApprovedBy : approverTitle,
+            hrApprovedAt: isApplicantHr ? item.hrApprovedAt : nowStr,
+            financeApprovedBy: isApplicantHr ? approverTitle : item.financeApprovedBy,
+            financeApprovedAt: isApplicantHr ? nowStr : item.financeApprovedAt,
+            reviewedBy: approverTitle,
+            reviewedAt: nowStr,
+            reviewNote: reviewerNote || (isApplicantHr ? 'Disetujui oleh Finance Manager (Otorisasi Silang).' : 'Disetujui.')
           };
         }
         return item;

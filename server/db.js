@@ -916,6 +916,16 @@ export function saveAttendance(record) {
       const hasPm = Boolean(projInfo?.projectManagerId && !projInfo.isEmployeeThePm);
       const hasAdmin = Boolean(projInfo?.projectAdminIds && projInfo.projectAdminIds.length > 0);
 
+      const applicant = getEmployeeByIdentifier(record.employeeId);
+      const isApplicantHr = applicant && (
+        applicant.systemRole === 'hr' || 
+        applicant.systemRole === 'admin' || 
+        applicant.role === 'HR_Manager' ||
+        (applicant.position && applicant.position.toLowerCase().includes('hr')) ||
+        applicant.id === 'EMP-022'
+      );
+      const defaultStage2 = isApplicantHr ? 'FINANCE' : 'HR';
+
       const approvalItem = {
         id: approvalId,
         type: approvalType,
@@ -943,10 +953,11 @@ export function saveAttendance(record) {
         projectManagerName: projInfo?.projectManagerName || null,
         projectAdminIds: projInfo?.projectAdminIds || [],
         projectAdminNames: projInfo?.projectAdminNames || [],
-      targetApproverRole: (hasPm || hasAdmin) ? 'PM' : 'HR',
-      stage: (hasPm || hasAdmin) ? 'PM' : 'HR',
-      requiresHrApproval: true
-    };
+        targetApproverRole: (hasPm || hasAdmin) ? 'PM' : defaultStage2,
+        stage: (hasPm || hasAdmin) ? 'PM' : defaultStage2,
+        requiresHrApproval: !isApplicantHr,
+        requiresFinanceApproval: isApplicantHr
+      };
 
     db.prepare(`
       INSERT OR REPLACE INTO approvals (
@@ -1061,20 +1072,40 @@ export function updateApproval(id, status, reviewNote, reviewedBy = 'Direksi / H
   const item = JSON.parse(row.data_json);
   const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
 
+  // Periksa profil pengaju (Applicant) untuk aturan Otorisasi Silang (Cross-Approval)
+  const applicant = getEmployeeByIdentifier(item.employeeId);
+  const isApplicantHr = applicant && (
+    applicant.systemRole === 'hr' || 
+    applicant.systemRole === 'admin' || 
+    applicant.role === 'HR_Manager' ||
+    (applicant.position && applicant.position.toLowerCase().includes('hr')) ||
+    applicant.id === 'EMP-022'
+  );
+  const isApplicantFinance = applicant && (
+    applicant.systemRole === 'finance' ||
+    applicant.role === 'Finance' ||
+    (applicant.position && applicant.position.toLowerCase().includes('finance')) ||
+    (applicant.department && applicant.department.toLowerCase().includes('finance')) ||
+    applicant.id === 'EMP-015' ||
+    applicant.id === 'EMP-045'
+  );
+
   // 2-STAGE APPROVAL WORKFLOW GATEKEEPER:
   // If item is currently at Stage 1 (PM / Admin Proyek review) and action is 'APPROVED':
-  // Record PM / Admin recommendation/approval and shift to Stage 2 (HR Manager)
-  // Note: SLIP_ACCESS and KASBON are handled by Finance directly.
+  // Record PM / Admin recommendation/approval and shift to Stage 2 (HR Manager / Finance Manager Otorisasi Silang)
+  // Note: SLIP_ACCESS and KASBON are handled by Finance directly (or HR if applicant is Finance).
   const isPmStage = item.type !== 'SLIP_ACCESS' && item.type !== 'KASBON' && (item.targetApproverRole === 'PM' || item.stage === 'PM' || !item.stage) && !item.pmApprovedBy && (Boolean(item.projectManagerId) || Boolean(item.projectAdminIds && item.projectAdminIds.length > 0));
 
   if (status === 'APPROVED' && isPmStage) {
+    const nextTargetRole = isApplicantHr ? 'FINANCE' : 'HR';
     item.pmApprovedBy = reviewedBy;
     item.pmApprovedAt = now;
     item.pmReviewNote = reviewNote || null;
-    item.targetApproverRole = 'HR';
-    item.stage = 'HR';
-    item.status = 'PENDING'; // Retains PENDING status until final HR approval!
-    item.requiresHrApproval = true;
+    item.targetApproverRole = nextTargetRole;
+    item.stage = nextTargetRole;
+    item.status = 'PENDING'; // Retains PENDING status until final Stage 2 approval!
+    item.requiresHrApproval = !isApplicantHr;
+    item.requiresFinanceApproval = isApplicantHr;
 
     db.prepare(`
       UPDATE approvals
@@ -1090,7 +1121,7 @@ export function updateApproval(id, status, reviewNote, reviewedBy = 'Direksi / H
       userRole: 'pm',
       module: 'APPROVALS',
       status: 'SUCCESS',
-      details: `Pengajuan [${item.type}] untuk ${item.employeeName} (${item.employeeNik}) telah disetujui Tahap 1 oleh PM ${reviewedBy}. Diteruskan ke HR Manager untuk otorisasi akhir.${reviewNote ? ` Catatan PM: "${reviewNote}"` : ''}`
+      details: `Pengajuan [${item.type}] untuk ${item.employeeName} (${item.employeeNik}) telah disetujui Tahap 1 oleh PM ${reviewedBy}. Diteruskan ke ${isApplicantHr ? 'Finance Manager (Otorisasi Silang HR ➔ Finance)' : 'HR Manager'} untuk otorisasi akhir.${reviewNote ? ` Catatan PM: "${reviewNote}"` : ''}`
     });
 
     return {
@@ -1102,16 +1133,22 @@ export function updateApproval(id, status, reviewNote, reviewedBy = 'Direksi / H
     };
   }
 
-  // Final Decision (Stage 2 HR Approval, or Rejection by either PM / HR)
+  // Final Decision (Stage 2 Approval, or Rejection by either PM / Final Approver)
   item.status = status;
   item.reviewNote = reviewNote;
   item.reviewedBy = reviewedBy;
   item.reviewedAt = now;
 
   if (status === 'APPROVED') {
-    item.hrApprovedBy = reviewedBy;
-    item.hrApprovedAt = now;
-    item.hrReviewNote = reviewNote || null;
+    if (isApplicantHr) {
+      item.financeApprovedBy = reviewedBy;
+      item.financeApprovedAt = now;
+      item.financeReviewNote = reviewNote || null;
+    } else {
+      item.hrApprovedBy = reviewedBy;
+      item.hrApprovedAt = now;
+      item.hrReviewNote = reviewNote || null;
+    }
     item.stage = 'FINAL';
 
     // If SLIP_ACCESS: calculate exact 10 minutes (600s) active window
@@ -1125,7 +1162,11 @@ export function updateApproval(id, status, reviewNote, reviewedBy = 'Direksi / H
     if (isPmStage) {
       item.pmReviewNote = reviewNote || null;
     } else {
-      item.hrReviewNote = reviewNote || null;
+      if (isApplicantHr) {
+        item.financeReviewNote = reviewNote || null;
+      } else {
+        item.hrReviewNote = reviewNote || null;
+      }
     }
   }
 
@@ -1347,13 +1388,24 @@ export function saveApproval(item) {
   if (!item.projectAdminIds && projInfo?.projectAdminIds) item.projectAdminIds = projInfo.projectAdminIds;
   if (!item.projectAdminNames && projInfo?.projectAdminNames) item.projectAdminNames = projInfo.projectAdminNames;
 
+  const applicant = getEmployeeByIdentifier(item.employeeId);
+  const isApplicantHr = applicant && (
+    applicant.systemRole === 'hr' || 
+    applicant.systemRole === 'admin' || 
+    applicant.role === 'HR_Manager' ||
+    (applicant.position && applicant.position.toLowerCase().includes('hr')) ||
+    applicant.id === 'EMP-022'
+  );
+  const defaultStage2 = isApplicantHr ? 'FINANCE' : 'HR';
+
   if (!item.targetApproverRole) {
-    item.targetApproverRole = (hasPm || hasAdmin) ? 'PM' : 'HR';
+    item.targetApproverRole = (hasPm || hasAdmin) ? 'PM' : defaultStage2;
   }
   if (!item.stage) {
-    item.stage = (hasPm || hasAdmin) ? 'PM' : 'HR';
+    item.stage = (hasPm || hasAdmin) ? 'PM' : defaultStage2;
   }
-  item.requiresHrApproval = true;
+  item.requiresHrApproval = !isApplicantHr;
+  item.requiresFinanceApproval = isApplicantHr;
 
   db.prepare(`
     INSERT OR REPLACE INTO approvals (

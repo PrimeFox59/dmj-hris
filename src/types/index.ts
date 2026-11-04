@@ -70,6 +70,20 @@ export function getEffectiveSystemRole(emp?: { role?: UserRole | string; systemR
   return 'staff';
 }
 
+export function isHrEmployee(emp?: { role?: UserRole | string; systemRole?: SystemRole | string; position?: string; department?: string; id?: string } | null): boolean {
+  if (!emp) return false;
+  if (emp.id === 'EMP-022') return true;
+  const eff = getEffectiveSystemRole(emp);
+  return eff === 'hr' || String(emp.role || '').toUpperCase() === 'HR_MANAGER';
+}
+
+export function isFinanceEmployee(emp?: { role?: UserRole | string; systemRole?: SystemRole | string; position?: string; department?: string; id?: string } | null): boolean {
+  if (!emp) return false;
+  if (emp.id === 'EMP-015' || emp.id === 'EMP-045') return true;
+  const eff = getEffectiveSystemRole(emp);
+  return eff === 'finance' || String(emp.role || '').toUpperCase() === 'FINANCE';
+}
+
 export function isProjectManager(
   emp?: { role?: UserRole | string; systemRole?: SystemRole | string; position?: string; department?: string; id?: string; name?: string } | null,
   projects?: Array<{ projectManagerId?: string; projectManagerName?: string }>
@@ -440,6 +454,9 @@ export interface ApprovalItem {
   slipAccessExpiresAt?: string;
   financeApprovedBy?: string;
   financeApprovedAt?: string;
+  financeReviewNote?: string;
+  requiresFinanceApproval?: boolean;
+  crossApprovalReason?: string;
 }
 
 export interface ProjectWorkSchedule {

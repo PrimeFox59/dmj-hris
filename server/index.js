@@ -1129,37 +1129,104 @@ const server = http.createServer(async (req, res) => {
           return sendJson(401, { success: false, error: 'Unauthorized: Sesi tidak valid atau telah berakhir' });
         }
         const body = await readBody();
-        const isPrivileged = ['admin', 'superuser', 'hr', 'director', 'finance'].includes(user.systemRole) ||
-                             user.role === 'Director' ||
-                             user.role === 'Finance' ||
-                             user.role === 'HR_Manager';
-
-        let isPmAuthorized = false;
-        if (!isPrivileged && body?.id) {
-          try {
-            const db = getDatabase();
-            const row = db.prepare('SELECT data_json FROM approvals WHERE id = ?;').get(body.id);
-            if (row) {
-              const item = JSON.parse(row.data_json);
-              const userEmpId = user.employeeId || user.id;
-              const userName = (user.employee?.name || user.name || user.username || '').toLowerCase().trim();
-              const userPos = (user.employee?.position || user.position || '').toLowerCase();
-              const userRole = (user.role || '').toLowerCase();
-
-              const isPm = (item.projectManagerId && item.projectManagerId === userEmpId) ||
-                           (item.projectManagerName && userName && item.projectManagerName.toLowerCase().trim() === userName) ||
-                           userPos.includes('project manager') || userPos.includes('site manager') || userRole.includes('pm');
-              const isPAdmin = (Array.isArray(item.projectAdminIds) && item.projectAdminIds.includes(userEmpId)) ||
-                               (Array.isArray(item.projectAdminNames) && userName && item.projectAdminNames.some(n => n.toLowerCase().trim() === userName));
-              isPmAuthorized = isPm || isPAdmin;
-            }
-          } catch (e) {
-            console.warn('[Approval Auth Check Error]', e);
-          }
+        if (!body?.id) {
+          return sendJson(400, { success: false, error: 'Bad Request: ID pengajuan persetujuan wajib disertakan' });
         }
 
-        if (!isPrivileged && !isPmAuthorized) {
-          return sendJson(403, { success: false, error: 'Forbidden: Anda tidak memiliki wewenang untuk memproses persetujuan ini' });
+        const db = getDatabase();
+        const row = db.prepare('SELECT data_json FROM approvals WHERE id = ?;').get(body.id);
+        if (!row) {
+          return sendJson(404, { success: false, error: 'Not Found: Pengajuan persetujuan tidak ditemukan' });
+        }
+
+        const item = JSON.parse(row.data_json);
+        const userEmpId = user.employeeId || user.id;
+        const isSuperuser = user.systemRole === 'superuser' || user.role === 'Director';
+
+        // 1. PENCEGAHAN SELF-APPROVAL (Segregation of Duties)
+        if (userEmpId === item.employeeId && !isSuperuser) {
+          return sendJson(403, {
+            success: false,
+            error: 'Forbidden: Anda tidak dapat menyetujui pengajuan milik sendiri demi integritas audit dan kepatuhan sistem.'
+          });
+        }
+
+        const userName = (user.employee?.name || user.name || user.username || '').toLowerCase().trim();
+        const userPos = (user.employee?.position || user.position || '').toLowerCase();
+        const userRole = (user.role || '').toLowerCase();
+
+        // 2. CEK TAHAP PERSETUJUAN (Tahap 1 PM atau Tahap 2 Otorisasi Akhir)
+        const isPmStage = item.type !== 'SLIP_ACCESS' && item.type !== 'KASBON' &&
+                          (item.targetApproverRole === 'PM' || item.stage === 'PM' || !item.stage) &&
+                          !item.pmApprovedBy &&
+                          (Boolean(item.projectManagerId) || Boolean(item.projectAdminIds && item.projectAdminIds.length > 0));
+
+        if (isPmStage) {
+          const isPm = (item.projectManagerId && item.projectManagerId === userEmpId) ||
+                       (item.projectManagerName && userName && item.projectManagerName.toLowerCase().trim() === userName) ||
+                       userPos.includes('project manager') || userPos.includes('site manager') || userRole.includes('pm');
+          const isPAdmin = (Array.isArray(item.projectAdminIds) && item.projectAdminIds.includes(userEmpId)) ||
+                           (Array.isArray(item.projectAdminNames) && userName && item.projectAdminNames.some(n => n.toLowerCase().trim() === userName));
+          if (!isSuperuser && !isPm && !isPAdmin) {
+            return sendJson(403, {
+              success: false,
+              error: 'Forbidden: Tahap 1 wajib direkomendasikan oleh Project Manager atau Admin Proyek terkait.'
+            });
+          }
+        } else {
+          // Tahap 2: Otorisasi Akhir / Level 2 (Aturan Otorisasi Silang HR ⇄ Finance)
+          const applicant = getEmployeeByIdentifier(item.employeeId);
+          const isApplicantHr = applicant && (
+            applicant.systemRole === 'hr' || 
+            applicant.systemRole === 'admin' || 
+            applicant.role === 'HR_Manager' ||
+            (applicant.position && applicant.position.toLowerCase().includes('hr')) ||
+            applicant.id === 'EMP-022'
+          );
+          const isApplicantFinance = applicant && (
+            applicant.systemRole === 'finance' ||
+            applicant.role === 'Finance' ||
+            (applicant.position && applicant.position.toLowerCase().includes('finance')) ||
+            (applicant.department && applicant.department.toLowerCase().includes('finance')) ||
+            applicant.id === 'EMP-015' ||
+            applicant.id === 'EMP-045'
+          );
+
+          const isUserFinance = user.systemRole === 'finance' || user.role === 'Finance';
+          const isUserHr = ['hr', 'admin'].includes(user.systemRole) || user.role === 'HR_Manager';
+
+          // ATURAN 1: Pengajuan dari HR Manager WAJIB disetujui oleh Finance Manager!
+          if (isApplicantHr) {
+            if (!isUserFinance && !isSuperuser) {
+              return sendJson(403, {
+                success: false,
+                error: 'Forbidden: Pengajuan dari HR Manager wajib disetujui oleh Finance Manager (Otorisasi Silang HR ➔ Finance).'
+              });
+            }
+          } else if (isApplicantFinance) {
+            // ATURAN 2: Pengajuan dari Finance Manager WAJIB disetujui oleh HR Manager!
+            if (!isUserHr && !isSuperuser) {
+              return sendJson(403, {
+                success: false,
+                error: 'Forbidden: Pengajuan dari Finance Manager wajib disetujui oleh HR Manager (Otorisasi Silang Finance ➔ HR).'
+              });
+            }
+          } else if (item.type === 'SLIP_ACCESS' || item.type === 'KASBON') {
+            if (!isUserFinance && !isSuperuser) {
+              return sendJson(403, {
+                success: false,
+                error: 'Forbidden: Pengajuan Slip Gaji / Kasbon wajib diotorisasi oleh Finance Manager.'
+              });
+            }
+          } else {
+            // Karyawan biasa / staf umum
+            if (!isUserHr && !isSuperuser) {
+              return sendJson(403, {
+                success: false,
+                error: 'Forbidden: Anda tidak memiliki wewenang untuk menyetujui pengajuan ini (Wewenang HR Manager).'
+              });
+            }
+          }
         }
         const reviewerTitle = body.reviewedBy || user.employee?.name || user.name || user.username || 'Direksi / HR Lead';
         const result = updateApproval(body.id, body.status, body.reviewNote, reviewerTitle);
