@@ -244,7 +244,12 @@ export const api = {
   },
 
   // 3. Save Attendance Record to SQLite
-  async saveAttendance(record: AttendanceRecord): Promise<{ success: boolean; record: AttendanceRecord }> {
+  async saveAttendance(record: AttendanceRecord): Promise<{
+    success: boolean;
+    record: AttendanceRecord;
+    approvalItem?: ApprovalItem | null;
+    removedApprovalIds?: string[];
+  }> {
     const res = await fetch('/api/attendance', {
       method: 'POST',
       headers: api.getAuthHeaders(),

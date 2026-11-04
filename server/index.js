@@ -1002,6 +1002,21 @@ const server = http.createServer(async (req, res) => {
 
           const result = saveAttendance(body);
           const savedRecord = result.record || body;
+
+          // Broadcast approval cleanup & replacement
+          if (result.removedApprovalIds && result.removedApprovalIds.length > 0) {
+            broadcastRealtimeEvent('APPROVAL_DELETED_BATCH', {
+              ids: result.removedApprovalIds,
+              employeeId: savedRecord.employeeId,
+              date: savedRecord.date
+            });
+          }
+          if (result.approvalItem) {
+            broadcastRealtimeEvent('APPROVAL_SUBMITTED', result.approvalItem);
+            triggerApprovalSubmitWaNotification(result.approvalItem).catch(err => console.error('[WA Trigger Approval Submit Error]', err));
+            triggerApprovalSubmitEmailNotification(result.approvalItem).catch(err => console.error('[Email Trigger Approval Submit Error]', err));
+          }
+
           broadcastRealtimeEvent('ATTENDANCE_SAVED', savedRecord);
           triggerAttendanceWaNotification(savedRecord).catch(err => console.error('[WA Trigger Attendance Error]', err));
           triggerAttendanceEmailNotification(savedRecord).catch(err => console.error('[Email Trigger Attendance Error]', err));
@@ -1053,10 +1068,24 @@ const server = http.createServer(async (req, res) => {
           details: `Presensi Kiosk Publik (Zero-Login) untuk ${body.employeeName} (${body.employeeNik}) berhasil dicatat. Biometrik: ${body.biometricVerification?.matchScore ? body.biometricVerification.matchScore + '%' : 'Manual'}.`
         });
 
+        // Broadcast approval cleanup & replacement for kiosk
+        if (result.removedApprovalIds && result.removedApprovalIds.length > 0) {
+          broadcastRealtimeEvent('APPROVAL_DELETED_BATCH', {
+            ids: result.removedApprovalIds,
+            employeeId: savedRecord.employeeId,
+            date: savedRecord.date
+          });
+        }
+        if (result.approvalItem) {
+          broadcastRealtimeEvent('APPROVAL_SUBMITTED', result.approvalItem);
+          triggerApprovalSubmitWaNotification(result.approvalItem).catch(err => console.error('[WA Trigger Approval Submit Error]', err));
+          triggerApprovalSubmitEmailNotification(result.approvalItem).catch(err => console.error('[Email Trigger Approval Submit Error]', err));
+        }
+
         broadcastRealtimeEvent('ATTENDANCE_SAVED', savedRecord);
         triggerAttendanceWaNotification(savedRecord).catch(err => console.error('[WA Trigger Attendance Error]', err));
         triggerAttendanceEmailNotification(savedRecord).catch(err => console.error('[Email Trigger Attendance Error]', err));
-        return sendJson(200, { success: true, record: savedRecord });
+        return sendJson(200, result);
       } catch (err) {
         console.error('[SERVER ERROR /api/public-attendance]', err);
         return sendJson(500, { success: false, error: err.message || 'Internal Server Error' });

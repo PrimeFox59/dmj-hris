@@ -509,7 +509,12 @@ export function resolveEmployeeProjectAndPm(employeeId: string) {
   };
 }
 
-export function saveAttendance(record: AttendanceRecord): { success: boolean; record: AttendanceRecord } {
+export function saveAttendance(record: AttendanceRecord): {
+  success: boolean;
+  record: AttendanceRecord;
+  approvalItem?: ApprovalItem | null;
+  removedApprovalIds?: string[];
+} {
   const db = getDatabase();
   const insert = db.prepare(`
     INSERT OR REPLACE INTO attendances (

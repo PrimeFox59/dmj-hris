@@ -573,6 +573,17 @@ export function App() {
           const displayTime = isCheckout ? (newAtt.checkOutTime || newAtt.checkInTime) : newAtt.checkInTime;
           showLiveToast(`${actionLabel}: ${newAtt.employeeName} (${displayTime || ''} - ${newAtt.mode || 'WFO'})`, 'success');
         }
+      } else if (packet.type === 'APPROVAL_DELETED_BATCH') {
+        const { ids } = packet.payload || {};
+        if (Array.isArray(ids) && ids.length > 0) {
+          const idSet = new Set(ids);
+          setApprovals(prev => prev.filter(a => !idSet.has(a.id)));
+        }
+      } else if (packet.type === 'APPROVAL_DELETED') {
+        const { id } = packet.payload || {};
+        if (id) {
+          setApprovals(prev => prev.filter(a => a.id !== id));
+        }
       } else if (packet.type === 'APPROVAL_UPDATED') {
         const { id, status, reviewNote, reviewedBy, item } = packet.payload;
         setApprovals(prev => prev.map(a => a.id === id ? { ...a, status, reviewNote, reviewedBy, ...(item || {}) } : a));
@@ -908,7 +919,7 @@ export function App() {
       return [merged, ...rest];
     });
 
-    // Save to SQLite asynchronously and reconcile returned record at index 0
+    // Save to authoritative SQLite backend: handles replacement and returns canonical approvals
     try {
       const res = await api.saveAttendance(record);
       if (res && res.record) {
@@ -919,189 +930,27 @@ export function App() {
           return [merged, ...rest];
         });
       }
+
+      // Reconcile approvals from backend Single Source of Truth (SSOT)
+      if (res && res.removedApprovalIds && res.removedApprovalIds.length > 0) {
+        const removedSet = new Set(res.removedApprovalIds);
+        setApprovals(prev => prev.filter(a => !removedSet.has(a.id)));
+      }
+
+      if (res && res.approvalItem) {
+        const newItem = res.approvalItem;
+        setApprovals(prev => {
+          const idx = prev.findIndex(a => a.id === newItem.id);
+          if (idx >= 0) {
+            const next = [...prev];
+            next[idx] = { ...next[idx], ...newItem };
+            return next;
+          }
+          return [newItem, ...prev];
+        });
+      }
     } catch (err) {
       console.error('Failed to save attendance to SQLite', err);
-    }
-
-    // Resolve project and PM routing for applicant (prioritaskan proyek yang tercatat pada presensi)
-    const userProj = (record.projectId && projects.find(p => p.id === record.projectId || p.code === record.projectId)) ||
-      projects.find(p => 
-        p.id === currentUser.assignedProjectId || 
-        p.code === currentUser.assignedProjectId || 
-        (p.assignedEmployeeIds && p.assignedEmployeeIds.includes(record.employeeId)) ||
-        p.projectManagerId === record.employeeId
-      );
-
-    let pmEmp = userProj?.projectManagerId ? employees.find(e => e.id === userProj.projectManagerId) : null;
-    if (!pmEmp && userProj?.assignedEmployeeIds) {
-      pmEmp = employees.find(e => 
-        userProj.assignedEmployeeIds?.includes(e.id) && 
-        (e.position?.toLowerCase().includes('project manager') || 
-         e.position?.toLowerCase().includes('site manager') || 
-         e.role?.toLowerCase() === 'manager')
-      );
-    }
-
-    // 1. Geofence Out-of-Area Approval: Otomatis submit ke PM atau HR
-    const isOutOfGeofence = record.status === 'OUT_OF_GEOFENCE' || (record.mode === 'WFO' && !record.location.inGeofence);
-    if (isOutOfGeofence) {
-      const dist = record.location.distanceMeters || 0;
-      const distFormatted = dist >= 1000 ? `${(dist / 1000).toFixed(1)} km` : `${dist} m`;
-      const projName = userProj ? `${userProj.code} - ${userProj.name}` : (record.location.address || 'Site Proyek');
-
-      const geofenceApproval: ApprovalItem = {
-        id: `APP-GEO-${Date.now()}`,
-        type: 'OUT_OF_GEOFENCE',
-        employeeId: record.employeeId,
-        employeeName: record.employeeName,
-        employeeNik: record.employeeNik,
-        department: record.department,
-        title: `Persetujuan Presensi Luar Radius (${distFormatted}) - ${userProj?.code || 'SITE'}`,
-        description: `Lokasi: ${projName}. Jarak Aktual: ${distFormatted}. Catatan Karyawan: ${record.outOfRangeReason || record.note || 'Tugas operasional luar radius'}`,
-        startDate: record.date,
-        attendanceRecordId: record.id,
-        targetCheckInTime: record.checkInTime || undefined,
-        targetCheckOutTime: record.checkOutTime || undefined,
-        targetStatus: 'OUT_OF_GEOFENCE',
-        status: 'PENDING',
-        submittedAt: `${record.date} ${record.checkInTime || ''}`,
-        projectId: userProj?.id,
-        projectCode: userProj?.code,
-        projectName: userProj?.name,
-        projectManagerId: pmEmp?.id,
-        projectManagerName: pmEmp?.name,
-        targetApproverRole: pmEmp ? 'PM' : 'HR'
-      };
-
-      setApprovals(prev => [geofenceApproval, ...prev]);
-      api.submitApproval(geofenceApproval).catch(err => console.error('Failed to submit OUT_OF_GEOFENCE approval to SQLite', err));
-    }
-
-    // 2. Late Justification Approval: HANYA untuk Absen Masuk (CHECK_IN) yang terlambat
-    if (record.isLate && record.attendanceType !== 'CHECK_OUT') {
-      const lateApproval: ApprovalItem = {
-        id: `APP-LATE-${Date.now()}`,
-        type: 'LATE_JUSTIFICATION',
-        employeeId: record.employeeId,
-        employeeName: record.employeeName,
-        employeeNik: record.employeeNik,
-        department: record.department,
-        title: `Justifikasi Keterlambatan Presensi (${record.lateMinutes} Menit)`,
-        description: record.lateReason || 'Keterlambatan masuk shift kerja.',
-        startDate: record.date,
-        lateMinutes: record.lateMinutes,
-        attendanceRecordId: record.id,
-        status: 'PENDING',
-        submittedAt: `${record.date} ${record.checkInTime}`,
-        projectId: userProj?.id,
-        projectCode: userProj?.code,
-        projectName: userProj?.name,
-        projectManagerId: pmEmp?.id,
-        projectManagerName: pmEmp?.name,
-        targetApproverRole: pmEmp ? 'PM' : 'HR'
-      };
-      setApprovals(prev => [lateApproval, ...prev]);
-      api.submitApproval(lateApproval).catch(err => console.error('Failed to submit late approval', err));
-    } else if (record.mode === 'DINAS_LUAR' && record.dinasLuarDetails) {
-      const dinasApproval: ApprovalItem = {
-        id: `APP-DINAS-${Date.now()}`,
-        type: 'DINAS_LUAR',
-        employeeId: record.employeeId,
-        employeeName: record.employeeName,
-        employeeNik: record.employeeNik,
-        department: record.department,
-        title: `Persetujuan Dinas Luar Mendadak - ${record.dinasLuarDetails.clientName}`,
-        description: `Tujuan: ${record.dinasLuarDetails.destination}. Proyek: ${record.dinasLuarDetails.projectCode}. Alasan: ${record.dinasLuarDetails.purpose}`,
-        startDate: record.date,
-        daysCount: 1,
-        attendanceRecordId: record.id,
-        status: 'PENDING',
-        submittedAt: `${record.date} ${record.checkInTime}`,
-        projectId: userProj?.id,
-        projectCode: userProj?.code,
-        projectName: userProj?.name,
-        projectManagerId: pmEmp?.id,
-        projectManagerName: pmEmp?.name,
-        targetApproverRole: pmEmp ? 'PM' : 'HR'
-      };
-      setApprovals(prev => [dinasApproval, ...prev]);
-      api.submitApproval(dinasApproval).catch(err => console.error('Failed to submit dinas approval', err));
-    }
-
-    // 3. Incomplete Attendance (Hanya Absen Pulang / Lupa Absen Masuk): Otomatis submit ke PM kemudian HR
-    const isMissingCheckIn = !record.checkInTime && Boolean(record.checkOutTime);
-    if (isMissingCheckIn) {
-      const incompleteApproval: ApprovalItem = {
-        id: `APP-NOIN-${Date.now()}`,
-        type: 'ATTENDANCE_CORRECTION',
-        employeeId: record.employeeId,
-        employeeName: record.employeeName,
-        employeeNik: record.employeeNik,
-        department: record.department,
-        title: `Persetujuan Presensi Tanpa Absen Masuk - ${record.employeeName}`,
-        description: `Karyawan melakukan Absen Pulang pukul ${record.checkOutTime} WIB tanpa rekam Absen Masuk pada tanggal ${record.date}. Status kehadiran saat ini Tidak Absen (Alpa) dan memerlukan peninjauan kehadiran oleh PM terkait kemudian HR Manager.`,
-        startDate: record.date,
-        targetCheckOutTime: record.checkOutTime,
-        attendanceRecordId: record.id,
-        status: 'PENDING',
-        stage: 'PM',
-        targetApproverRole: pmEmp ? 'PM' : 'HR',
-        requiresHrApproval: true,
-        submittedAt: `${record.date} ${record.checkOutTime}`,
-        projectId: userProj?.id,
-        projectCode: userProj?.code,
-        projectName: userProj?.name,
-        projectManagerId: pmEmp?.id,
-        projectManagerName: pmEmp?.name,
-        projectAdminIds: userProj?.projectAdminIds,
-        projectAdminNames: userProj?.projectAdminNames
-      };
-
-      setApprovals(prev => [incompleteApproval, ...prev]);
-      api.submitApproval(incompleteApproval).catch(err => console.error('Failed to submit missing check-in approval to SQLite', err));
-    }
-
-    // 4. Pulang Lebih Awal (Early Check-Out): Wajib approval berjenjang PKM (Project Manager) kemudian HR
-    const isEarlyCheckOut = Boolean(record.isEarlyCheckOut || (
-      record.attendanceType === 'CHECK_OUT' &&
-      record.checkOutTime &&
-      record.scheduledCheckOutTime &&
-      record.checkOutTime < record.scheduledCheckOutTime
-    ));
-
-    if (isEarlyCheckOut) {
-      const schedTime = record.scheduledCheckOutTime || '17:00';
-      const earlyMins = record.earlyCheckOutMinutes || 0;
-      const earlyApproval: ApprovalItem = {
-        id: `APP-EARLY-${Date.now()}`,
-        type: 'EARLY_CHECKOUT',
-        employeeId: record.employeeId,
-        employeeName: record.employeeName,
-        employeeNik: record.employeeNik,
-        department: record.department,
-        title: `Persetujuan Pulang Lebih Awal (${earlyMins} Menit Sebelum ${schedTime} WIB) - ${record.employeeName}`,
-        description: `Karyawan melakukan Absen Pulang pukul ${record.checkOutTime} WIB sebelum jam selesai operasional (${schedTime} WIB, selisih ${earlyMins} menit). Alasan Karyawan: ${record.earlyCheckOutReason || record.note || 'Izin pulang mendahului jam kerja'}. Memerlukan persetujuan berjenjang PKM dan HR.`,
-        startDate: record.date,
-        targetCheckOutTime: record.checkOutTime,
-        scheduledCheckOutTime: schedTime,
-        earlyCheckOutMinutes: earlyMins,
-        attendanceRecordId: record.id,
-        status: 'PENDING',
-        stage: pmEmp ? 'PM' : 'HR',
-        targetApproverRole: pmEmp ? 'PM' : 'HR',
-        requiresHrApproval: true,
-        submittedAt: `${record.date} ${record.checkOutTime}`,
-        projectId: userProj?.id,
-        projectCode: userProj?.code,
-        projectName: userProj?.name,
-        projectManagerId: pmEmp?.id,
-        projectManagerName: pmEmp?.name,
-        projectAdminIds: userProj?.projectAdminIds,
-        projectAdminNames: userProj?.projectAdminNames
-      };
-
-      setApprovals(prev => [earlyApproval, ...prev]);
-      api.submitApproval(earlyApproval).catch(err => console.error('Failed to submit early checkout approval to SQLite', err));
     }
   };
 
