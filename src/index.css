@@ -448,5 +448,31 @@ body {
   background: #FF6B00;
 }
 
+/* HR Room Auto-scaling Table Typography based on Container Width & Viewport */
+.hr-table-container {
+  container-type: inline-size;
+}
+
+.hr-text-auto-header {
+  font-size: clamp(7.5px, 0.68vw, 9.5px);
+  font-size: clamp(7.5px, 0.82cqw, 9.5px);
+  letter-spacing: -0.02em;
+}
+
+.hr-text-auto-base {
+  font-size: clamp(8.5px, 0.78vw, 11px);
+  font-size: clamp(8.5px, 0.95cqw, 11px);
+}
+
+.hr-text-auto-sm {
+  font-size: clamp(8px, 0.7vw, 10px);
+  font-size: clamp(8px, 0.85cqw, 10px);
+}
+
+.hr-text-auto-xs {
+  font-size: clamp(7px, 0.62vw, 8.5px);
+  font-size: clamp(7px, 0.72cqw, 8.5px);
+}
+
 
 
