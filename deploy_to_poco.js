@@ -84,7 +84,12 @@ try {
 
   const execCommand = `node /data/data/com.termux/files/home/prime-hris/${runnerFile} && rm -f /data/data/com.termux/files/home/prime-hris/${runnerFile}`;
   if (remoteRunner === 'DIRECT') {
-    execSync(`ssh -T poco "${execCommand}"`, { stdio: 'inherit' });
+    try {
+      execSync(`ssh -T -o ConnectTimeout=5 poco "${execCommand}"`, { stdio: 'inherit' });
+    } catch (eDirect) {
+      console.log('[MC18] Direct SSH timed out. Falling back to VPS relay...');
+      execSync(`ssh vps "ssh -T poco \\"${execCommand}\\""`, { stdio: 'inherit' });
+    }
   } else {
     execSync(`ssh vps "ssh -T poco \\"${execCommand}\\""`, { stdio: 'inherit' });
   }
