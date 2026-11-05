@@ -400,11 +400,29 @@ export function getAllData() {
   const projects: Project[] = (db.prepare('SELECT data_json FROM projects ORDER BY code ASC;').all() as any[])
     .map(row => JSON.parse(row.data_json));
 
+  const empLoginMap = new Map<string, string>();
+  for (const emp of employees) {
+    if (emp.id && emp.loginId) empLoginMap.set(emp.id, emp.loginId);
+    if (emp.nik && emp.loginId) empLoginMap.set(emp.nik, emp.loginId);
+    if (emp.name && emp.loginId) empLoginMap.set(emp.name.toLowerCase().trim(), emp.loginId);
+  }
+
   const attendances: AttendanceRecord[] = (db.prepare('SELECT id, data_json FROM attendances ORDER BY date DESC, checkInTime DESC LIMIT 200;').all() as any[])
     .map(row => {
       const item = JSON.parse(row.data_json);
       if (item.photoUrl && item.photoUrl.startsWith('data:image')) {
         item.photoUrl = `/api/attendance/${item.id || row.id}/photo`;
+      }
+      if (!item.employeeLoginId) {
+        if (item.employeeId === 'EMP-001') {
+          item.employeeLoginId = 'admin';
+        } else if (empLoginMap.has(item.employeeId)) {
+          item.employeeLoginId = empLoginMap.get(item.employeeId);
+        } else if (item.employeeNik && empLoginMap.has(item.employeeNik)) {
+          item.employeeLoginId = empLoginMap.get(item.employeeNik);
+        } else if (item.employeeName && empLoginMap.has(item.employeeName.toLowerCase().trim())) {
+          item.employeeLoginId = empLoginMap.get(item.employeeName.toLowerCase().trim());
+        }
       }
       return item;
     });

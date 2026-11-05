@@ -107,6 +107,7 @@ export function formatDistanceKm(meters?: number | null): string {
 
 interface PresensiCameraTabProps {
   currentUser: Employee;
+  employees?: Employee[];
   salaryRules: SalaryRuleConfig;
   attendanceHistory: AttendanceRecord[];
   onSubmitAttendance: (record: AttendanceRecord) => void;
@@ -125,6 +126,7 @@ interface PresensiCameraTabProps {
 
 export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
   currentUser,
+  employees = [],
   salaryRules,
   attendanceHistory,
   onSubmitAttendance,
@@ -147,6 +149,34 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
 
   const currentRole: SystemRole = getEffectiveSystemRole(currentUser);
   const isSuperOrAdmin = currentRole === 'superuser' || currentRole === 'admin' || currentRole === 'hr';
+
+  // Canonical Employee Lookup Map (by id, nik, and clean lowercased name)
+  const employeeMap = useMemo(() => {
+    const map = new Map<string, Employee>();
+    for (const emp of employees) {
+      if (emp.id) map.set(emp.id, emp);
+      if (emp.nik) map.set(emp.nik, emp);
+      if (emp.name) map.set(emp.name.toLowerCase().trim(), emp);
+    }
+    return map;
+  }, [employees]);
+
+  // Helper to resolve canonical login ID badge (d001, d014, admin, etc.) matching Master Karyawan
+  const getRecordLoginBadgeId = (record: AttendanceRecord): string => {
+    if (record.employeeLoginId) return record.employeeLoginId;
+    const empId = record.employeeId;
+    const empNik = record.employeeNik;
+    const empName = record.employeeName ? record.employeeName.toLowerCase().trim() : '';
+    const emp = (empId ? employeeMap.get(empId) : undefined)
+      || (empNik ? employeeMap.get(empNik) : undefined)
+      || (empName ? employeeMap.get(empName) : undefined);
+    if (emp && emp.loginId) return emp.loginId;
+    if (currentUser && (currentUser.id === record.employeeId || currentUser.nik === record.employeeNik)) {
+      if (currentUser.loginId) return currentUser.loginId;
+    }
+    if (record.employeeId === 'EMP-001') return 'admin';
+    return record.employeeId || '';
+  };
 
   // RBAC Privacy Filter & Chronological Sorting:
   // Superuser & Admin see all workforce logs, staff users only see their own attendance records.
@@ -1391,6 +1421,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
     const newRecord: AttendanceRecord = {
       id: isCheckIn ? `ATT-${Date.now()}` : (existingToday?.id || `ATT-${Date.now()}`),
       employeeId: currentUser.id,
+      employeeLoginId: currentUser.loginId || (currentUser.id === 'EMP-001' ? 'admin' : undefined),
       employeeName: currentUser.name,
       employeeNik: currentUser.nik,
       department: currentUser.department,
@@ -2109,7 +2140,9 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                     </td>
                     <td className="py-3 px-3">
                       <div className="font-bold text-slate-900">{item.employeeName}</div>
-                      <div className="text-[10px] text-indigo-600 font-mono-code font-semibold">{item.employeeId ? (item.employeeId === 'EMP-001' ? 'admin' : ('d' + String(item.employeeId.replace(/\D/g, '')).padStart(3, '0'))) : ''}</div>
+                      <div className="text-[10px] text-indigo-600 font-mono-code font-semibold">
+                        {getRecordLoginBadgeId(item)}
+                      </div>
                     </td>
                     <td className="py-3 px-3 whitespace-nowrap">
                       {item.checkInTime ? (
@@ -2301,7 +2334,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                     />
                     <div className="mt-3 p-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs space-y-1">
                       <p><span className="font-bold text-slate-700">Waktu & Tipe:</span> <span className="font-mono-code font-bold text-slate-900">{isMasuk ? `Absen Masuk (${selectedHistoryItem.checkInTime} WIB)` : `Absen Pulang (${selectedHistoryItem.checkOutTime || '-'} WIB)`}</span></p>
-                      <p><span className="font-bold text-slate-700">Karyawan:</span> {selectedHistoryItem.employeeName} ({selectedHistoryItem.employeeNik})</p>
+                      <p><span className="font-bold text-slate-700">Karyawan:</span> {selectedHistoryItem.employeeName} • <span className="text-indigo-600 font-mono-code font-bold">{getRecordLoginBadgeId(selectedHistoryItem)}</span> ({selectedHistoryItem.employeeNik})</p>
                       <p><span className="font-bold text-slate-700">Catatan:</span> {selectedHistoryItem.note}</p>
                       <p><span className="font-bold text-slate-700">Geofence:</span> <span className="font-mono-code font-semibold">{formatDistanceKm(selectedHistoryItem.location.distanceMeters)}</span> • {selectedHistoryItem.location.inGeofence ? 'Dalam Area Geofence Resmi' : 'Luar Radius'}</p>
                       <p><span className="font-bold text-slate-700">Lokasi:</span> {selectedHistoryItem.location.address}</p>

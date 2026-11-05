@@ -1640,6 +1640,7 @@ export function App() {
         {activeTab === 'attendance' && (
           <PresensiCameraTab
             currentUser={currentUser}
+            employees={employees}
             salaryRules={salaryRules}
             attendanceHistory={attendances}
             onSubmitAttendance={handleAttendanceSubmit}

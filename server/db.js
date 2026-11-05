@@ -681,12 +681,32 @@ export function getAllData() {
   });
   const projects = db.prepare('SELECT data_json FROM projects ORDER BY code ASC;').all().map(r => JSON.parse(r.data_json));
 
+  const empLoginMap = new Map();
+  for (const emp of employees) {
+    if (emp.id && emp.loginId) empLoginMap.set(emp.id, emp.loginId);
+    if (emp.nik && emp.loginId) empLoginMap.set(emp.nik, emp.loginId);
+    if (emp.name && emp.loginId) empLoginMap.set(emp.name.toLowerCase().trim(), emp.loginId);
+  }
+
   // REA Optimization: Streamline attendances and convert inline base64 to /api/attendance/:id/photo
   const attendances = db.prepare('SELECT id, data_json FROM attendances ORDER BY date DESC, COALESCE(checkOutTime, checkInTime) DESC, checkInTime DESC LIMIT 200;').all().map(r => {
     let item = {};
     try { item = JSON.parse(r.data_json); } catch (e) {}
     if (item.photoUrl && item.photoUrl.startsWith('data:image')) {
       item.photoUrl = `/api/attendance/${item.id || r.id}/photo`;
+    }
+    if (!item.employeeLoginId) {
+      if (item.employeeId === 'EMP-001') {
+        item.employeeLoginId = 'admin';
+      } else if (empLoginMap.has(item.employeeId)) {
+        item.employeeLoginId = empLoginMap.get(item.employeeId);
+      } else if (item.employeeNik && empLoginMap.has(item.employeeNik)) {
+        item.employeeLoginId = empLoginMap.get(item.employeeNik);
+      } else if (item.employeeName && empLoginMap.has(item.employeeName.toLowerCase().trim())) {
+        item.employeeLoginId = empLoginMap.get(item.employeeName.toLowerCase().trim());
+      } else if (userMap.has(item.employeeId)) {
+        item.employeeLoginId = userMap.get(item.employeeId);
+      }
     }
     return item;
   });
@@ -835,6 +855,25 @@ export function saveAttendance(record) {
   let finalApprovalStatus = 'APPROVED';
   let mergedData = {};
 
+  let employeeLoginId = record.employeeLoginId;
+  if (!employeeLoginId) {
+    if (record.employeeId === 'EMP-001') {
+      employeeLoginId = 'admin';
+    } else {
+      try {
+        const u = db.prepare('SELECT username FROM user_accounts WHERE employee_id = ?;').get(record.employeeId);
+        if (u && u.username) {
+          employeeLoginId = u.username;
+        } else {
+          const empRow = db.prepare('SELECT data_json FROM employees WHERE id = ?;').get(record.employeeId);
+          if (empRow && empRow.data_json) {
+            employeeLoginId = JSON.parse(empRow.data_json).loginId;
+          }
+        }
+      } catch (e) {}
+    }
+  }
+
   const sched = getEmployeeProjectSchedule(record.employeeId);
 
   if (attType === 'CHECK_IN') {
@@ -878,6 +917,7 @@ export function saveAttendance(record) {
       ...prevData,
       ...record,
       id: targetId,
+      employeeLoginId: employeeLoginId || prevData.employeeLoginId,
       attendanceType: 'CHECK_IN',
       checkInTime: finalCheckIn || undefined,
       checkOutTime: finalCheckOut || undefined,
@@ -933,6 +973,7 @@ export function saveAttendance(record) {
       ...prevData,
       ...record,
       id: targetId,
+      employeeLoginId: employeeLoginId || prevData.employeeLoginId,
       attendanceType: 'CHECK_OUT',
       checkInTime: finalCheckIn || undefined,
       checkOutTime: finalCheckOut,
@@ -983,6 +1024,7 @@ export function saveAttendance(record) {
 
   // Sync return values back to record object
   record.id = targetId;
+  record.employeeLoginId = employeeLoginId || prevData?.employeeLoginId;
   record.attendanceType = attType;
   record.checkInTime = finalCheckIn || undefined;
   record.checkOutTime = finalCheckOut || undefined;

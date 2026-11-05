@@ -292,6 +292,7 @@ export interface NonLokalLeaveConfig {
 export interface AttendanceRecord {
   id: string;
   employeeId: string;
+  employeeLoginId?: string; // Canonical Login ID badge (e.g. 'd014', 'd025', 'admin') matching Master Karyawan
   employeeName: string;
   employeeNik: string;
   department: string;
