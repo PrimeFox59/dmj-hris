@@ -4,6 +4,7 @@ import {
   LogIn,
   LogOut,
   ArrowRight,
+  ArrowDown,
   Camera,
   RotateCcw,
   CheckCircle2,
@@ -217,6 +218,43 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
       return badge.includes(q) || name.includes(q) || nik.includes(q) || date.includes(q) || proj.includes(q) || note.includes(q);
     });
   }, [attendanceHistory, isSuperOrAdmin, currentUser.id, currentUser.nik, currentUser.name, logSearchQuery, employeeMap]);
+
+  // Load More & Infinite Scroll Controller (Default 10 records per page)
+  const PAGE_SIZE = 10;
+  const [displayLimit, setDisplayLimit] = useState<number>(PAGE_SIZE);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  // Reset pagination limit when search query changes
+  useEffect(() => {
+    setDisplayLimit(PAGE_SIZE);
+  }, [logSearchQuery]);
+
+  const hasMore = displayLimit < visibleAttendanceHistory.length;
+  const displayedAttendanceHistory = useMemo(() => {
+    return visibleAttendanceHistory.slice(0, displayLimit);
+  }, [visibleAttendanceHistory, displayLimit]);
+
+  // Infinite scroll trigger via IntersectionObserver
+  useEffect(() => {
+    if (!hasMore) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setDisplayLimit(prev => Math.min(prev + PAGE_SIZE, visibleAttendanceHistory.length));
+        }
+      },
+      { rootMargin: '300px', threshold: 0.1 }
+    );
+
+    const currentSentinel = sentinelRef.current;
+    if (currentSentinel) {
+      observer.observe(currentSentinel);
+    }
+
+    return () => {
+      if (currentSentinel) observer.unobserve(currentSentinel);
+    };
+  }, [hasMore, visibleAttendanceHistory.length]);
 
   const [cameraActive, setCameraActive] = useState(false);
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
@@ -2165,7 +2203,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                   </td>
                 </tr>
               ) : (
-                visibleAttendanceHistory.map(item => (
+                displayedAttendanceHistory.map(item => (
                   <tr key={item.id} className="hover:bg-slate-50/70 transition-colors">
                     <td className="py-3 px-3 whitespace-nowrap">
                       <div className="flex items-center gap-1.5 font-mono-code">
@@ -2289,6 +2327,32 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
             </tbody>
           </table>
         </div>
+
+        {/* Load More & Infinite Scroll Controller */}
+        <div className="pt-4 mt-2 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
+          <div className="font-mono-code text-[11px] text-slate-500">
+            Menampilkan <span className="font-bold text-slate-900">{displayedAttendanceHistory.length}</span> dari <span className="font-bold text-slate-900">{visibleAttendanceHistory.length}</span> Rekaman
+          </div>
+
+          {hasMore ? (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setDisplayLimit(prev => Math.min(prev + PAGE_SIZE, visibleAttendanceHistory.length))}
+                className="px-4 py-2 rounded-xl bg-orange-50 hover:bg-[#FF6B00] text-[#FF6B00] hover:text-white border border-orange-200 hover:border-[#FF6B00] font-bold text-xs flex items-center gap-2 transition-all cursor-pointer active:scale-95 shadow-2xs"
+              >
+                <ArrowDown className="w-3.5 h-3.5 animate-bounce" />
+                <span>Muat 10 Rekaman Lagi ({visibleAttendanceHistory.length - displayLimit} Tersisa)</span>
+              </button>
+            </div>
+          ) : visibleAttendanceHistory.length > 0 ? (
+            <div className="text-[11px] text-emerald-600 font-mono-code font-bold flex items-center gap-1.5 bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-200/80">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Seluruh {visibleAttendanceHistory.length} rekaman telah dimuat</span>
+            </div>
+          ) : null}
+        </div>
+        <div ref={sentinelRef} className="h-4 w-full pointer-events-none" />
       </div>
 
       {/* Modal Photo Inspector (Portaled to document.body) */}
