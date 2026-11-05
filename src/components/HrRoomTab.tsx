@@ -1294,21 +1294,22 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-slate-200/90 bg-slate-50/80 text-slate-500 uppercase tracking-wider text-[10px] font-mono-code font-bold">
-                <th className="py-3 px-3.5">Tanggal</th>
-                <th className="py-3 px-3.5">Karyawan</th>
-                <th className="py-3 px-3.5">Proyek</th>
-                <th className="py-3 px-3.5">Masuk</th>
-                <th className="py-3 px-3.5">Pulang</th>
-                <th className="py-3 px-3.5">Kepatuhan</th>
-                <th className="py-3 px-3.5">Skor Biometrik</th>
-                <th className="py-3 px-3.5">Lokasi & Geofence</th>
-                <th className="py-3 px-3.5">Catatan Absen</th>
+                <th className="py-2.5 px-3 whitespace-nowrap">Tanggal</th>
+                <th className="py-2.5 px-2.5 whitespace-nowrap">ID</th>
+                <th className="py-2.5 px-3">Karyawan</th>
+                <th className="py-2.5 px-3">Proyek</th>
+                <th className="py-2.5 px-3 whitespace-nowrap">Masuk</th>
+                <th className="py-2.5 px-3 whitespace-nowrap">Pulang</th>
+                <th className="py-2.5 px-3 whitespace-nowrap">Kepatuhan</th>
+                <th className="py-2.5 px-3 whitespace-nowrap">Skor Biometrik</th>
+                <th className="py-2.5 px-3">Lokasi & Geofence</th>
+                <th className="py-2.5 px-3">Catatan</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {displayedAttendances.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-slate-400">
+                  <td colSpan={10} className="py-12 text-center text-slate-400">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <Clock className="w-7 h-7 text-slate-300" />
                       <p className="text-xs font-semibold text-slate-500">
@@ -1329,68 +1330,57 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                   return (
                     <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
                       {/* Tanggal */}
-                      <td className="py-3.5 px-3.5 whitespace-nowrap font-mono-code text-[11px] text-slate-800">
-                        <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-lg bg-orange-50 border border-orange-200/60 flex items-center justify-center shrink-0 text-[#FF6B00]">
-                            <Calendar className="w-3.5 h-3.5" />
-                          </div>
-                          <div>
-                            <span className="font-bold text-slate-900">{item.date}</span>
-                            {dayName && <span className="text-[10px] text-slate-400 block font-normal">{dayName}</span>}
-                          </div>
+                      <td className="py-2.5 px-3 whitespace-nowrap font-mono-code text-[11px] text-slate-800">
+                        <div className="flex items-center gap-1.5">
+                          <Calendar className="w-3.5 h-3.5 text-[#FF6B00] shrink-0" />
+                          <span className="font-bold text-slate-900">{item.date}</span>
+                          {dayName && <span className="text-[10px] text-slate-400 font-normal">({dayName})</span>}
                         </div>
                       </td>
 
-                      {/* Karyawan & Login ID (Tanpa Posisi) */}
-                      <td className="py-3.5 px-3.5">
+                      {/* ID (Kolom Tersendiri) */}
+                      <td className="py-2.5 px-2.5 whitespace-nowrap">
+                        <span className="px-2 py-0.5 rounded-md bg-indigo-50 border border-indigo-200/80 text-indigo-700 font-mono-code font-bold text-[11px] inline-block shadow-2xs">
+                          {loginId}
+                        </span>
+                      </td>
+
+                      {/* Karyawan (Single Line Truncate ...) */}
+                      <td className="py-2.5 px-3 whitespace-nowrap">
                         <button
                           type="button"
                           onClick={() => {
                             if (emp) setInspectedEmployee(emp);
                           }}
-                          className="text-left group cursor-pointer focus:outline-none flex items-center gap-2.5"
-                          title="Klik untuk melihat performa detail karyawan ini"
+                          className="text-left group cursor-pointer focus:outline-none flex items-center gap-2 max-w-[130px] sm:max-w-[160px]"
+                          title={`Lihat profil performa: ${item.employeeName}`}
                         >
                           {emp?.avatar ? (
                             <img
                               src={emp.avatar}
                               alt={item.employeeName}
-                              className="w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0 group-hover:ring-2 group-hover:ring-[#FF6B00]/50 transition-all"
+                              className="w-6 h-6 rounded-full object-cover border border-slate-200 shrink-0 group-hover:ring-2 group-hover:ring-[#FF6B00]/50 transition-all"
                             />
                           ) : (
-                            <div className="w-8 h-8 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-[11px] font-mono-code shrink-0 group-hover:bg-[#FF6B00] transition-colors">
+                            <div className="w-6 h-6 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-[10px] font-mono-code shrink-0 group-hover:bg-[#FF6B00] transition-colors">
                               {(item.employeeName || 'K')[0].toUpperCase()}
                             </div>
                           )}
-                          <div>
-                            <div className="font-bold text-slate-900 group-hover:text-[#FF6B00] transition-colors flex items-center gap-1.5">
-                              <span>{item.employeeName}</span>
-                              <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity text-[#FF6B00]" />
-                            </div>
-                            <div className="mt-0.5">
-                              <span className="px-1.5 py-0.5 rounded bg-indigo-50 border border-indigo-200/70 text-indigo-700 font-mono-code font-bold text-[10px] inline-flex items-center gap-1">
-                                ID: {loginId}
-                              </span>
-                            </div>
-                          </div>
+                          <span className="font-bold text-slate-900 group-hover:text-[#FF6B00] transition-colors truncate text-xs block">
+                            {item.employeeName}
+                          </span>
                         </button>
                       </td>
 
-                      {/* Proyek / Lokasi Absen (NEW) */}
-                      <td className="py-3.5 px-3.5 whitespace-nowrap">
-                        <div className="flex items-center gap-2">
-                          <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${
-                            projInfo.isOffice
-                              ? 'bg-slate-100 border border-slate-200 text-slate-600'
-                              : 'bg-orange-50 border border-orange-200/60 text-[#FF6B00]'
-                          }`}>
-                            <Building className="w-3.5 h-3.5" />
-                          </div>
-                          <div className="max-w-[170px]">
-                            <div className="font-bold text-slate-900 text-[11px] truncate" title={projInfo.name}>
+                      {/* Proyek / Lokasi Absen (Single Line Truncate ...) */}
+                      <td className="py-2.5 px-3 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5 max-w-[140px] sm:max-w-[170px]">
+                          <Building className={`w-3.5 h-3.5 shrink-0 ${projInfo.isOffice ? 'text-slate-400' : 'text-[#FF6B00]'}`} />
+                          <div className="min-w-0 flex-1">
+                            <span className="font-semibold text-slate-900 text-xs truncate block" title={projInfo.name}>
                               {projInfo.name}
-                            </div>
-                            <span className="text-[10px] font-mono-code font-semibold px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 border border-slate-200/60 inline-block mt-0.5">
+                            </span>
+                            <span className="text-[9px] font-mono-code font-semibold px-1 py-0.2 rounded bg-slate-100 text-slate-600 border border-slate-200/60 inline-block">
                               {projInfo.code}
                             </span>
                           </div>
@@ -1398,7 +1388,7 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                       </td>
 
                       {/* Masuk */}
-                      <td className="py-3.5 px-3.5 whitespace-nowrap">
+                      <td className="py-2.5 px-3 whitespace-nowrap">
                         {item.checkInTime ? (
                           <button
                             type="button"
@@ -1406,7 +1396,7 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                               setSelectedPhotoItem(item);
                               setPhotoType('CHECK_IN');
                             }}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-50/80 hover:bg-emerald-100 text-emerald-900 border border-emerald-200/70 font-mono-code text-[11px] font-bold transition-all group cursor-pointer shadow-2xs hover:scale-102"
+                            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-emerald-50/80 hover:bg-emerald-100 text-emerald-900 border border-emerald-200/70 font-mono-code text-[11px] font-bold transition-all group cursor-pointer shadow-2xs hover:scale-102"
                             title="Klik untuk melihat foto selfie presensi masuk"
                           >
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 group-hover:scale-125 transition-transform" />
@@ -1419,7 +1409,7 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                       </td>
 
                       {/* Pulang */}
-                      <td className="py-3.5 px-3.5 whitespace-nowrap">
+                      <td className="py-2.5 px-3 whitespace-nowrap">
                         {item.checkOutTime ? (
                           <button
                             type="button"
@@ -1427,7 +1417,7 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                               setSelectedPhotoItem(item);
                               setPhotoType('CHECK_OUT');
                             }}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-blue-50/80 hover:bg-blue-100 text-blue-900 border border-blue-200/70 font-mono-code text-[11px] font-bold transition-all group cursor-pointer shadow-2xs hover:scale-102"
+                            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-blue-50/80 hover:bg-blue-100 text-blue-900 border border-blue-200/70 font-mono-code text-[11px] font-bold transition-all group cursor-pointer shadow-2xs hover:scale-102"
                             title="Klik untuk melihat foto selfie presensi pulang"
                           >
                             <span className="w-1.5 h-1.5 rounded-full bg-blue-500 group-hover:scale-125 transition-transform" />
@@ -1435,7 +1425,7 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                             <Camera className="w-3 h-3 text-blue-600/70 group-hover:text-blue-700 ml-0.5 shrink-0" />
                           </button>
                         ) : (
-                          <span className="px-2.5 py-1 rounded-xl bg-slate-100/90 text-slate-500 text-[10px] font-mono-code font-medium border border-slate-200/60 inline-flex items-center gap-1">
+                          <span className="px-2 py-0.5 rounded-lg bg-slate-100/90 text-slate-500 text-[10px] font-mono-code font-medium border border-slate-200/60 inline-flex items-center gap-1">
                             <Clock className="w-3 h-3 text-slate-400" />
                             <span>Belum Pulang</span>
                           </span>
@@ -1443,14 +1433,14 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                       </td>
 
                       {/* Status Kepatuhan */}
-                      <td className="py-3.5 px-3.5 whitespace-nowrap">
+                      <td className="py-2.5 px-3 whitespace-nowrap">
                         {isLate ? (
-                          <span className="px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold font-mono-code inline-flex items-center gap-1 shadow-2xs">
+                          <span className="px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold font-mono-code inline-flex items-center gap-1 shadow-2xs">
                             <Clock className="w-3 h-3 text-amber-600" />
                             <span>Terlambat {item.lateMinutes ? `${item.lateMinutes}m` : ''}</span>
                           </span>
                         ) : (
-                          <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-bold font-mono-code inline-flex items-center gap-1 shadow-2xs">
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-bold font-mono-code inline-flex items-center gap-1 shadow-2xs">
                             <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                             <span>Tepat Waktu</span>
                           </span>
@@ -1458,21 +1448,21 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                       </td>
 
                       {/* Skor Biometrik */}
-                      <td className="py-3.5 px-3.5 whitespace-nowrap">
+                      <td className="py-2.5 px-3 whitespace-nowrap">
                         {item.biometricVerification ? (
                           item.biometricVerification.matchScore !== undefined && item.biometricVerification.matchScore !== null ? (
                             item.biometricVerification.matchScore >= 70 ? (
-                              <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold font-mono-code inline-flex items-center gap-1 shadow-2xs" title={item.biometricVerification.details || 'Biometrik Cocok'}>
+                              <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold font-mono-code inline-flex items-center gap-1 shadow-2xs" title={item.biometricVerification.details || 'Biometrik Cocok'}>
                                 <ShieldCheck className="w-3 h-3 text-emerald-600" />
                                 <span>{item.biometricVerification.matchScore}% Match</span>
                               </span>
                             ) : item.biometricVerification.matchScore >= 60 ? (
-                              <span className="px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold font-mono-code inline-flex items-center gap-1 shadow-2xs" title={item.biometricVerification.details || 'Biometrik Memadai'}>
+                              <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold font-mono-code inline-flex items-center gap-1 shadow-2xs" title={item.biometricVerification.details || 'Biometrik Memadai'}>
                                 <ShieldCheck className="w-3 h-3 text-blue-600" />
                                 <span>{item.biometricVerification.matchScore}% Match</span>
                               </span>
                             ) : (
-                              <span className="px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-bold font-mono-code inline-flex items-center gap-1 shadow-2xs" title={item.biometricVerification.details || 'Kemiripan Rendah / Tanpa Wajah'}>
+                              <span className="px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-bold font-mono-code inline-flex items-center gap-1 shadow-2xs" title={item.biometricVerification.details || 'Kemiripan Rendah / Tanpa Wajah'}>
                                 <ShieldAlert className="w-3 h-3 text-rose-600" />
                                 <span>{item.biometricVerification.matchScore === 0 ? 'Tanpa Wajah' : `${item.biometricVerification.matchScore}% Mismatch`}</span>
                               </span>
@@ -1489,27 +1479,27 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                         )}
                       </td>
 
-                      {/* Lokasi & Geofence */}
-                      <td className="py-3.5 px-3.5 max-w-[220px]">
-                        <div className="flex items-center gap-1.5 font-mono-code text-[10px] font-bold">
-                          <MapPin className={`w-3.5 h-3.5 shrink-0 ${item.location?.inGeofence ? 'text-emerald-500' : 'text-amber-500'}`} />
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] ${item.location?.inGeofence ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60' : 'bg-amber-50 text-amber-700 border border-amber-200/60'}`}>
+                      {/* Lokasi & Geofence (Single Line Truncate ...) */}
+                      <td className="py-2.5 px-3 whitespace-nowrap">
+                        <div className="flex items-center gap-1 font-mono-code text-[10px] font-bold">
+                          <MapPin className={`w-3 h-3 shrink-0 ${item.location?.inGeofence ? 'text-emerald-500' : 'text-amber-500'}`} />
+                          <span className={`px-1.5 py-0.2 rounded ${item.location?.inGeofence ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60' : 'bg-amber-50 text-amber-700 border border-amber-200/60'}`}>
                             {formatDistanceKm(item.location?.distanceMeters)} {item.location?.inGeofence ? '(Dalam Area)' : '(Luar Area)'}
                           </span>
                         </div>
-                        <div className="text-[10px] text-slate-500 truncate mt-0.5" title={item.location?.address}>
+                        <div className="text-[10px] text-slate-500 truncate max-w-[130px] sm:max-w-[160px] mt-0.5" title={item.location?.address}>
                           {item.location?.address || '-'}
                         </div>
                       </td>
 
-                      {/* Catatan Absen (Bersih, Rapi & Jelas) */}
-                      <td className="py-3.5 px-3.5 min-w-[190px] max-w-[280px]">
+                      {/* Catatan Absen (Single Line Truncate ...) */}
+                      <td className="py-2.5 px-3 whitespace-nowrap">
                         {noteInfo.text === '-' ? (
                           <span className="text-slate-400 font-mono-code text-[11px]">-</span>
                         ) : (
-                          <div className="space-y-1" title={noteInfo.fullRaw}>
+                          <div className="flex items-center gap-1.5 max-w-[130px] sm:max-w-[170px]" title={noteInfo.fullRaw}>
                             {noteInfo.badge && (
-                              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold font-mono-code border ${
+                              <span className={`shrink-0 px-1.5 py-0.2 rounded text-[9px] font-bold font-mono-code border ${
                                 noteInfo.badge === 'Luar Area'
                                   ? 'bg-amber-50 text-amber-800 border-amber-200/70'
                                   : noteInfo.badge === 'Alasan Telat'
@@ -1519,9 +1509,9 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                                 {noteInfo.badge}
                               </span>
                             )}
-                            <div className="text-slate-900 text-xs font-semibold leading-relaxed break-words line-clamp-2">
+                            <span className="text-slate-800 text-xs font-semibold truncate block">
                               {noteInfo.text}
-                            </div>
+                            </span>
                           </div>
                         )}
                       </td>
