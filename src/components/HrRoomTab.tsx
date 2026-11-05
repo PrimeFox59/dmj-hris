@@ -171,6 +171,22 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
     return `${km.toFixed(1)} km`;
   };
 
+  // Format Indo Day Name
+  const getDayNameIndo = (dateStr: string): string => {
+    if (!dateStr) return '';
+    try {
+      const parts = dateStr.split('-');
+      if (parts.length === 3) {
+        const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+        const days = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+        return days[d.getDay()] || '';
+      }
+    } catch {
+      // fallback
+    }
+    return '';
+  };
+
   // =========================================================================
   // 3. DATE RANGE DAYS LIST
   // =========================================================================
@@ -819,38 +835,41 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
         </div>
 
         {/* Date Preset Selector Toolbar */}
-        <div className="relative z-10 mt-6 pt-5 border-t border-slate-800/80 flex flex-wrap items-center gap-2">
-          <span className="text-xs text-slate-400 font-mono-code flex items-center gap-1.5 mr-1">
-            <Calendar className="w-3.5 h-3.5 text-[#FF6B00]" />
-            <span>Rentang Waktu:</span>
-          </span>
-          {(['TODAY', 'LAST_7', 'THIS_MONTH', 'LAST_30', 'ALL', 'CUSTOM'] as DatePreset[]).map(p => {
-            const labels: Record<DatePreset, string> = {
-              TODAY: 'Hari Ini',
-              LAST_7: '7 Hari Terakhir',
-              THIS_MONTH: 'Bulan Ini',
-              LAST_30: '30 Hari Terakhir',
-              ALL: 'Semua Data',
-              CUSTOM: 'Kustom'
-            };
-            const isActive = datePreset === p;
-            return (
-              <button
-                key={p}
-                onClick={() => handleSelectPreset(p)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer font-mono-code ${
-                  isActive
-                    ? 'bg-[#FF6B00] text-white shadow-md shadow-orange-500/30 ring-1 ring-orange-400'
-                    : 'bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 border border-slate-700'
-                }`}
-              >
-                {labels[p]}
-              </button>
-            );
-          })}
+        <div className="relative z-10 mt-6 pt-5 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs text-slate-400 font-mono-code flex items-center gap-1.5 mr-1 font-bold">
+              <Calendar className="w-3.5 h-3.5 text-[#FF6B00]" />
+              <span>Rentang Waktu:</span>
+            </span>
+            {(['TODAY', 'LAST_7', 'THIS_MONTH', 'LAST_30', 'ALL', 'CUSTOM'] as DatePreset[]).map(p => {
+              const labels: Record<DatePreset, string> = {
+                TODAY: 'Hari Ini',
+                LAST_7: '7 Hari Terakhir',
+                THIS_MONTH: 'Bulan Ini',
+                LAST_30: '30 Hari Terakhir',
+                ALL: 'Semua Data',
+                CUSTOM: 'Kustom'
+              };
+              const isActive = datePreset === p;
+              return (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => handleSelectPreset(p)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer font-mono-code ${
+                    isActive
+                      ? 'bg-[#FF6B00] text-white shadow-md shadow-orange-500/30 ring-1 ring-orange-400'
+                      : 'bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 border border-slate-700'
+                  }`}
+                >
+                  {labels[p]}
+                </button>
+              );
+            })}
+          </div>
 
           {/* Custom Date Pickers */}
-          <div className="flex items-center gap-2 ml-auto mt-2 sm:mt-0 bg-slate-800/90 border border-slate-700/80 rounded-xl px-2.5 py-1 text-xs">
+          <div className="flex items-center gap-2 bg-slate-800/90 border border-slate-700/80 rounded-xl px-3 py-1.5 text-xs shadow-inner">
             <input
               type="date"
               value={startDate}
@@ -860,7 +879,7 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
               }}
               className="bg-transparent text-slate-200 font-mono-code focus:outline-none cursor-pointer"
             />
-            <span className="text-slate-500">s/d</span>
+            <span className="text-slate-500 font-mono-code">s/d</span>
             <input
               type="date"
               value={endDate}
@@ -875,14 +894,14 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
       </div>
 
       {/* =====================================================================
-          2. EXECUTIVE KPI CARDS
+          2. EXECUTIVE KPI CARDS (PREMIUM REFINED)
          ===================================================================== */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
         {/* KPI 1: Rata-Rata Kehadiran */}
-        <div className="bg-white/80 backdrop-blur-md rounded-2xl p-4 border border-slate-200/80 shadow-xs flex flex-col justify-between">
+        <div className="bg-white/95 backdrop-blur-md rounded-2xl p-4.5 border border-slate-200/90 border-t-4 border-t-emerald-500 shadow-xs hover:shadow-md hover:-translate-y-0.5 transition-all flex flex-col justify-between group">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-500 font-mono-code uppercase">Rata Kehadiran</span>
-            <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <span className="text-[11px] font-bold text-slate-500 font-mono-code uppercase tracking-wider">Rata Kehadiran</span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-200/60 text-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform">
               <CheckCircle2 className="w-4 h-4" />
             </div>
           </div>
@@ -890,17 +909,17 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
             <div className="text-2xl font-black text-slate-900 font-mono-code">
               {summaryMetrics.avgAttendanceRate}%
             </div>
-            <p className="text-[10px] text-slate-500 mt-0.5">
+            <p className="text-[10px] text-slate-500 mt-1 font-medium">
               {workingDaysInRange.length} hari kerja dalam rentang
             </p>
           </div>
         </div>
 
         {/* KPI 2: Kepatuhan Tepat Waktu */}
-        <div className="bg-white/80 backdrop-blur-md rounded-2xl p-4 border border-slate-200/80 shadow-xs flex flex-col justify-between">
+        <div className="bg-white/95 backdrop-blur-md rounded-2xl p-4.5 border border-slate-200/90 border-t-4 border-t-[#FF6B00] shadow-xs hover:shadow-md hover:-translate-y-0.5 transition-all flex flex-col justify-between group">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-500 font-mono-code uppercase">Kepatuhan Waktu</span>
-            <div className="w-7 h-7 rounded-lg bg-[#FF6B00]/10 text-[#FF6B00] flex items-center justify-center">
+            <span className="text-[11px] font-bold text-slate-500 font-mono-code uppercase tracking-wider">Kepatuhan Waktu</span>
+            <div className="w-8 h-8 rounded-xl bg-orange-50 border border-orange-200/60 text-[#FF6B00] flex items-center justify-center group-hover:scale-110 transition-transform">
               <TrendingUp className="w-4 h-4" />
             </div>
           </div>
@@ -908,17 +927,17 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
             <div className="text-2xl font-black text-[#FF6B00] font-mono-code">
               {summaryMetrics.avgComplianceRate}%
             </div>
-            <p className="text-[10px] text-slate-500 mt-0.5">
+            <p className="text-[10px] text-slate-500 mt-1 font-medium">
               Presensi masuk sebelum cutoff
             </p>
           </div>
         </div>
 
         {/* KPI 3: Kasus Terlambat */}
-        <div className="bg-white/80 backdrop-blur-md rounded-2xl p-4 border border-slate-200/80 shadow-xs flex flex-col justify-between">
+        <div className="bg-white/95 backdrop-blur-md rounded-2xl p-4.5 border border-slate-200/90 border-t-4 border-t-amber-500 shadow-xs hover:shadow-md hover:-translate-y-0.5 transition-all flex flex-col justify-between group">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-500 font-mono-code uppercase">Total Keterlambatan</span>
-            <div className="w-7 h-7 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+            <span className="text-[11px] font-bold text-slate-500 font-mono-code uppercase tracking-wider">Total Terlambat</span>
+            <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-200/60 text-amber-600 flex items-center justify-center group-hover:scale-110 transition-transform">
               <Clock className="w-4 h-4" />
             </div>
           </div>
@@ -926,17 +945,17 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
             <div className="text-2xl font-black text-amber-600 font-mono-code">
               {summaryMetrics.totalLateIncidents} <span className="text-xs font-normal text-slate-500">kali</span>
             </div>
-            <p className="text-[10px] text-amber-700 font-semibold mt-0.5">
+            <p className="text-[10px] text-amber-700 font-semibold mt-1">
               Akumulasi {summaryMetrics.totalLateMinutes} menit
             </p>
           </div>
         </div>
 
         {/* KPI 4: Alpa / Tidak Hadir */}
-        <div className="bg-white/80 backdrop-blur-md rounded-2xl p-4 border border-slate-200/80 shadow-xs flex flex-col justify-between">
+        <div className="bg-white/95 backdrop-blur-md rounded-2xl p-4.5 border border-slate-200/90 border-t-4 border-t-rose-500 shadow-xs hover:shadow-md hover:-translate-y-0.5 transition-all flex flex-col justify-between group">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-500 font-mono-code uppercase">Alpa / Tanpa Izin</span>
-            <div className="w-7 h-7 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center">
+            <span className="text-[11px] font-bold text-slate-500 font-mono-code uppercase tracking-wider">Alpa / Tanpa Izin</span>
+            <div className="w-8 h-8 rounded-xl bg-rose-50 border border-rose-200/60 text-rose-600 flex items-center justify-center group-hover:scale-110 transition-transform">
               <UserX className="w-4 h-4" />
             </div>
           </div>
@@ -944,17 +963,17 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
             <div className="text-2xl font-black text-rose-600 font-mono-code">
               {summaryMetrics.totalAbsentDays} <span className="text-xs font-normal text-slate-500">hari</span>
             </div>
-            <p className="text-[10px] text-rose-700 font-semibold mt-0.5">
+            <p className="text-[10px] text-rose-700 font-semibold mt-1">
               Tanpa tiket cuti/izin resmi
             </p>
           </div>
         </div>
 
         {/* KPI 5: Pelanggaran Geofence & Biometrik */}
-        <div className="bg-white/80 backdrop-blur-md rounded-2xl p-4 border border-slate-200/80 shadow-xs flex flex-col justify-between col-span-2 sm:col-span-1">
+        <div className="bg-white/95 backdrop-blur-md rounded-2xl p-4.5 border border-slate-200/90 border-t-4 border-t-purple-500 shadow-xs hover:shadow-md hover:-translate-y-0.5 transition-all flex flex-col justify-between col-span-2 sm:col-span-1 group">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold text-slate-500 font-mono-code uppercase">Integritas Audit</span>
-            <div className="w-7 h-7 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
+            <span className="text-[11px] font-bold text-slate-500 font-mono-code uppercase tracking-wider">Integritas Audit</span>
+            <div className="w-8 h-8 rounded-xl bg-purple-50 border border-purple-200/60 text-purple-600 flex items-center justify-center group-hover:scale-110 transition-transform">
               <ShieldAlert className="w-4 h-4" />
             </div>
           </div>
@@ -962,7 +981,7 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
             <div className="text-2xl font-black text-purple-700 font-mono-code">
               {summaryMetrics.totalGeofenceViolations + summaryMetrics.totalBiometricAlerts}
             </div>
-            <p className="text-[10px] text-slate-500 mt-0.5">
+            <p className="text-[10px] text-slate-500 mt-1 font-medium">
               {summaryMetrics.totalGeofenceViolations} luar area • {summaryMetrics.totalBiometricAlerts} bio alert
             </p>
           </div>
@@ -1015,91 +1034,134 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
       </div>
 
       {/* =====================================================================
-          4. FILTER & SEARCH CONTROL BAR FOR LOGS & EMPLOYEES
+          4. FILTER & SEARCH CONTROL BAR FOR LOGS & EMPLOYEES (PREMIUM COMMAND BAR)
          ===================================================================== */}
-      <div className="bg-white/90 backdrop-blur-md rounded-3xl p-5 border border-slate-200/80 shadow-xs space-y-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+      <div className="bg-white/95 backdrop-blur-md rounded-3xl p-5 sm:p-6 border border-slate-200/90 shadow-xs space-y-4">
+        {/* Top Controls: Search & Selectors */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
           {/* Live Search Input */}
-          <div className="relative flex-1 max-w-md">
+          <div className="md:col-span-6 relative">
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               placeholder="Cari nama karyawan, NIK, ID akun (e.g. d014, d025)..."
-              className="w-full pl-9 pr-8 py-2 rounded-2xl bg-slate-50 hover:bg-slate-100 focus:bg-white border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/30 transition-all font-mono-code"
+              className="w-full pl-10 pr-9 py-2.5 rounded-2xl bg-slate-50/80 hover:bg-slate-100/70 focus:bg-white border border-slate-200 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/25 focus:border-[#FF6B00] transition-all font-mono-code"
             />
             {searchQuery && (
               <button
+                type="button"
                 onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer p-0.5 rounded-full hover:bg-slate-200/60 transition-colors"
+                title="Hapus pencarian"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
 
-          {/* Project & Department Selectors */}
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Project Filter */}
+          {/* Project Selector */}
+          <div className="md:col-span-3 relative">
+            <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+              <Building className="w-3.5 h-3.5" />
+            </div>
             <select
               value={selectedProjectId}
               onChange={e => setSelectedProjectId(e.target.value)}
-              className="px-3 py-2 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/30 cursor-pointer font-mono-code"
+              className="w-full pl-8.5 pr-8 py-2.5 rounded-2xl bg-slate-50/80 hover:bg-slate-100/70 border border-slate-200 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/25 focus:border-[#FF6B00] cursor-pointer font-mono-code appearance-none transition-all"
             >
               <option value="ALL">Semua Proyek ({projects.length})</option>
               {projects.map(p => (
                 <option key={p.id} value={p.id}>{p.code} - {p.name}</option>
               ))}
             </select>
+            <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          </div>
 
-            {/* Department Filter */}
+          {/* Department Selector */}
+          <div className="md:col-span-3 relative">
+            <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+              <Briefcase className="w-3.5 h-3.5" />
+            </div>
             <select
               value={selectedDepartment}
               onChange={e => setSelectedDepartment(e.target.value)}
-              className="px-3 py-2 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/30 cursor-pointer font-mono-code"
+              className="w-full pl-8.5 pr-8 py-2.5 rounded-2xl bg-slate-50/80 hover:bg-slate-100/70 border border-slate-200 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/25 focus:border-[#FF6B00] cursor-pointer font-mono-code appearance-none transition-all"
             >
               <option value="ALL">Semua Departemen ({departments.length})</option>
               {departments.map(d => (
                 <option key={d} value={d}>{d}</option>
               ))}
             </select>
+            <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
         </div>
 
-        {/* Compliance Filter Pills */}
-        <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center gap-1.5">
-          <span className="text-[11px] font-bold text-slate-400 font-mono-code uppercase mr-1">Status:</span>
-          {([
-            { id: 'ALL', label: 'Semua Status' },
-            { id: 'LATE', label: '🟡 Hanya Terlambat' },
-            { id: 'ON_TIME', label: '🟢 Hanya Tepat Waktu' },
-            { id: 'OUT_GEOFENCE', label: '📍 Luar Geofence' },
-            { id: 'FRAUD_BIOMETRIC', label: '🛡️ Mismatch Biometrik (<60%)' }
-          ] as { id: ComplianceFilter; label: string }[]).map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setComplianceFilter(tab.id)}
-              className={`px-3 py-1 rounded-full text-xs font-semibold font-mono-code transition-all cursor-pointer ${
-                complianceFilter === tab.id
-                  ? 'bg-slate-900 text-white shadow-2xs'
-                  : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-          <span className="text-xs text-slate-400 font-mono-code ml-auto">
-            Menemukan <b>{scopedAttendances.length}</b> rekaman log
-          </span>
+        {/* Status Filter & Summary Toolbar */}
+        <div className="pt-3.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
+          {/* Status Pills */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[10px] font-black text-slate-400 font-mono-code uppercase tracking-wider mr-1">
+              STATUS:
+            </span>
+            {([
+              { id: 'ALL', label: 'Semua Status', dot: null },
+              { id: 'LATE', label: 'Hanya Terlambat', dot: 'bg-amber-500' },
+              { id: 'ON_TIME', label: 'Hanya Tepat Waktu', dot: 'bg-emerald-500' },
+              { id: 'OUT_GEOFENCE', label: 'Luar Geofence', dot: 'bg-orange-500' },
+              { id: 'FRAUD_BIOMETRIC', label: 'Mismatch Biometrik (<60%)', dot: 'bg-rose-500' }
+            ] as const).map(tab => {
+              const isActive = complianceFilter === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setComplianceFilter(tab.id as ComplianceFilter)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-bold font-mono-code transition-all cursor-pointer inline-flex items-center gap-1.5 ${
+                    isActive
+                      ? 'bg-slate-900 text-white shadow-xs ring-1 ring-slate-900'
+                      : 'bg-slate-100/80 hover:bg-slate-200/80 text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {tab.dot && <span className={`w-2 h-2 rounded-full ${tab.dot}`} />}
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+
+            {/* Reset Filter Button if active */}
+            {(searchQuery || selectedProjectId !== 'ALL' || selectedDepartment !== 'ALL' || complianceFilter !== 'ALL') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery('');
+                  setSelectedProjectId('ALL');
+                  setSelectedDepartment('ALL');
+                  setComplianceFilter('ALL');
+                }}
+                className="px-2.5 py-1 rounded-full text-[11px] font-bold font-mono-code text-[#FF6B00] hover:bg-orange-50 border border-orange-200 transition-colors cursor-pointer inline-flex items-center gap-1"
+                title="Reset semua filter"
+              >
+                <RefreshCw className="w-3 h-3" />
+                <span>Reset Filter</span>
+              </button>
+            )}
+          </div>
+
+          {/* Record Counters */}
+          <div className="flex items-center gap-2 text-xs font-mono-code text-slate-500">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span>Menemukan <b>{scopedAttendances.length}</b> rekaman log</span>
+          </div>
         </div>
       </div>
 
       {/* =====================================================================
-          5. TABLE LOG RIWAYAT PRESENSI TERPADU
+          5. TABLE LOG RIWAYAT PRESENSI TERPADU (PREMIUM REFINED)
          ===================================================================== */}
-      <div className="bg-white/90 backdrop-blur-md rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+      <div className="bg-white/95 backdrop-blur-md rounded-3xl border border-slate-200/90 shadow-xs overflow-hidden">
+        <div className="px-6 py-4.5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-slate-50/70 via-white to-slate-50/70">
           <div>
             <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
               <Clock className="w-4 h-4 text-[#FF6B00]" />
@@ -1109,30 +1171,31 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
               Rekaman presensi masuk, pulang, durasi kerja, status kepatuhan, serta skor biometrik per individu
             </p>
           </div>
-          <span className="text-xs font-mono-code font-bold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-full">
-            Menampilkan {Math.min(displayedAttendances.length, visibleRowsCount)} dari {scopedAttendances.length}
-          </span>
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <span className="text-xs font-mono-code font-bold text-slate-700 bg-slate-100 border border-slate-200 px-3 py-1 rounded-full">
+              Menampilkan {Math.min(displayedAttendances.length, visibleRowsCount)} dari {scopedAttendances.length}
+            </span>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="border-b border-slate-200/80 bg-slate-50/70 text-slate-500 uppercase tracking-wider text-[10px] font-mono-code">
-                <th className="py-2.5 px-3">Tanggal</th>
-                <th className="py-2.5 px-3">Karyawan</th>
-                <th className="py-2.5 px-3">Masuk</th>
-                <th className="py-2.5 px-3">Pulang</th>
-                <th className="py-2.5 px-3">Kepatuhan</th>
-                <th className="py-2.5 px-3">Skor Biometrik</th>
-                <th className="py-2.5 px-3">Lokasi & Geofence</th>
-                <th className="py-2.5 px-3">Catatan</th>
-                <th className="py-2.5 px-3 text-right">Foto</th>
+              <tr className="border-b border-slate-200/90 bg-slate-50/80 text-slate-500 uppercase tracking-wider text-[10px] font-mono-code font-bold">
+                <th className="py-3 px-3.5">Tanggal</th>
+                <th className="py-3 px-3.5">Karyawan</th>
+                <th className="py-3 px-3.5">Masuk</th>
+                <th className="py-3 px-3.5">Pulang</th>
+                <th className="py-3 px-3.5">Kepatuhan</th>
+                <th className="py-3 px-3.5">Skor Biometrik</th>
+                <th className="py-3 px-3.5">Lokasi & Geofence</th>
+                <th className="py-3 px-3.5">Catatan</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {displayedAttendances.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-slate-400">
+                  <td colSpan={8} className="py-12 text-center text-slate-400">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <Clock className="w-7 h-7 text-slate-300" />
                       <p className="text-xs font-semibold text-slate-500">
@@ -1146,39 +1209,65 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                   const emp = employees.find(e => e.id === item.employeeId || e.nik === item.employeeNik);
                   const loginId = getLoginBadge(item);
                   const isLate = item.isLate || (item.lateMinutes && item.lateMinutes > 0);
+                  const dayName = getDayNameIndo(item.date);
 
                   return (
-                    <tr key={item.id} className="hover:bg-slate-50/70 transition-colors">
+                    <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
                       {/* Tanggal */}
-                      <td className="py-3 px-3 whitespace-nowrap font-mono-code text-[11px] font-semibold text-slate-800">
-                        <div className="flex items-center gap-1.5">
-                          <Calendar className="w-3.5 h-3.5 text-[#FF6B00] shrink-0" />
-                          <span>{item.date}</span>
+                      <td className="py-3.5 px-3.5 whitespace-nowrap font-mono-code text-[11px] text-slate-800">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-lg bg-orange-50 border border-orange-200/60 flex items-center justify-center shrink-0 text-[#FF6B00]">
+                            <Calendar className="w-3.5 h-3.5" />
+                          </div>
+                          <div>
+                            <span className="font-bold text-slate-900">{item.date}</span>
+                            {dayName && <span className="text-[10px] text-slate-400 block font-normal">{dayName}</span>}
+                          </div>
                         </div>
                       </td>
 
                       {/* Karyawan & Login ID */}
-                      <td className="py-3 px-3">
+                      <td className="py-3.5 px-3.5">
                         <button
                           type="button"
                           onClick={() => {
                             if (emp) setInspectedEmployee(emp);
                           }}
-                          className="text-left group cursor-pointer focus:outline-none"
+                          className="text-left group cursor-pointer focus:outline-none flex items-center gap-2.5"
                           title="Klik untuk melihat performa detail karyawan ini"
                         >
-                          <div className="font-bold text-slate-900 group-hover:text-[#FF6B00] transition-colors flex items-center gap-1.5">
-                            <span>{item.employeeName}</span>
-                            <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity text-[#FF6B00]" />
-                          </div>
-                          <div className="text-[10px] text-indigo-600 font-mono-code font-bold">
-                            {loginId} {emp?.department ? `• ${emp.department}` : ''}
+                          {emp?.avatar ? (
+                            <img
+                              src={emp.avatar}
+                              alt={item.employeeName}
+                              className="w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0 group-hover:ring-2 group-hover:ring-[#FF6B00]/50 transition-all"
+                            />
+                          ) : (
+                            <div className="w-8 h-8 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-[11px] font-mono-code shrink-0 group-hover:bg-[#FF6B00] transition-colors">
+                              {(item.employeeName || 'K')[0].toUpperCase()}
+                            </div>
+                          )}
+                          <div>
+                            <div className="font-bold text-slate-900 group-hover:text-[#FF6B00] transition-colors flex items-center gap-1.5">
+                              <span>{item.employeeName}</span>
+                              <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity text-[#FF6B00]" />
+                            </div>
+                            <div className="text-[10px] flex items-center gap-1.5 mt-0.5">
+                              <span className="px-1.5 py-0.2 rounded bg-indigo-50 border border-indigo-200/60 text-indigo-700 font-mono-code font-bold">
+                                {loginId}
+                              </span>
+                              {emp?.department && (
+                                <span className="text-slate-500 font-medium truncate max-w-[180px]">
+                                  • {emp.department}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </button>
                       </td>
 
                       {/* Masuk */}
-                      <td className="py-3 px-3 whitespace-nowrap">
+                      <td className="py-3.5 px-3.5 whitespace-nowrap">
                         {item.checkInTime ? (
                           <button
                             type="button"
@@ -1186,11 +1275,12 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                               setSelectedPhotoItem(item);
                               setPhotoType('CHECK_IN');
                             }}
-                            className="font-mono-code text-[11px] font-bold text-slate-800 hover:text-[#FF6B00] flex items-center gap-1.5 group cursor-pointer"
-                            title="Klik untuk melihat foto presensi masuk"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-50/80 hover:bg-emerald-100 text-emerald-900 border border-emerald-200/70 font-mono-code text-[11px] font-bold transition-all group cursor-pointer shadow-2xs hover:scale-102"
+                            title="Klik untuk melihat foto selfie presensi masuk"
                           >
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0 group-hover:scale-125 transition-transform" />
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 group-hover:scale-125 transition-transform" />
                             <span>{item.checkInTime} WIB</span>
+                            <Camera className="w-3 h-3 text-emerald-600/70 group-hover:text-emerald-700 ml-0.5 shrink-0" />
                           </button>
                         ) : (
                           <span className="text-slate-400 font-mono-code text-[11px]">-</span>
@@ -1198,7 +1288,7 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                       </td>
 
                       {/* Pulang */}
-                      <td className="py-3 px-3 whitespace-nowrap">
+                      <td className="py-3.5 px-3.5 whitespace-nowrap">
                         {item.checkOutTime ? (
                           <button
                             type="button"
@@ -1206,28 +1296,30 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                               setSelectedPhotoItem(item);
                               setPhotoType('CHECK_OUT');
                             }}
-                            className="font-mono-code text-[11px] font-bold text-slate-800 hover:text-[#FF6B00] flex items-center gap-1.5 group cursor-pointer"
-                            title="Klik untuk melihat foto presensi pulang"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-blue-50/80 hover:bg-blue-100 text-blue-900 border border-blue-200/70 font-mono-code text-[11px] font-bold transition-all group cursor-pointer shadow-2xs hover:scale-102"
+                            title="Klik untuk melihat foto selfie presensi pulang"
                           >
-                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0 group-hover:scale-125 transition-transform" />
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 group-hover:scale-125 transition-transform" />
                             <span>{item.checkOutTime} WIB</span>
+                            <Camera className="w-3 h-3 text-blue-600/70 group-hover:text-blue-700 ml-0.5 shrink-0" />
                           </button>
                         ) : (
-                          <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-400 text-[10px] font-mono-code font-medium">
-                            Belum Pulang
+                          <span className="px-2.5 py-1 rounded-xl bg-slate-100/90 text-slate-500 text-[10px] font-mono-code font-medium border border-slate-200/60 inline-flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-slate-400" />
+                            <span>Belum Pulang</span>
                           </span>
                         )}
                       </td>
 
                       {/* Status Kepatuhan */}
-                      <td className="py-3 px-3 whitespace-nowrap">
+                      <td className="py-3.5 px-3.5 whitespace-nowrap">
                         {isLate ? (
-                          <span className="px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold font-mono-code inline-flex items-center gap-1">
+                          <span className="px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold font-mono-code inline-flex items-center gap-1 shadow-2xs">
                             <Clock className="w-3 h-3 text-amber-600" />
                             <span>Terlambat {item.lateMinutes ? `${item.lateMinutes}m` : ''}</span>
                           </span>
                         ) : (
-                          <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-bold font-mono-code inline-flex items-center gap-1">
+                          <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-bold font-mono-code inline-flex items-center gap-1 shadow-2xs">
                             <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                             <span>Tepat Waktu</span>
                           </span>
@@ -1235,69 +1327,77 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                       </td>
 
                       {/* Skor Biometrik */}
-                      <td className="py-3 px-3 whitespace-nowrap">
+                      <td className="py-3.5 px-3.5 whitespace-nowrap">
                         {item.biometricVerification ? (
                           item.biometricVerification.matchScore !== undefined && item.biometricVerification.matchScore !== null ? (
                             item.biometricVerification.matchScore >= 70 ? (
-                              <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold font-mono-code inline-flex items-center gap-1" title={item.biometricVerification.details || 'Biometrik Cocok'}>
+                              <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold font-mono-code inline-flex items-center gap-1 shadow-2xs" title={item.biometricVerification.details || 'Biometrik Cocok'}>
                                 <ShieldCheck className="w-3 h-3 text-emerald-600" />
                                 <span>{item.biometricVerification.matchScore}% Match</span>
                               </span>
                             ) : item.biometricVerification.matchScore >= 60 ? (
-                              <span className="px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold font-mono-code inline-flex items-center gap-1" title={item.biometricVerification.details || 'Biometrik Memadai'}>
+                              <span className="px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold font-mono-code inline-flex items-center gap-1 shadow-2xs" title={item.biometricVerification.details || 'Biometrik Memadai'}>
                                 <ShieldCheck className="w-3 h-3 text-blue-600" />
                                 <span>{item.biometricVerification.matchScore}% Match</span>
                               </span>
                             ) : (
-                              <span className="px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-bold font-mono-code inline-flex items-center gap-1" title={item.biometricVerification.details || 'Kemiripan Rendah / Tanpa Wajah'}>
+                              <span className="px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-bold font-mono-code inline-flex items-center gap-1 shadow-2xs" title={item.biometricVerification.details || 'Kemiripan Rendah / Tanpa Wajah'}>
                                 <ShieldAlert className="w-3 h-3 text-rose-600" />
                                 <span>{item.biometricVerification.matchScore === 0 ? 'Tanpa Wajah' : `${item.biometricVerification.matchScore}% Mismatch`}</span>
                               </span>
                             )
                           ) : (
-                            <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[10px] font-mono-code">
+                            <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200 text-[10px] font-mono-code">
                               Non-Biometrik
                             </span>
                           )
                         ) : (
-                          <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-400 text-[10px] font-mono-code">
+                          <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-400 border border-slate-200 text-[10px] font-mono-code">
                             Belum Enroll
                           </span>
                         )}
                       </td>
 
                       {/* Lokasi & Geofence */}
-                      <td className="py-3 px-3 max-w-[220px]">
-                        <div className="flex items-center gap-1 font-mono-code text-[10px] font-bold">
-                          <MapPin className={`w-3 h-3 ${item.location?.inGeofence ? 'text-emerald-500' : 'text-amber-500'}`} />
-                          <span className={item.location?.inGeofence ? 'text-emerald-700' : 'text-amber-700'}>
+                      <td className="py-3.5 px-3.5 max-w-[240px]">
+                        <div className="flex items-center gap-1.5 font-mono-code text-[10px] font-bold">
+                          <MapPin className={`w-3.5 h-3.5 shrink-0 ${item.location?.inGeofence ? 'text-emerald-500' : 'text-amber-500'}`} />
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] ${item.location?.inGeofence ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60' : 'bg-amber-50 text-amber-700 border border-amber-200/60'}`}>
                             {formatDistanceKm(item.location?.distanceMeters)} {item.location?.inGeofence ? '(Dalam Area)' : '(Luar Area)'}
                           </span>
                         </div>
-                        <div className="text-[10px] text-slate-500 truncate" title={item.location?.address}>
+                        <div className="text-[10px] text-slate-500 truncate mt-0.5" title={item.location?.address}>
                           {item.location?.address || '-'}
                         </div>
                       </td>
 
                       {/* Catatan */}
-                      <td className="py-3 px-3 max-w-[150px] text-slate-600 text-[11px] truncate" title={item.note}>
-                        {item.note || '-'}
-                      </td>
-
-                      {/* Tombol Foto */}
-                      <td className="py-3 px-3 text-right whitespace-nowrap">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedPhotoItem(item);
-                            setPhotoType('CHECK_IN');
-                          }}
-                          className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-[#FF6B00] hover:text-white text-slate-600 transition-colors cursor-pointer text-[10px] font-bold font-mono-code inline-flex items-center gap-1"
-                          title="Buka bukti foto selfie & watermark"
-                        >
-                          <Camera className="w-3 h-3" />
-                          <span>Foto</span>
-                        </button>
+                      <td className="py-3.5 px-3.5 max-w-[180px]">
+                        {(() => {
+                          const raw = item.note;
+                          if (!raw || !raw.trim()) {
+                            return <span className="text-slate-400 font-mono-code text-[11px]">-</span>;
+                          }
+                          const match = raw.match(/^\[Luar Area \d+m\]:\s*(.*)$/);
+                          if (match) {
+                            const userText = match[1].trim();
+                            return (
+                              <div className="flex flex-col gap-0.5" title={raw}>
+                                <span className="inline-flex items-center w-fit px-1.5 py-0.2 rounded bg-amber-50 text-amber-700 border border-amber-200/60 text-[9px] font-bold font-mono-code">
+                                  Luar Geofence
+                                </span>
+                                <span className="text-slate-700 text-[11px] truncate font-medium">
+                                  {userText || 'Terdeteksi di luar area'}
+                                </span>
+                              </div>
+                            );
+                          }
+                          return (
+                            <span className="text-slate-700 text-[11px] truncate font-medium block" title={raw}>
+                              {raw}
+                            </span>
+                          );
+                        })()}
                       </td>
                     </tr>
                   );
@@ -1464,19 +1564,27 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
       })()}
 
       {/* =====================================================================
-          7. MODAL 2: INSPEKSI FOTO & WATERMARK PRESENSI
+          7. MODAL 2: INSPEKSI FOTO & WATERMARK PRESENSI (PREMIUM REFINED)
          ===================================================================== */}
       {selectedPhotoItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-              <div>
-                <h4 className="text-sm font-black text-slate-900">Bukti Foto & Watermark</h4>
-                <p className="text-[10px] font-mono-code text-slate-500">{selectedPhotoItem.id}</p>
+            {/* Dark Executive Header */}
+            <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center text-[#FF6B00]">
+                  <Camera className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-black text-white">Bukti Foto & Watermark</h4>
+                  <p className="text-[10px] font-mono-code text-slate-400">{selectedPhotoItem.id}</p>
+                </div>
               </div>
               <button
+                type="button"
                 onClick={() => setSelectedPhotoItem(null)}
-                className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:text-slate-900 flex items-center justify-center transition-colors cursor-pointer"
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                title="Tutup dialog"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1484,33 +1592,35 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
 
             {/* Toggle Check-in / Check-out if both photos exist */}
             {(selectedPhotoItem.checkOutTime || selectedPhotoItem.photoOutUrl || (selectedPhotoItem as any).checkOutPhotoUrl) && (
-              <div className="px-4 pt-3 flex gap-2">
+              <div className="px-5 pt-4 flex gap-2">
                 <button
                   type="button"
                   onClick={() => setPhotoType('CHECK_IN')}
-                  className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold font-mono-code transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                     photoType === 'CHECK_IN'
                       ? 'bg-emerald-600 text-white shadow-xs'
-                      : 'bg-slate-100 text-slate-600'
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
                   }`}
                 >
-                  Foto Masuk ({selectedPhotoItem.checkInTime || '-'})
+                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                  <span>Foto Masuk ({selectedPhotoItem.checkInTime || '-'})</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setPhotoType('CHECK_OUT')}
-                  className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold font-mono-code transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                     photoType === 'CHECK_OUT'
                       ? 'bg-blue-600 text-white shadow-xs'
-                      : 'bg-slate-100 text-slate-600'
+                      : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
                   }`}
                 >
-                  Foto Pulang ({selectedPhotoItem.checkOutTime || '-'})
+                  <span className="w-2 h-2 rounded-full bg-blue-400" />
+                  <span>Foto Pulang ({selectedPhotoItem.checkOutTime || '-'})</span>
                 </button>
               </div>
             )}
 
-            <div className="p-4">
+            <div className="p-5 space-y-4">
               {(() => {
                 const isMasuk = photoType === 'CHECK_IN';
                 const activePhoto = isMasuk
@@ -1519,26 +1629,78 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
 
                 return (
                   <>
-                    <img
-                      src={activePhoto}
-                      alt={isMasuk ? "Foto Absen Masuk" : "Foto Absen Pulang"}
-                      className="w-full rounded-2xl border border-slate-200 object-cover shadow-sm max-h-[380px]"
-                    />
-                    <div className="mt-3 p-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs space-y-1">
-                      <p><span className="font-bold text-slate-700">Waktu & Tipe:</span> <span className="font-mono-code font-bold text-slate-900">{isMasuk ? `Absen Masuk (${selectedPhotoItem.checkInTime} WIB)` : `Absen Pulang (${selectedPhotoItem.checkOutTime || '-'} WIB)`}</span></p>
-                      <p><span className="font-bold text-slate-700">Karyawan:</span> {selectedPhotoItem.employeeName} • <span className="text-indigo-600 font-mono-code font-bold">{getLoginBadge(selectedPhotoItem)}</span> ({selectedPhotoItem.employeeNik})</p>
-                      <p><span className="font-bold text-slate-700">Geofence:</span> <span className="font-mono-code font-semibold">{formatDistanceKm(selectedPhotoItem.location?.distanceMeters)}</span> • {selectedPhotoItem.location?.inGeofence ? 'Dalam Area Geofence Resmi' : 'Luar Radius'}</p>
-                      <p><span className="font-bold text-slate-700">Lokasi:</span> {selectedPhotoItem.location?.address}</p>
-                      <p><span className="font-bold text-slate-700">Skor Biometrik:</span> <span className={`font-mono-code font-bold ${
-                        (selectedPhotoItem.biometricVerification?.matchScore || 0) >= 70 ? 'text-emerald-700' :
-                        (selectedPhotoItem.biometricVerification?.matchScore || 0) >= 60 ? 'text-blue-700' : 'text-rose-600'
-                      }`}>
-                        {selectedPhotoItem.biometricVerification?.matchScore !== undefined ? `${selectedPhotoItem.biometricVerification.matchScore}% Match` : 'Belum Terdaftar'}
-                      </span> {selectedPhotoItem.biometricVerification?.details ? `• ${selectedPhotoItem.biometricVerification.details}` : ''}</p>
+                    <div className="rounded-2xl overflow-hidden border border-slate-200 shadow-inner bg-slate-900 flex items-center justify-center max-h-[380px]">
+                      {activePhoto ? (
+                        <img
+                          src={activePhoto}
+                          alt={isMasuk ? "Foto Absen Masuk" : "Foto Absen Pulang"}
+                          className="w-full object-contain max-h-[380px]"
+                        />
+                      ) : (
+                        <div className="py-16 text-slate-500 text-xs font-mono-code text-center">
+                          Tidak ada rekaman foto tersedia
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/90 text-xs space-y-2">
+                      <div className="flex items-start justify-between pb-2 border-b border-slate-200/60">
+                        <div>
+                          <span className="text-[10px] text-slate-400 uppercase font-mono-code font-bold block">Tipe Presensi</span>
+                          <span className="font-mono-code font-bold text-slate-900">
+                            {isMasuk ? `Absen Masuk (${selectedPhotoItem.checkInTime} WIB)` : `Absen Pulang (${selectedPhotoItem.checkOutTime || '-'} WIB)`}
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[10px] text-slate-400 uppercase font-mono-code font-bold block">Karyawan</span>
+                          <span className="font-bold text-slate-900">
+                            {selectedPhotoItem.employeeName}
+                          </span>
+                          <span className="ml-1.5 px-1.5 py-0.2 rounded bg-indigo-50 border border-indigo-200/60 text-indigo-700 font-mono-code font-bold text-[10px]">
+                            {getLoginBadge(selectedPhotoItem)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 pt-1 font-mono-code text-[11px]">
+                        <div>
+                          <span className="text-slate-400 block text-[10px]">Jarak Geofence:</span>
+                          <span className="font-bold text-slate-800">
+                            {formatDistanceKm(selectedPhotoItem.location?.distanceMeters)} {selectedPhotoItem.location?.inGeofence ? '(Dalam Area)' : '(Luar Area)'}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block text-[10px]">Skor Biometrik:</span>
+                          <span className={`font-bold ${
+                            (selectedPhotoItem.biometricVerification?.matchScore || 0) >= 70 ? 'text-emerald-700' :
+                            (selectedPhotoItem.biometricVerification?.matchScore || 0) >= 60 ? 'text-blue-700' : 'text-rose-600'
+                          }`}>
+                            {selectedPhotoItem.biometricVerification?.matchScore !== undefined ? `${selectedPhotoItem.biometricVerification.matchScore}% Match` : 'Non-Biometrik'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="pt-1">
+                        <span className="text-slate-400 block text-[10px] font-mono-code">Lokasi Presensi:</span>
+                        <span className="text-slate-600 text-[11px] leading-relaxed">
+                          {selectedPhotoItem.location?.address || '-'}
+                        </span>
+                      </div>
                     </div>
                   </>
                 );
               })()}
+            </div>
+
+            {/* Footer */}
+            <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setSelectedPhotoItem(null)}
+                className="px-4 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs font-mono-code cursor-pointer transition-colors"
+              >
+                Tutup
+              </button>
             </div>
           </div>
         </div>
