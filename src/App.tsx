@@ -3,6 +3,7 @@ import { Zap, Crown, Lock } from 'lucide-react';
 import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
 import { DashboardTab } from './components/DashboardTab';
+import { HrRoomTab } from './components/HrRoomTab';
 import { PresensiCameraTab } from './components/PresensiCameraTab';
 import { ApprovalHubTab } from './components/ApprovalHubTab';
 import { EmployeeManagementTab } from './components/EmployeeManagementTab';
@@ -1586,6 +1587,7 @@ export function App() {
           : userSystemRole === 'superuser'
           ? [
               { id: 'dashboard', label: 'Dashboard' },
+              { id: 'hr_room', label: 'HR Room' },
               { id: 'attendance', label: 'Presensi' },
               { id: 'approvals', label: 'Approval SDM' },
               { id: 'projects', label: 'Proyek & Site' },
@@ -1634,6 +1636,18 @@ export function App() {
             initialSubView={dashboardSubView}
             selectedProjectId={selectedProjectId}
             onSelectProjectId={setSelectedProjectId}
+          />
+        )}
+
+        {activeTab === 'hr_room' && userSystemRole === 'superuser' && (
+          <HrRoomTab
+            currentUser={currentUser}
+            employees={employees}
+            attendances={attendances}
+            approvals={approvals}
+            projects={projects}
+            salaryRules={salaryRules}
+            onNavigateToTab={handleNavigateToTab}
           />
         )}
 

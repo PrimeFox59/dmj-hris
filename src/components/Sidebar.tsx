@@ -17,7 +17,8 @@ import {
   Mail,
   Settings,
   CalendarDays,
-  HardHat
+  HardHat,
+  Activity
 } from 'lucide-react';
 import { UserRole, SystemRole, Employee, canAccessProjectModule, isProjectManager, isProjectAdmin, Project } from '../types';
 
@@ -264,6 +265,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
           title: 'DASHBOARD TERPADU',
           desc: 'Pusat monitoring terpadu: HRIS SDM, Finance Kas & Kinerja Saya',
           icon: LayoutDashboard,
+          badge: null
+        },
+        {
+          id: 'hr_room',
+          title: 'HR ROOM',
+          desc: 'Pusat analitik HR: pantau performa tiap user, kepatuhan & tren presensi ECharts',
+          icon: Activity,
           badge: null
         },
         {

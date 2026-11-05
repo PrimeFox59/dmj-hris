@@ -22,7 +22,8 @@ import {
   Globe,
   Lock,
   KeyRound,
-  HardHat
+  HardHat,
+  Activity
 } from 'lucide-react';
 import { Employee, getEffectiveSystemRole, SystemRole, canAccessProjectModule, isProjectManager, Project } from '../types';
 import { ProfileTabId } from './ProfileSettingsModal';
@@ -253,6 +254,30 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                         </p>
                         <p className="text-[10px] text-slate-500 mt-0.5 line-clamp-1">
                           Log rekaman ISO/IATF
+                        </p>
+                      </div>
+                    </button>
+                  )}
+
+                  {/* Tab: HR Room (Superuser only) */}
+                  {currentRole === 'superuser' && (
+                    <button
+                      onClick={() => handleTabClick('hr_room')}
+                      className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                        activeTab === 'hr_room'
+                          ? 'bg-orange-50 border-orange-300 shadow-xs'
+                          : 'bg-slate-50/70 hover:bg-slate-100 border-slate-200/80'
+                      }`}
+                    >
+                      <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center mb-2">
+                        <Activity className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-slate-900 leading-tight">
+                          HR Room
+                        </p>
+                        <p className="text-[10px] text-slate-500 mt-0.5 line-clamp-1">
+                          Pusat performa & kepatuhan
                         </p>
                       </div>
                     </button>
