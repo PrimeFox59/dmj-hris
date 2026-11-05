@@ -1111,9 +1111,12 @@ export function saveAttendance(record) {
       );
       const isApplicantFinance = applicant && (
         applicant.systemRole === 'finance' || 
+        applicant.role === 'Finance' ||
         applicant.role === 'Finance_Manager' ||
         (applicant.position && applicant.position.toLowerCase().includes('finance')) ||
-        applicant.id === 'EMP-025'
+        (applicant.department && applicant.department.toLowerCase().includes('finance')) ||
+        applicant.id === 'EMP-015' ||
+        applicant.id === 'EMP-045'
       );
 
       let targetRole = (hasPm || hasAdmin) ? 'PM' : (isApplicantHr ? 'FINANCE' : (isApplicantFinance ? 'HR' : 'HR'));
@@ -1214,9 +1217,12 @@ export function saveAttendance(record) {
       );
       const isApplicantFinance = applicant && (
         applicant.systemRole === 'finance' || 
+        applicant.role === 'Finance' ||
         applicant.role === 'Finance_Manager' ||
         (applicant.position && applicant.position.toLowerCase().includes('finance')) ||
-        applicant.id === 'EMP-025'
+        (applicant.department && applicant.department.toLowerCase().includes('finance')) ||
+        applicant.id === 'EMP-015' ||
+        applicant.id === 'EMP-045'
       );
       let targetRole = (hasPm || hasAdmin) ? 'PM' : (isApplicantHr ? 'FINANCE' : (isApplicantFinance ? 'HR' : 'HR'));
 
@@ -2016,7 +2022,7 @@ export function saveEmployee(emp, operatorUser = null) {
 
     // If no user account existed yet for this employee, create it
     if (res.changes === 0 && emp.id !== 'EMP-001') {
-      const loginId = emp.loginId || `d${String(emp.id.replace(/\D/g, '')).padStart(3, '0')}`;
+      const loginId = emp.loginId || emp.id;
       const email = emp.email || `${loginId}@primeprojectx.net`;
       const { hash, salt } = hashPassword('zzz');
       db.prepare(`
@@ -2129,7 +2135,7 @@ export function updateUserProfile(profileData, operatorUser = null) {
   }
 
   // Add audit log
-  const operatorLogin = operatorUser?.username || operatorUser?.loginId || emp.loginId || (emp.id === 'EMP-001' ? 'admin' : `d${String(emp.id.replace(/\D/g, '')).padStart(3, '0')}`);
+  const operatorLogin = operatorUser?.username || operatorUser?.loginId || emp.loginId || (emp.id === 'EMP-001' ? 'admin' : emp.id);
   addAuditLog({
     action: 'UPDATE_PROFILE',
     entity: 'employees',
@@ -2647,7 +2653,7 @@ export function authenticateByBiometric(employeeId, biometricVerification = {}) 
     if (empRow) {
       let parsedEmp = {};
       try { parsedEmp = JSON.parse(empRow.data_json); } catch (e) {}
-      const loginId = parsedEmp.loginId || (empRow.id === 'EMP-001' ? 'admin' : `d${String(empRow.id.replace(/\D/g, '')).padStart(3, '0')}`);
+      const loginId = parsedEmp.loginId || (empRow.id === 'EMP-001' ? 'admin' : empRow.id);
       const email = parsedEmp.email || empRow.email || `${loginId}@primeprojectx.net`;
       const role = parsedEmp.role || empRow.role || 'Employee';
       const systemRole = empRow.id === 'EMP-001' ? 'superuser' : (parsedEmp.systemRole === 'admin' ? 'hr' : parsedEmp.systemRole || 'staff');
@@ -2947,7 +2953,7 @@ export function generateTemporaryPassword(rawIdentifier) {
   let username = targetUser?.username;
 
   if (!username) {
-    username = targetEmployee?.loginId || (empId === 'EMP-001' ? 'admin' : `d${String(empId.replace(/\D/g, '')).padStart(3, '0')}`);
+    username = targetEmployee?.loginId || (empId === 'EMP-001' ? 'admin' : empId);
   }
 
   // Generate Temporary Password (Readable & Secure PIN)

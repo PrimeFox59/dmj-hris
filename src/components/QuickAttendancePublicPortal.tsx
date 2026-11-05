@@ -677,6 +677,7 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
       const record: Partial<AttendanceRecord> = {
         id: `ATT-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
         employeeId: emp.id,
+        employeeLoginId: emp.loginId || undefined,
         employeeName: emp.name,
         employeeNik: emp.nik,
         date: dateStr,

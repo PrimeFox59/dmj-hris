@@ -2429,7 +2429,7 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
             {/* Employee Information */}
             {(() => {
               const emp = employees.find(e => e.id === selectedSlip.employeeId);
-              const loginId = emp?.loginId || (selectedSlip.employeeId === 'EMP-001' ? 'admin' : ('d' + String(selectedSlip.employeeId.replace(/\D/g, '')).padStart(3, '0')));
+              const loginId = emp?.loginId || (selectedSlip.employeeId === 'EMP-001' ? 'admin' : selectedSlip.employeeId);
               const nikVal = selectedSlip.nik || emp?.nik || emp?.ktpNumber || '-';
               const bankInfo = emp?.bankAccount?.accountNumber 
                 ? `${emp.bankAccount.bankName} - ${emp.bankAccount.accountNumber}`

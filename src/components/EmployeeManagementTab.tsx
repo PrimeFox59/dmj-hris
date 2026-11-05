@@ -415,7 +415,7 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
 
   const handleCopyWhatsAppFormat = () => {
     if (!resetTargetEmployee) return;
-    const loginId = resetTargetEmployee.loginId || (resetTargetEmployee.id === 'EMP-001' ? 'admin' : `d${String(resetTargetEmployee.id.replace(/\D/g, '')).padStart(3, '0')}`);
+    const loginId = resetTargetEmployee.loginId || (resetTargetEmployee.id === 'EMP-001' ? 'admin' : resetTargetEmployee.id);
     const pw = resetSuccessMessage ? (customPassword.trim() || 'zzz') : 'zzz';
     const text = `*Kredensial Akses DMJ HRIS Enterprise*\n` +
       `👤 Nama: ${resetTargetEmployee.name}\n` +
@@ -822,7 +822,7 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                         title="ID Kredensial Login Akun Sistem"
                       >
                         <KeyRound className="w-3.5 h-3.5 text-indigo-500" />
-                        <span>{emp.loginId || (emp.id === 'EMP-001' ? 'admin' : `d${String(emp.id.replace(/\D/g, '')).padStart(3, '0')}`)}</span>
+                        <span>{emp.loginId || (emp.id === 'EMP-001' ? 'admin' : emp.id)}</span>
                       </span>
                     </td>
 
@@ -1659,7 +1659,7 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                   <div className="font-bold text-slate-900 text-sm truncate">{resetTargetEmployee.name}</div>
                   <div className="text-[11px] text-slate-500 truncate">{resetTargetEmployee.position} • {resetTargetEmployee.department}</div>
                   <div className="text-[10px] text-slate-500 font-mono-code mt-0.5">
-                    ID Login Akun: <span className="font-bold text-slate-800 font-mono">{resetTargetEmployee.loginId || (resetTargetEmployee.id === 'EMP-001' ? 'admin' : ('d' + String(resetTargetEmployee.id.replace(/\D/g, '')).padStart(3, '0')))}</span>
+                    ID Login Akun: <span className="font-bold text-slate-800 font-mono">{resetTargetEmployee.loginId || (resetTargetEmployee.id === 'EMP-001' ? 'admin' : resetTargetEmployee.id)}</span>
                   </div>
                 </div>
               </div>
@@ -1681,11 +1681,11 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                     <span className="text-[10px] text-slate-400 block uppercase font-mono-code">ID Login (Username)</span>
                     <div className="flex items-center justify-between mt-0.5">
                       <span className="font-mono-code font-black text-indigo-900 text-sm">
-                        {resetTargetEmployee.loginId || (resetTargetEmployee.id === 'EMP-001' ? 'admin' : `d${String(resetTargetEmployee.id.replace(/\\D/g, '')).padStart(3, '0')}`)}
+                        {resetTargetEmployee.loginId || (resetTargetEmployee.id === 'EMP-001' ? 'admin' : resetTargetEmployee.id)}
                       </span>
                       <button
                         onClick={() => handleCopyText(
-                          resetTargetEmployee.loginId || (resetTargetEmployee.id === 'EMP-001' ? 'admin' : `d${String(resetTargetEmployee.id.replace(/\\D/g, '')).padStart(3, '0')}`),
+                          resetTargetEmployee.loginId || (resetTargetEmployee.id === 'EMP-001' ? 'admin' : resetTargetEmployee.id),
                           'loginId'
                         )}
                         className="p-1 rounded-md text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 cursor-pointer"

@@ -178,6 +178,8 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
     return record.employeeId || '';
   };
 
+  const [logSearchQuery, setLogSearchQuery] = useState('');
+
   // RBAC Privacy Filter & Chronological Sorting:
   // Superuser & Admin see all workforce logs, staff users only see their own attendance records.
   // ALWAYS sort by latest activity time (checkOutTime || checkInTime) DESC so the newest activity is at the very top!
@@ -191,7 +193,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
         return matchId || matchNik || matchName;
       });
 
-    return [...rawList].sort((a, b) => {
+    const sorted = [...rawList].sort((a, b) => {
       // 1. Sort by Date DESC
       const dateA = a.date || '';
       const dateB = b.date || '';
@@ -202,7 +204,19 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
       const timeB = b.checkOutTime || b.checkInTime || '00:00:00';
       return timeB.localeCompare(timeA);
     });
-  }, [attendanceHistory, isSuperOrAdmin, currentUser.id, currentUser.nik, currentUser.name]);
+
+    if (!logSearchQuery.trim()) return sorted;
+    const q = logSearchQuery.trim().toLowerCase();
+    return sorted.filter(item => {
+      const badge = getRecordLoginBadgeId(item).toLowerCase();
+      const name = (item.employeeName || '').toLowerCase();
+      const nik = (item.employeeNik || '').toLowerCase();
+      const date = (item.date || '').toLowerCase();
+      const proj = (item.projectName || item.projectCode || '').toLowerCase();
+      const note = (item.note || '').toLowerCase();
+      return badge.includes(q) || name.includes(q) || nik.includes(q) || date.includes(q) || proj.includes(q) || note.includes(q);
+    });
+  }, [attendanceHistory, isSuperOrAdmin, currentUser.id, currentUser.nik, currentUser.name, logSearchQuery, employeeMap]);
 
   const [cameraActive, setCameraActive] = useState(false);
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
@@ -1683,7 +1697,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                       LIVE
                     </span>
                     <span className="text-[10px] text-orange-400 font-bold font-mono-code hidden sm:inline">
-                      {currentUser.loginId || (currentUser.id === 'EMP-001' ? 'admin' : ('d' + String(currentUser.id.replace(/\D/g, '')).padStart(3, '0')))}
+                      {currentUser.loginId || (currentUser.id === 'EMP-001' ? 'admin' : currentUser.id)}
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-400 font-mono-code">
@@ -2077,23 +2091,44 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
 
       {/* Attendance History Table */}
       <div id="tour-attendance-history" className="glass-card rounded-3xl p-5 sm:p-6 space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <Clock className="w-4 h-4 text-[#FF6B00]" />
             <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider font-mono-code">
               {isSuperOrAdmin ? 'Riwayat Log Presensi Terkini' : 'Riwayat Log Presensi Saya'}
             </h2>
           </div>
-          <span className="text-xs text-slate-500 font-medium font-mono-code">
-            {isDbLoading && visibleAttendanceHistory.length === 0 ? (
-              <span className="inline-flex items-center gap-1.5 text-slate-400 animate-pulse">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-                Sinkronisasi data presensi...
-              </span>
-            ) : (
-              `Total: ${visibleAttendanceHistory.length} Rekaman ${isSuperOrAdmin ? '(Semua Karyawan)' : '(Data Mandiri)'}`
-            )}
-          </span>
+          <div className="flex items-center gap-2.5">
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Cari ID login (d014...), nama, tgl..."
+                value={logSearchQuery}
+                onChange={e => setLogSearchQuery(e.target.value)}
+                className="w-48 sm:w-64 px-3 py-1 text-xs rounded-xl border border-slate-200 bg-white font-mono-code focus:outline-none focus:border-[#FF6B00] placeholder:text-slate-400"
+              />
+              {logSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setLogSearchQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs cursor-pointer"
+                  title="Hapus pencarian"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+            <span className="text-xs text-slate-500 font-medium font-mono-code whitespace-nowrap">
+              {isDbLoading && visibleAttendanceHistory.length === 0 ? (
+                <span className="inline-flex items-center gap-1.5 text-slate-400 animate-pulse">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                  Sinkronisasi...
+                </span>
+              ) : (
+                `Total: ${visibleAttendanceHistory.length} Rekaman ${isSuperOrAdmin ? '(Semua Karyawan)' : '(Data Mandiri)'}`
+              )}
+            </span>
+          </div>
         </div>
 
         <div className="overflow-x-auto">

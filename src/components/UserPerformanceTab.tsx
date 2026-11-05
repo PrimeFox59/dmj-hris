@@ -301,7 +301,7 @@ export const UserPerformanceTab: React.FC<UserPerformanceTabProps> = ({
                   {selectedEmployeeId === currentUser.id ? 'PORTAL PERSONAL KARYAWAN' : 'TINJAUAN KINERJA PERSONEL'}
                 </span>
                 <span className="text-xs font-mono-code text-slate-400 font-bold">
-                  {activeEmployee.loginId || (activeEmployee.id === 'EMP-001' ? 'admin' : ('d' + String(activeEmployee.id.replace(/\D/g, '')).padStart(3, '0')))}
+                  {activeEmployee.loginId || (activeEmployee.id === 'EMP-001' ? 'admin' : activeEmployee.id)}
                 </span>
                 <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 text-[10px] font-mono-code">
                   Status: {activeEmployee.employmentType}
@@ -1373,7 +1373,7 @@ export const UserPerformanceTab: React.FC<UserPerformanceTabProps> = ({
               </div>
               <div>
                 <span className="text-[10px] text-slate-400 font-mono-code uppercase block">ID Login Akun</span>
-                <span className="font-bold text-slate-900 font-mono-code">{activeEmployee.loginId || (activeEmployee.id === 'EMP-001' ? 'admin' : ('d' + String(activeEmployee.id.replace(/\D/g, '')).padStart(3, '0')))}</span>
+                <span className="font-bold text-slate-900 font-mono-code">{activeEmployee.loginId || (activeEmployee.id === 'EMP-001' ? 'admin' : activeEmployee.id)}</span>
               </div>
               <div>
                 <span className="text-[10px] text-slate-400 font-mono-code uppercase block">Departemen</span>
