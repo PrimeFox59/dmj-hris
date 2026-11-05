@@ -630,6 +630,13 @@ async function evaluateScheduledReminders() {
 
   if (waConfig.enabled === false) return;
 
+  // Pre-flight check: If dedicated WhatsApp Gateway is offline/unpaired, abort immediately (0ms)
+  // to prevent blocking the event loop and spamming logs with 120+ failed attempts every minute
+  const gwStatus = await getGatewayStatus();
+  if (!gwStatus || !gwStatus.online) {
+    return;
+  }
+
   const employees = db.prepare("SELECT id, name, nik, data_json FROM employees;").all().map(r => {
     try { return JSON.parse(r.data_json); } catch (e) { return r; }
   });

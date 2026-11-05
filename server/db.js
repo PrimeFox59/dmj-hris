@@ -695,6 +695,15 @@ export function getAllData() {
     if (item.photoUrl && item.photoUrl.startsWith('data:image')) {
       item.photoUrl = `/api/attendance/${item.id || r.id}/photo`;
     }
+    if (item.photoOutUrl && item.photoOutUrl.startsWith('data:image')) {
+      item.photoOutUrl = `/api/attendance/${item.id || r.id}/photo-out`;
+    }
+    if (item.checkInPhotoUrl && item.checkInPhotoUrl.startsWith('data:image')) {
+      item.checkInPhotoUrl = `/api/attendance/${item.id || r.id}/photo`;
+    }
+    if (item.checkOutPhotoUrl && item.checkOutPhotoUrl.startsWith('data:image')) {
+      item.checkOutPhotoUrl = `/api/attendance/${item.id || r.id}/photo-out`;
+    }
     if (!item.employeeLoginId) {
       if (item.employeeId === 'EMP-001') {
         item.employeeLoginId = 'admin';
@@ -744,7 +753,19 @@ export function getAttendancePhoto(id) {
     const row = db.prepare('SELECT data_json FROM attendances WHERE id = ?').get(id);
     if (!row) return null;
     const item = JSON.parse(row.data_json);
-    return item.photoUrl || null;
+    return item.photoUrl || item.checkInPhotoUrl || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+export function getAttendancePhotoOut(id) {
+  const db = getDatabase();
+  try {
+    const row = db.prepare('SELECT data_json FROM attendances WHERE id = ?').get(id);
+    if (!row) return null;
+    const item = JSON.parse(row.data_json);
+    return item.photoOutUrl || item.checkOutPhotoUrl || null;
   } catch (e) {
     return null;
   }

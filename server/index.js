@@ -45,6 +45,7 @@ import {
   deleteCasualAttendance,
   deleteAttendance,
   getAttendancePhoto,
+  getAttendancePhotoOut,
   getEmployeeByIdentifier,
   getEmployeeProjectSchedule,
   updateUserProfile
@@ -1206,6 +1207,34 @@ const server = http.createServer(async (req, res) => {
       if (photoMatch && method === 'GET') {
         const id = decodeURIComponent(photoMatch[1]);
         const photoUrl = getAttendancePhoto(id);
+        if (photoUrl) {
+          if (photoUrl.startsWith('data:image/')) {
+            const matches = photoUrl.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+            if (matches && matches.length === 3) {
+              const mimeType = matches[1];
+              const buffer = Buffer.from(matches[2], 'base64');
+              res.writeHead(200, {
+                'Content-Type': mimeType,
+                'Content-Length': buffer.length,
+                'Cache-Control': 'public, max-age=86400, immutable',
+                'Access-Control-Allow-Origin': '*'
+              });
+              return res.end(buffer);
+            }
+          } else if (photoUrl.startsWith('http')) {
+            res.writeHead(302, { Location: photoUrl, 'Access-Control-Allow-Origin': '*' });
+            return res.end();
+          }
+        }
+        res.writeHead(404, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        return res.end(JSON.stringify({ error: 'Photo not found' }));
+      }
+
+      // 6e. Stream Check-Out Attendance Photo Binary with Instant Cache (Zero-lag Hydration)
+      const photoOutMatch = cleanUrl.match(/^\/api\/attendance\/([^\/]+)\/photo-out$/);
+      if (photoOutMatch && method === 'GET') {
+        const id = decodeURIComponent(photoOutMatch[1]);
+        const photoUrl = getAttendancePhotoOut(id);
         if (photoUrl) {
           if (photoUrl.startsWith('data:image/')) {
             const matches = photoUrl.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
