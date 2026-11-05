@@ -2180,6 +2180,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                 <th className="py-2.5 px-3">Lokasi & Geofence</th>
                 <th className="py-2.5 px-3">Catatan / Keterangan</th>
                 <th className="py-2.5 px-3">Status Verifikasi</th>
+                <th className="py-2.5 px-3">Skor Biometrik</th>
                 {currentRole === 'superuser' && onDeleteAttendance && (
                   <th className="py-2.5 px-3 text-right">Aksi</th>
                 )}
@@ -2188,7 +2189,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
             <tbody className="divide-y divide-slate-100">
               {visibleAttendanceHistory.length === 0 ? (
                 <tr>
-                  <td colSpan={currentRole === 'superuser' && onDeleteAttendance ? 8 : 7} className="py-10 text-center text-slate-400 text-xs">
+                  <td colSpan={currentRole === 'superuser' && onDeleteAttendance ? 9 : 8} className="py-10 text-center text-slate-400 text-xs">
                     {isDbLoading ? (
                       <div className="flex flex-col items-center justify-center gap-2 animate-pulse py-4">
                         <div className="w-5 h-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
@@ -2297,6 +2298,41 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                       ) : (
                         <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-bold">
                           Tervalidasi Otomatis
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3 px-3 whitespace-nowrap">
+                      {item.biometricVerification ? (
+                        item.biometricVerification.matchScore !== undefined && item.biometricVerification.matchScore !== null ? (
+                          item.biometricVerification.matchScore >= 70 ? (
+                            <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold font-mono-code inline-flex items-center gap-1 shadow-2xs" title={item.biometricVerification.details || 'Biometrik Cocok'}>
+                              <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                              <span>{item.biometricVerification.matchScore}% Match</span>
+                            </span>
+                          ) : item.biometricVerification.matchScore >= 60 ? (
+                            <span className="px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold font-mono-code inline-flex items-center gap-1 shadow-2xs" title={item.biometricVerification.details || 'Biometrik Memadai'}>
+                              <ShieldCheck className="w-3 h-3 text-blue-600" />
+                              <span>{item.biometricVerification.matchScore}% Match</span>
+                            </span>
+                          ) : item.biometricVerification.matchScore === 0 || item.biometricVerification.details?.toLowerCase().includes('tidak terdeteksi') ? (
+                            <span className="px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-bold font-mono-code inline-flex items-center gap-1 shadow-2xs" title={item.biometricVerification.details || 'Wajah Tidak Terdeteksi'}>
+                              <ShieldAlert className="w-3 h-3 text-rose-600" />
+                              <span>Tanpa Wajah (0%)</span>
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-bold font-mono-code inline-flex items-center gap-1 shadow-2xs" title={item.biometricVerification.details || 'Kemiripan Rendah'}>
+                              <ShieldAlert className="w-3 h-3 text-rose-600" />
+                              <span>{item.biometricVerification.matchScore}% Mismatch</span>
+                            </span>
+                          )
+                        ) : (
+                          <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-500 border border-slate-200 text-[10px] font-medium font-mono-code inline-flex items-center gap-1">
+                            {item.biometricVerification.details || 'Non-Biometrik'}
+                          </span>
+                        )
+                      ) : (
+                        <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-400 border border-slate-200 text-[10px] font-medium font-mono-code inline-flex items-center gap-1">
+                          Belum Enroll
                         </span>
                       )}
                     </td>
@@ -2437,6 +2473,12 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                       <p><span className="font-bold text-slate-700">Catatan:</span> {selectedHistoryItem.note}</p>
                       <p><span className="font-bold text-slate-700">Geofence:</span> <span className="font-mono-code font-semibold">{formatDistanceKm(selectedHistoryItem.location.distanceMeters)}</span> • {selectedHistoryItem.location.inGeofence ? 'Dalam Area Geofence Resmi' : 'Luar Radius'}</p>
                       <p><span className="font-bold text-slate-700">Lokasi:</span> {selectedHistoryItem.location.address}</p>
+                      <p><span className="font-bold text-slate-700">Skor Biometrik:</span> <span className={`font-mono-code font-bold ${
+                        (selectedHistoryItem.biometricVerification?.matchScore || 0) >= 70 ? 'text-emerald-700' :
+                        (selectedHistoryItem.biometricVerification?.matchScore || 0) >= 60 ? 'text-blue-700' : 'text-rose-600'
+                      }`}>
+                        {selectedHistoryItem.biometricVerification?.matchScore !== undefined ? `${selectedHistoryItem.biometricVerification.matchScore}% Match` : 'Belum Terdaftar'}
+                      </span> {selectedHistoryItem.biometricVerification?.details ? `• ${selectedHistoryItem.biometricVerification.details}` : ''}</p>
                     </div>
                   </>
                 );

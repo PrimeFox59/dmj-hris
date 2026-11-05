@@ -399,6 +399,83 @@ async function triggerApprovalDecisionEmailNotification(approvalId, status, revi
 }
 
 // ==========================================
+// BACKGROUND BIOMETRIC FACE VERIFICATION ENGINE
+// Asynchronous face scanning against Central VPS Face Engine (YuNet + SFace)
+// Ensures zero latency/blocking on attendance submission.
+// ==========================================
+async function triggerBiometricBackgroundScan(attendanceRecord) {
+  try {
+    if (!attendanceRecord || !attendanceRecord.id) return;
+    const photo = attendanceRecord.photoUrl || attendanceRecord.photoOutUrl || attendanceRecord.checkInPhotoUrl;
+    if (!photo || typeof photo !== 'string' || !photo.startsWith('data:image/')) return;
+
+    const resp = await fetch('http://103.31.205.218:8599/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: photo }),
+      signal: AbortSignal.timeout(6000)
+    }).then(r => r.json()).catch(() => null);
+
+    let bioResult = null;
+    if (resp) {
+      if (resp.status === 'NO_FACE') {
+        bioResult = {
+          isVerified: false,
+          matchScore: 0,
+          livenessPassed: false,
+          details: 'Wajah tidak terdeteksi pada foto presensi (kamera tertutup/gelap)'
+        };
+      } else if (resp.status === 'OCCLUDED') {
+        bioResult = {
+          isVerified: false,
+          matchScore: 30,
+          livenessPassed: false,
+          details: resp.message || 'Wajah terhalang tangan/masker/objek'
+        };
+      } else if (resp.matched && resp.employeeId) {
+        const isSame = resp.employeeId === attendanceRecord.employeeId;
+        bioResult = {
+          isVerified: isSame,
+          matchScore: isSame ? (resp.score || 95) : 35,
+          matchedPose: 'front',
+          livenessPassed: true,
+          details: isSame
+            ? `Wajah terverifikasi cocok (${resp.score}%)`
+            : `Wajah terdeteksi milik karyawan lain (${resp.employeeName || resp.employeeId})`
+        };
+      } else if (resp.score !== undefined) {
+        const passed = resp.score >= 60;
+        bioResult = {
+          isVerified: passed,
+          matchScore: resp.score,
+          matchedPose: 'front',
+          livenessPassed: true,
+          details: passed
+            ? `Wajah terverifikasi (${resp.score}%)`
+            : `Tingkat kemiripan wajah rendah (${resp.score}% < 60%)`
+        };
+      }
+    }
+
+    if (bioResult) {
+      const db = getDatabase();
+      const row = db.prepare('SELECT data_json FROM attendances WHERE id = ?;').get(attendanceRecord.id);
+      if (row && row.data_json) {
+        const d = JSON.parse(row.data_json);
+        d.biometricVerification = bioResult;
+        db.prepare('UPDATE attendances SET data_json = ? WHERE id = ?;').run(JSON.stringify(d), attendanceRecord.id);
+
+        const updatedRecord = { ...attendanceRecord, biometricVerification: bioResult };
+        broadcastRealtimeEvent('ATTENDANCE_SAVED', updatedRecord);
+        console.log(`[BIOMETRIC BG SCAN] Record ${attendanceRecord.id} (${attendanceRecord.employeeName}) verified: ${bioResult.matchScore}% - ${bioResult.details}`);
+      }
+    }
+  } catch (err) {
+    console.error('[triggerBiometricBackgroundScan Error]', err);
+  }
+}
+
+// ==========================================
 // ENTERPRISE POLICY: ZERO PAYROLL / SLIP BROADCAST VIA WHATSAPP & EMAIL
 // Under direct executive instruction of Mr Prime, salary slip (slip gaji)
 // notifications MUST NEVER be dispatched via WhatsApp or Email.
@@ -1020,6 +1097,7 @@ const server = http.createServer(async (req, res) => {
           broadcastRealtimeEvent('ATTENDANCE_SAVED', savedRecord);
           triggerAttendanceWaNotification(savedRecord).catch(err => console.error('[WA Trigger Attendance Error]', err));
           triggerAttendanceEmailNotification(savedRecord).catch(err => console.error('[Email Trigger Attendance Error]', err));
+          setImmediate(() => triggerBiometricBackgroundScan(savedRecord));
           return sendJson(200, result);
         } catch (err) {
           console.error('[SERVER ERROR /api/attendance]', err);
@@ -1085,6 +1163,7 @@ const server = http.createServer(async (req, res) => {
         broadcastRealtimeEvent('ATTENDANCE_SAVED', savedRecord);
         triggerAttendanceWaNotification(savedRecord).catch(err => console.error('[WA Trigger Attendance Error]', err));
         triggerAttendanceEmailNotification(savedRecord).catch(err => console.error('[Email Trigger Attendance Error]', err));
+        setImmediate(() => triggerBiometricBackgroundScan(savedRecord));
         return sendJson(200, result);
       } catch (err) {
         console.error('[SERVER ERROR /api/public-attendance]', err);
