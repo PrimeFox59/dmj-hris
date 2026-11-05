@@ -187,6 +187,115 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
     return '';
   };
 
+  // Project Info for Attendance Record
+  const getProjectInfo = (item: AttendanceRecord) => {
+    let code = item.projectCode || '';
+    let name = item.projectName || '';
+
+    if (item.projectId) {
+      const proj = projects.find(p => p.id === item.projectId || p.code === item.projectId);
+      if (proj) {
+        if (!name || name === 'OFFICE') name = proj.name;
+        if (!code) code = proj.code;
+      }
+    }
+
+    if (!name || name === 'OFFICE' || !code) {
+      const emp = employees.find(e => e.id === item.employeeId || e.nik === item.employeeNik);
+      if (emp?.assignedProjectId) {
+        const proj = projects.find(p => p.id === emp.assignedProjectId);
+        if (proj) {
+          if (!name || name === 'OFFICE') name = proj.name;
+          if (!code) code = proj.code;
+        }
+      }
+    }
+
+    if (!name || name === 'OFFICE' || item.projectId === 'OFFICE') {
+      return {
+        name: salaryRules?.officeGeofence?.name || 'Kantor Pusat & Operasional',
+        code: code || 'HO',
+        isOffice: true
+      };
+    }
+
+    return {
+      name,
+      code: code || 'PROJ',
+      isOffice: false
+    };
+  };
+
+  // Extract Clean User Note
+  const extractUserAttendanceNote = (item: AttendanceRecord): { badge?: string; text: string; fullRaw: string } => {
+    const raw = (item.note || '').trim();
+    const outOfRange = (item.outOfRangeReason || '').trim();
+    const late = (item.lateReason || '').trim();
+
+    // 1. Check if raw note has [Luar Area Xm]: <User Note>
+    const luarMatch = raw.match(/^\[Luar Area \d+m\]:\s*(.*)$/i);
+    if (luarMatch) {
+      const userTyped = luarMatch[1].trim();
+      return {
+        badge: 'Luar Area',
+        text: userTyped || outOfRange || 'Presensi di luar geofence',
+        fullRaw: raw
+      };
+    }
+
+    // 2. Check if raw note has [Dinas Luar: ...]: <User Note>
+    const dinasMatch = raw.match(/^\[Dinas Luar:[^\]]+\]\s*(.*)$/i);
+    if (dinasMatch) {
+      const userTyped = dinasMatch[1].trim();
+      return {
+        badge: 'Dinas Luar',
+        text: userTyped || raw,
+        fullRaw: raw
+      };
+    }
+
+    // 3. Explicit outOfRangeReason
+    if (outOfRange && !outOfRange.startsWith('[Luar Area')) {
+      return {
+        badge: 'Luar Area',
+        text: outOfRange,
+        fullRaw: raw || outOfRange
+      };
+    }
+
+    // 4. Explicit lateReason
+    if (late) {
+      return {
+        badge: 'Alasan Telat',
+        text: late,
+        fullRaw: raw || late
+      };
+    }
+
+    // 5. System boilerplate notes
+    if (raw === 'Presensi Masuk (Dalam Area Kerja)' || raw === 'Presensi Pulang (Dalam Area Kerja)') {
+      return {
+        badge: undefined,
+        text: '-',
+        fullRaw: raw
+      };
+    }
+
+    if (raw) {
+      return {
+        badge: undefined,
+        text: raw,
+        fullRaw: raw
+      };
+    }
+
+    return {
+      badge: undefined,
+      text: '-',
+      fullRaw: '-'
+    };
+  };
+
   // =========================================================================
   // 3. DATE RANGE DAYS LIST
   // =========================================================================
@@ -757,6 +866,8 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
     const dataToExport = scopedAttendances.map(a => {
       const emp = employees.find(e => e.id === a.employeeId || e.nik === a.employeeNik);
       const loginId = getLoginBadge(a);
+      const projInfo = getProjectInfo(a);
+      const noteInfo = extractUserAttendanceNote(a);
       const isLateStr = a.isLate ? `Terlambat (${a.lateMinutes || 0} mnt)` : 'Tepat Waktu';
       const geofenceStr = a.location?.inGeofence ? 'Dalam Area' : `Luar Geofence (${formatDistanceKm(a.location?.distanceMeters)})`;
       const bioStr = a.biometricVerification?.matchScore !== undefined ? `${a.biometricVerification.matchScore}% Match` : 'Belum Enroll';
@@ -766,15 +877,16 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
         'ID Login': loginId,
         'NIK': a.employeeNik || emp?.nik || '-',
         'Nama Karyawan': a.employeeName || emp?.name || '-',
+        'Proyek': projInfo.name,
+        'Kode Proyek': projInfo.code,
         'Departemen': emp?.department || '-',
-        'Proyek': a.projectId || emp?.assignedProjectId || '-',
         'Jam Masuk': a.checkInTime ? `${a.checkInTime} WIB` : '-',
         'Jam Pulang': a.checkOutTime ? `${a.checkOutTime} WIB` : '-',
         'Status Kepatuhan': isLateStr,
         'Lokasi & Geofence': geofenceStr,
         'Alamat Presensi': a.location?.address || '-',
         'Skor Biometrik': bioStr,
-        'Catatan Presensi': a.note || '-'
+        'Catatan Absen': noteInfo.text !== '-' ? noteInfo.text : (a.note || '-')
       };
     });
 
@@ -1184,18 +1296,19 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
               <tr className="border-b border-slate-200/90 bg-slate-50/80 text-slate-500 uppercase tracking-wider text-[10px] font-mono-code font-bold">
                 <th className="py-3 px-3.5">Tanggal</th>
                 <th className="py-3 px-3.5">Karyawan</th>
+                <th className="py-3 px-3.5">Proyek</th>
                 <th className="py-3 px-3.5">Masuk</th>
                 <th className="py-3 px-3.5">Pulang</th>
                 <th className="py-3 px-3.5">Kepatuhan</th>
                 <th className="py-3 px-3.5">Skor Biometrik</th>
                 <th className="py-3 px-3.5">Lokasi & Geofence</th>
-                <th className="py-3 px-3.5">Catatan</th>
+                <th className="py-3 px-3.5">Catatan Absen</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {displayedAttendances.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">
+                  <td colSpan={9} className="py-12 text-center text-slate-400">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <Clock className="w-7 h-7 text-slate-300" />
                       <p className="text-xs font-semibold text-slate-500">
@@ -1208,6 +1321,8 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                 displayedAttendances.map(item => {
                   const emp = employees.find(e => e.id === item.employeeId || e.nik === item.employeeNik);
                   const loginId = getLoginBadge(item);
+                  const projInfo = getProjectInfo(item);
+                  const noteInfo = extractUserAttendanceNote(item);
                   const isLate = item.isLate || (item.lateMinutes && item.lateMinutes > 0);
                   const dayName = getDayNameIndo(item.date);
 
@@ -1226,7 +1341,7 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                         </div>
                       </td>
 
-                      {/* Karyawan & Login ID */}
+                      {/* Karyawan & Login ID (Tanpa Posisi) */}
                       <td className="py-3.5 px-3.5">
                         <button
                           type="button"
@@ -1252,18 +1367,34 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                               <span>{item.employeeName}</span>
                               <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity text-[#FF6B00]" />
                             </div>
-                            <div className="text-[10px] flex items-center gap-1.5 mt-0.5">
-                              <span className="px-1.5 py-0.2 rounded bg-indigo-50 border border-indigo-200/60 text-indigo-700 font-mono-code font-bold">
-                                {loginId}
+                            <div className="mt-0.5">
+                              <span className="px-1.5 py-0.5 rounded bg-indigo-50 border border-indigo-200/70 text-indigo-700 font-mono-code font-bold text-[10px] inline-flex items-center gap-1">
+                                ID: {loginId}
                               </span>
-                              {emp?.department && (
-                                <span className="text-slate-500 font-medium truncate max-w-[180px]">
-                                  • {emp.department}
-                                </span>
-                              )}
                             </div>
                           </div>
                         </button>
+                      </td>
+
+                      {/* Proyek / Lokasi Absen (NEW) */}
+                      <td className="py-3.5 px-3.5 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${
+                            projInfo.isOffice
+                              ? 'bg-slate-100 border border-slate-200 text-slate-600'
+                              : 'bg-orange-50 border border-orange-200/60 text-[#FF6B00]'
+                          }`}>
+                            <Building className="w-3.5 h-3.5" />
+                          </div>
+                          <div className="max-w-[170px]">
+                            <div className="font-bold text-slate-900 text-[11px] truncate" title={projInfo.name}>
+                              {projInfo.name}
+                            </div>
+                            <span className="text-[10px] font-mono-code font-semibold px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 border border-slate-200/60 inline-block mt-0.5">
+                              {projInfo.code}
+                            </span>
+                          </div>
+                        </div>
                       </td>
 
                       {/* Masuk */}
@@ -1359,7 +1490,7 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                       </td>
 
                       {/* Lokasi & Geofence */}
-                      <td className="py-3.5 px-3.5 max-w-[240px]">
+                      <td className="py-3.5 px-3.5 max-w-[220px]">
                         <div className="flex items-center gap-1.5 font-mono-code text-[10px] font-bold">
                           <MapPin className={`w-3.5 h-3.5 shrink-0 ${item.location?.inGeofence ? 'text-emerald-500' : 'text-amber-500'}`} />
                           <span className={`px-1.5 py-0.5 rounded text-[10px] ${item.location?.inGeofence ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60' : 'bg-amber-50 text-amber-700 border border-amber-200/60'}`}>
@@ -1371,33 +1502,28 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                         </div>
                       </td>
 
-                      {/* Catatan */}
-                      <td className="py-3.5 px-3.5 max-w-[180px]">
-                        {(() => {
-                          const raw = item.note;
-                          if (!raw || !raw.trim()) {
-                            return <span className="text-slate-400 font-mono-code text-[11px]">-</span>;
-                          }
-                          const match = raw.match(/^\[Luar Area \d+m\]:\s*(.*)$/);
-                          if (match) {
-                            const userText = match[1].trim();
-                            return (
-                              <div className="flex flex-col gap-0.5" title={raw}>
-                                <span className="inline-flex items-center w-fit px-1.5 py-0.2 rounded bg-amber-50 text-amber-700 border border-amber-200/60 text-[9px] font-bold font-mono-code">
-                                  Luar Geofence
-                                </span>
-                                <span className="text-slate-700 text-[11px] truncate font-medium">
-                                  {userText || 'Terdeteksi di luar area'}
-                                </span>
-                              </div>
-                            );
-                          }
-                          return (
-                            <span className="text-slate-700 text-[11px] truncate font-medium block" title={raw}>
-                              {raw}
-                            </span>
-                          );
-                        })()}
+                      {/* Catatan Absen (Bersih, Rapi & Jelas) */}
+                      <td className="py-3.5 px-3.5 min-w-[190px] max-w-[280px]">
+                        {noteInfo.text === '-' ? (
+                          <span className="text-slate-400 font-mono-code text-[11px]">-</span>
+                        ) : (
+                          <div className="space-y-1" title={noteInfo.fullRaw}>
+                            {noteInfo.badge && (
+                              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold font-mono-code border ${
+                                noteInfo.badge === 'Luar Area'
+                                  ? 'bg-amber-50 text-amber-800 border-amber-200/70'
+                                  : noteInfo.badge === 'Alasan Telat'
+                                  ? 'bg-orange-50 text-orange-800 border-orange-200/70'
+                                  : 'bg-blue-50 text-blue-800 border-blue-200/70'
+                              }`}>
+                                {noteInfo.badge}
+                              </span>
+                            )}
+                            <div className="text-slate-900 text-xs font-semibold leading-relaxed break-words line-clamp-2">
+                              {noteInfo.text}
+                            </div>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );
@@ -1685,6 +1811,24 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                         <span className="text-slate-600 text-[11px] leading-relaxed">
                           {selectedPhotoItem.location?.address || '-'}
                         </span>
+                      </div>
+
+                      {/* Proyek Presensi */}
+                      <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-xs">
+                        <span className="text-slate-400 font-mono-code text-[10px]">Proyek / Lokasi Absen:</span>
+                        <span className="font-bold text-slate-900 font-mono-code">
+                          {getProjectInfo(selectedPhotoItem).name} ({getProjectInfo(selectedPhotoItem).code})
+                        </span>
+                      </div>
+
+                      {/* Catatan Presensi Saat Absen */}
+                      <div className="pt-2 border-t border-slate-200/60">
+                        <span className="text-slate-400 block text-[10px] font-mono-code mb-0.5">Catatan Saat Absen:</span>
+                        <div className="p-2 rounded-xl bg-white border border-slate-200 text-slate-800 text-xs font-semibold leading-relaxed">
+                          {extractUserAttendanceNote(selectedPhotoItem).text !== '-'
+                            ? extractUserAttendanceNote(selectedPhotoItem).text
+                            : (selectedPhotoItem.note || 'Tidak ada catatan tambahan')}
+                        </div>
                       </div>
                     </div>
                   </>
