@@ -121,16 +121,33 @@ function saveOptInsToFile() {
   }
 }
 
+let gatewayDbInstance = null;
+function getGatewayDb() {
+  if (!gatewayDbInstance) {
+    try {
+      const { DatabaseSync } = require('node:sqlite');
+      const sqlitePath = path.join(__dirname, '..', 'data', 'hris.sqlite');
+      if (fs.existsSync(sqlitePath)) {
+        gatewayDbInstance = new DatabaseSync(sqlitePath);
+        gatewayDbInstance.exec('PRAGMA journal_mode = WAL;');
+        gatewayDbInstance.exec('PRAGMA synchronous = NORMAL;');
+        gatewayDbInstance.exec('PRAGMA busy_timeout = 5000;');
+      }
+    } catch (e) {
+      console.warn('[PRIME WA] Error initializing gateway DB connection:', e.message);
+    }
+  }
+  return gatewayDbInstance;
+}
+
 function hasOptedIn(phone) {
   const norm = normalizePhone(phone);
   if (!norm) return false;
 
   // Check persistent SQLite database
   try {
-    const { DatabaseSync } = require('node:sqlite');
-    const sqlitePath = path.join(__dirname, '..', 'data', 'hris.sqlite');
-    if (fs.existsSync(sqlitePath)) {
-      const db = new DatabaseSync(sqlitePath);
+    const db = getGatewayDb();
+    if (db) {
       const row = db.prepare('SELECT is_active, manual_override, message_count, first_message FROM wa_opt_ins WHERE phone = ?;').get(norm);
       if (row) {
         // Syarat 1: Preferensi wajib aktif (is_active === 1; default adalah 0 / OFF)
@@ -173,30 +190,13 @@ function recordOptIn(phone, messageText = '', pushName = '') {
 
   // Sync to main SQLite database
   try {
-    const { DatabaseSync } = require('node:sqlite');
-    const sqlitePath = path.join(__dirname, '..', 'data', 'hris.sqlite');
-    if (fs.existsSync(sqlitePath)) {
-      const db = new DatabaseSync(sqlitePath);
-
-      // Pastikan tabel ada
-      db.exec(`
-        CREATE TABLE IF NOT EXISTS wa_opt_ins (
-          phone TEXT PRIMARY KEY,
-          employee_id TEXT,
-          employee_name TEXT,
-          first_message TEXT,
-          first_message_at TEXT DEFAULT CURRENT_TIMESTAMP,
-          last_message TEXT,
-          last_message_at TEXT DEFAULT CURRENT_TIMESTAMP,
-          message_count INTEGER DEFAULT 1
-        );
-      `);
-
-      // Match employee by ID in message text or by phone number
+    const db = getGatewayDb();
+    if (db) {
+      // Match employee by ID in message text or by phone number (token-efficient scan without heavy data_json)
       let matchedEmpId = null;
       let matchedEmpName = null;
       try {
-        const empRows = db.prepare('SELECT id, name, phone, data_json FROM employees;').all();
+        const empRows = db.prepare('SELECT id, nik, name, phone FROM employees;').all();
         for (const emp of empRows) {
           if (messageText && (messageText.toUpperCase().includes(emp.id) || (emp.nik && messageText.includes(emp.nik)))) {
             matchedEmpId = emp.id;

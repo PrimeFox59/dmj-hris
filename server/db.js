@@ -77,6 +77,15 @@ let dbInstance = null;
 export function getDatabase() {
   if (!dbInstance) {
     dbInstance = new DatabaseSync(dbPath);
+    // Mandatory High-Performance PRAGMAs (Per-Connection)
+    dbInstance.exec('PRAGMA journal_mode = WAL;');
+    dbInstance.exec('PRAGMA synchronous = NORMAL;');
+    dbInstance.exec('PRAGMA foreign_keys = ON;');
+    dbInstance.exec('PRAGMA temp_store = MEMORY;');
+    dbInstance.exec('PRAGMA cache_size = -32000;');
+    dbInstance.exec('PRAGMA mmap_size = 268435456;');
+    dbInstance.exec('PRAGMA busy_timeout = 5000;');
+    dbInstance.exec('PRAGMA wal_autocheckpoint = 1000;');
     initializeSchema(dbInstance);
   }
   return dbInstance;
@@ -259,6 +268,29 @@ try {
       periods_json TEXT NOT NULL,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_by TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS reimbursements (
+      id TEXT PRIMARY KEY,
+      employeeId TEXT NOT NULL,
+      employeeName TEXT NOT NULL,
+      employeeNik TEXT NOT NULL,
+      category TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT,
+      amount REAL NOT NULL,
+      date TEXT NOT NULL,
+      receiptAttachment TEXT,
+      projectId TEXT,
+      projectName TEXT,
+      status TEXT NOT NULL,
+      submittedAt TEXT NOT NULL,
+      reviewedBy TEXT,
+      reviewedAt TEXT,
+      rejectReason TEXT,
+      data_json TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
   `);
 
@@ -489,6 +521,54 @@ try {
   if (logCount < 10) {
     seedRealisticAuditLogs(db);
   }
+
+  // -------------------------------------------------------------
+  // HIGH-PERFORMANCE COVERING & COMPOSITE INDEXES
+  // -------------------------------------------------------------
+  db.exec(`
+    -- Attendances High-Performance Indexes
+    CREATE INDEX IF NOT EXISTS idx_att_date_time ON attendances (date DESC, checkInTime DESC);
+    CREATE INDEX IF NOT EXISTS idx_att_date_latest ON attendances (date DESC, COALESCE(checkOutTime, checkInTime) DESC, checkInTime DESC);
+    CREATE INDEX IF NOT EXISTS idx_att_emp_date ON attendances (employeeId, date DESC);
+    CREATE INDEX IF NOT EXISTS idx_att_nik ON attendances (employeeNik);
+    CREATE INDEX IF NOT EXISTS idx_att_status ON attendances (status, date DESC);
+
+    -- Audit Logs High-Performance Indexes
+    CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_logs (timestamp DESC);
+    CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_logs (entity, entityId);
+    CREATE INDEX IF NOT EXISTS idx_audit_login_user ON audit_logs (userLoginId, timestamp DESC);
+
+    -- Approvals High-Performance Indexes
+    CREATE INDEX IF NOT EXISTS idx_app_emp_submitted ON approvals (employeeId, submittedAt DESC);
+    CREATE INDEX IF NOT EXISTS idx_app_status_submitted ON approvals (status, submittedAt DESC);
+
+    -- Employees High-Performance Indexes
+    CREATE INDEX IF NOT EXISTS idx_emp_nik ON employees (nik);
+    CREATE INDEX IF NOT EXISTS idx_emp_dept ON employees (department);
+    CREATE INDEX IF NOT EXISTS idx_emp_proj ON employees (assignedProjectId);
+
+    -- User Accounts Index
+    CREATE INDEX IF NOT EXISTS idx_ua_emp_id ON user_accounts (employee_id);
+
+    -- Reimbursements High-Performance Indexes
+    CREATE INDEX IF NOT EXISTS idx_reimb_emp_date ON reimbursements (employeeId, date DESC);
+    CREATE INDEX IF NOT EXISTS idx_reimb_status ON reimbursements (status, date DESC);
+
+    -- Notifications High-Performance Indexes
+    CREATE INDEX IF NOT EXISTS idx_wan_phone_sent ON wa_notifications (recipient_phone, sent_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_wan_sent ON wa_notifications (sent_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_email_recipient_sent ON email_notifications (recipient_email, sent_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_email_sent ON email_notifications (sent_at DESC);
+
+    -- WhatsApp Opt-Ins High-Performance Indexes
+    CREATE INDEX IF NOT EXISTS idx_wa_opt_emp ON wa_opt_ins (employee_id);
+    CREATE INDEX IF NOT EXISTS idx_wa_opt_active ON wa_opt_ins (is_active, message_count);
+  `);
+
+  // Query Planner Optimization
+  try {
+    db.exec('PRAGMA optimize;');
+  } catch (eOpt) {}
 
   // Automatically deduplicate any historical attendance records or pending attendance approvals
   cleanupDuplicateAttendanceAndApprovals(db);
