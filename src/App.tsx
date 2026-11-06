@@ -24,6 +24,7 @@ import { QuickAttendancePublicPortal } from './components/QuickAttendancePublicP
 import { AnnualWorkCalendarTab } from './components/AnnualWorkCalendarTab';
 import { CasualWorkerAttendanceTab } from './components/CasualWorkerAttendanceTab';
 import { PwaInstallPrompt } from './components/PwaInstallPrompt';
+import { PwaUpdateToast } from './components/PwaUpdateToast';
 
 import {
   INITIAL_EMPLOYEES,
@@ -1882,6 +1883,9 @@ export function App() {
 
       {/* Native PWA Mobile Install Banner */}
       <PwaInstallPrompt />
+
+      {/* Live OTA PWA Update Prompt */}
+      <PwaUpdateToast />
 
       {/* Floating Real-Time Sync Notification Toast */}
       {liveToast && (

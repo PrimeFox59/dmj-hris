@@ -25,26 +25,58 @@
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,600;1,700&display=swap" rel="stylesheet" />
     <script src="/models/face-api.js"></script>
 
-    <!-- Service Worker Registration -->
+    <!-- Service Worker Registration & Live OTA Auto-Update Detector -->
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js', { scope: '/' })
             .then((reg) => {
+              window.__PRIME_SW_REG__ = reg;
               console.log('[PWA] Service Worker aktif:', reg.scope);
-              // Handle updatefound
+
+              // 1. If a worker is already waiting in background, notify UI immediately
+              if (reg.waiting) {
+                console.log('[PWA] Versi baru sedang menunggu aktivasi.');
+                window.dispatchEvent(new CustomEvent('pwa-update-available', { detail: { registration: reg } }));
+              }
+
+              // 2. Handle background updates detected while app is open
               reg.onupdatefound = () => {
                 const installingWorker = reg.installing;
                 if (installingWorker) {
                   installingWorker.onstatechange = () => {
                     if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                      console.log('[PWA] Versi baru tersedia.');
+                      console.log('[PWA] Versi baru terdeteksi dan siap digunakan.');
+                      window.dispatchEvent(new CustomEvent('pwa-update-available', { detail: { registration: reg } }));
                     }
                   };
                 }
               };
             })
             .catch((err) => console.warn('[PWA] Pendaftaran SW gagal:', err));
+
+          // 3. Auto-check updates when user brings PWA back to foreground
+          document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' && window.__PRIME_SW_REG__) {
+              window.__PRIME_SW_REG__.update().catch(() => {});
+            }
+          });
+
+          // 4. Periodic background update check every 15 minutes
+          setInterval(() => {
+            if (window.__PRIME_SW_REG__) {
+              window.__PRIME_SW_REG__.update().catch(() => {});
+            }
+          }, 15 * 60 * 1000);
+        });
+
+        // 5. Seamless reload when the new worker takes control
+        let isRefreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (!isRefreshing) {
+            isRefreshing = true;
+            window.location.reload();
+          }
         });
       }
     </script>

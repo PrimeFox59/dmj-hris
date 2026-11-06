@@ -1,5 +1,6 @@
 // DMJ HRIS — High Performance Progressive Web App (PWA) Service Worker
-const CACHE_NAME = 'prime-hris-core-v1';
+const SW_VERSION = '2026.11.06-v2';
+const CACHE_NAME = `prime-hris-core-${SW_VERSION}`;
 
 // Core assets to pre-cache on install for instant native boot
 const PRECACHE_ASSETS = [
@@ -13,6 +14,13 @@ const PRECACHE_ASSETS = [
   '/icons/maskable-icon-512x512.png',
   '/models/face-api.js'
 ];
+
+// Message Listener: Support instant SKIP_WAITING from client update prompt
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
 
 // Install Event: Pre-cache core app shell
 self.addEventListener('install', (event) => {
