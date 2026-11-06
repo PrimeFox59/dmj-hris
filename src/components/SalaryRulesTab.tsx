@@ -1393,7 +1393,7 @@ export const SalaryRulesTab: React.FC<SalaryRulesTabProps> = ({
                                 </div>
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                   <span className="font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.2 rounded text-[10px] border border-emerald-200">
-                                    {opt.employee_id || 'ID'}
+                                    {opt.employee_login_id || opt.employee_id || 'ID'}
                                   </span>
                                   {opt.department && opt.department !== '-' && (
                                     <span className="text-slate-400 text-[10px]">

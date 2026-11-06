@@ -831,9 +831,15 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
                                 <span className="text-xs font-bold text-slate-900 font-mono-code">
                                   {item.employeeName || 'Karyawan'}
                                 </span>
-                                <span className="text-[10px] text-slate-400 font-mono-code">
-                                    {item.employeeNik || '-'}
-                                </span>
+                                {item.employeeLoginId ? (
+                                  <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200/60 px-1.5 py-0.2 rounded font-mono-code">
+                                    {item.employeeLoginId}
+                                  </span>
+                                ) : item.employeeNik && item.employeeNik.trim() && item.employeeNik !== '-' ? (
+                                  <span className="text-[10px] text-slate-400 font-mono-code">
+                                    {item.employeeNik}
+                                  </span>
+                                ) : null}
                               </div>
                               <p className="text-[11px] text-slate-500">{item.department || '-'}</p>
                             </div>

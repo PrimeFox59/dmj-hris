@@ -1128,8 +1128,9 @@ export function App() {
                 const newAtt: AttendanceRecord = {
                   id: `ATT-CORR-${item.id}`,
                   employeeId: item.employeeId,
+                  employeeLoginId: item.employeeLoginId,
                   employeeName: item.employeeName,
-                  employeeNik: item.employeeNik || 'NIK-CORR',
+                  employeeNik: item.employeeNik || '',
                   department: item.department || 'Operasional',
                   date: corrDate,
                   checkInTime: item.targetCheckInTime || '08:00:00',

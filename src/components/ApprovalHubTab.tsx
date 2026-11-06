@@ -517,7 +517,8 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
     const matchSearch =
       item.employeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.employeeNik.toLowerCase().includes(searchTerm.toLowerCase());
+      (Boolean(item.employeeLoginId) && item.employeeLoginId!.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (Boolean(item.employeeNik) && item.employeeNik!.toLowerCase().includes(searchTerm.toLowerCase()));
     
     let matchDate = true;
     const itemDate = item.startDate ? item.startDate.slice(0, 10) : item.submittedAt ? item.submittedAt.slice(0, 10) : '';
@@ -1014,10 +1015,19 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                             )}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <div className="font-bold text-slate-900 truncate flex items-center gap-1.5" title={`${item.employeeName} (${item.employeeNik})`}>
-                              <span className="truncate">{item.employeeName}</span>
-                              <span className="text-[10px] font-mono-code text-slate-400 font-normal shrink-0">({item.employeeNik})</span>
-                            </div>
+                            {(() => {
+                              const loginBadge = emp?.loginId || item.employeeLoginId || (item.employeeId === 'EMP-001' ? 'admin' : '');
+                              return (
+                                <div className="font-bold text-slate-900 truncate flex items-center gap-1.5" title={`${item.employeeName}${loginBadge ? ` (${loginBadge})` : ''}`}>
+                                  <span className="truncate">{item.employeeName}</span>
+                                  {loginBadge && (
+                                    <span className="text-[10px] font-mono-code font-bold text-indigo-700 bg-indigo-50 border border-indigo-200/60 px-1.5 py-0.2 rounded shrink-0">
+                                      {loginBadge}
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })()}
                             <p className="text-[11px] text-slate-500 truncate" title={`${item.department} • ${emp?.position || '-'}`}>
                               {item.department} • {emp?.position || '-'}
                             </p>
@@ -1488,7 +1498,12 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
                 <h3 className="font-bold text-slate-900 text-base">Formulir Permohonan Cuti / Izin</h3>
-                <p className="text-xs text-slate-500">Pemohon: {currentUser.name} ({currentUser.nik})</p>
+                <p className="text-xs text-slate-500">
+                  Pemohon: <span className="font-semibold text-slate-800">{currentUser.name}</span> • <span className="font-mono-code font-bold text-indigo-700 bg-indigo-50 border border-indigo-200/60 px-1.5 py-0.2 rounded text-[11px]">{currentUser.loginId || (currentUser.id === 'EMP-001' ? 'admin' : currentUser.id)}</span>
+                  {currentUser.nik && currentUser.nik.trim() && currentUser.nik !== '-' && !currentUser.nik.startsWith('PRIME-') ? (
+                    <span className="text-slate-400 font-mono-code ml-1.5">({currentUser.nik})</span>
+                  ) : null}
+                </p>
               </div>
               <button
                 onClick={() => setShowNewRequestModal(false)}
@@ -2216,10 +2231,25 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                   )}
                 </div>
                 <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-slate-900 text-base">{detailModalItem.employeeName}</h3>
-                    <span className="text-[11px] font-mono-code text-slate-400">({detailModalItem.employeeNik})</span>
-                  </div>
+                  {(() => {
+                    const detailEmp = employees.find(e => e.id === detailModalItem.employeeId);
+                    const detailLoginId = detailEmp?.loginId || detailModalItem.employeeLoginId || (detailModalItem.employeeId === 'EMP-001' ? 'admin' : '');
+                    const hasRealNik = Boolean(detailModalItem.employeeNik && detailModalItem.employeeNik.trim() && detailModalItem.employeeNik !== '-' && !detailModalItem.employeeNik.startsWith('PRIME-'));
+
+                    return (
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-bold text-slate-900 text-base">{detailModalItem.employeeName}</h3>
+                        {detailLoginId && (
+                          <span className="text-[10px] font-mono-code font-bold text-indigo-700 bg-indigo-50 border border-indigo-200/60 px-1.5 py-0.5 rounded">
+                            {detailLoginId}
+                          </span>
+                        )}
+                        {hasRealNik ? (
+                          <span className="text-[11px] font-mono-code text-slate-400">({detailModalItem.employeeNik})</span>
+                        ) : null}
+                      </div>
+                    );
+                  })()}
                   <p className="text-xs text-slate-500">
                     {detailModalItem.department} • {employees.find(e => e.id === detailModalItem.employeeId)?.position || '-'}
                   </p>

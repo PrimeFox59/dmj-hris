@@ -405,8 +405,9 @@ export interface ApprovalItem {
   id: string;
   type: 'LEAVE' | 'PERMIT' | 'LATE_JUSTIFICATION' | 'DINAS_LUAR' | 'ATTENDANCE_CORRECTION' | 'OUT_OF_GEOFENCE' | 'KASBON' | 'SLIP_ACCESS' | 'EARLY_CHECKOUT';
   employeeId: string;
+  employeeLoginId?: string; // Canonical Login ID badge (e.g. 'd014', 'd025', 'admin') matching Master Karyawan
   employeeName: string;
-  employeeNik: string;
+  employeeNik?: string;
   department: string;
   title: string;
   description: string;
@@ -824,6 +825,7 @@ export interface CasualWorkerAttendance {
 export interface WaOptInRecord {
   phone: string;
   employee_id?: string | null;
+  employee_login_id?: string | null;
   employee_name?: string | null;
   department?: string | null;
   position?: string | null;

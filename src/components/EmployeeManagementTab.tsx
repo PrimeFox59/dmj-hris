@@ -233,7 +233,7 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
     setLoginId(nextSuggested);
     setLoginIdError(null);
     setSaveError(null);
-    setNik(`PRIME-2026-${String(employees.length + 1).padStart(3, '0')}`);
+    setNik(''); // Jika tidak ada NIK, kosongkan saja
     setName('');
     setEmail('');
     setPhone('+62 8');
@@ -417,10 +417,11 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
     if (!resetTargetEmployee) return;
     const loginId = resetTargetEmployee.loginId || (resetTargetEmployee.id === 'EMP-001' ? 'admin' : resetTargetEmployee.id);
     const pw = resetSuccessMessage ? (customPassword.trim() || 'zzz') : 'zzz';
+    const nikLine = resetTargetEmployee.nik && resetTargetEmployee.nik.trim() ? `🆔 NIK Resmi: ${resetTargetEmployee.nik}\n` : '';
     const text = `*Kredensial Akses DMJ HRIS Enterprise*\n` +
       `👤 Nama: ${resetTargetEmployee.name}\n` +
       `🔑 ID Login: ${loginId}\n` +
-      `🆔 NIK Resmi: ${resetTargetEmployee.nik}\n` +
+      nikLine +
       `🔒 Password: ${pw}\n` +
       `🌐 Portal: https://hris.primeprojectx.net\n\n` +
       `_Catatan: Harap segera mengganti password setelah berhasil login pada menu profil._`;
@@ -435,10 +436,11 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
 
     const currentStatus = emp.status || 'ACTIVE';
     const newStatus: 'ACTIVE' | 'INACTIVE' = currentStatus === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+    const empLoginBadge = emp.loginId || (emp.id === 'EMP-001' ? 'admin' : emp.id);
 
     if (newStatus === 'INACTIVE') {
       const confirmDeactivate = confirm(
-        `Nonaktifkan akun karyawan "${emp.name}" (${emp.nik})?\n\n` +
+        `Nonaktifkan akun karyawan "${emp.name}" (${empLoginBadge})?\n\n` +
         `• Karyawan tidak akan dapat login lagi menggunakan password maupun biometrik.\n` +
         `• Sesi login aktif akan segera dicabut.\n` +
         `• Seluruh data master, riwayat presensi, dan slip gaji tetap tersimpan aman untuk audit.`
@@ -446,7 +448,7 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
       if (!confirmDeactivate) return;
     } else {
       const confirmActivate = confirm(
-        `Aktifkan kembali akun karyawan "${emp.name}" (${emp.nik})?\n\n` +
+        `Aktifkan kembali akun karyawan "${emp.name}" (${empLoginBadge})?\n\n` +
         `Karyawan ini akan diizinkan kembali untuk login dan melakukan presensi.`
       );
       if (!confirmActivate) return;
@@ -1234,14 +1236,13 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="text-[10px] font-bold text-slate-600 uppercase">Nomor Induk Karyawan (NIK)</label>
+                    <label className="text-[10px] font-bold text-slate-600 uppercase">Nomor Induk Karyawan (NIK) <span className="text-slate-400 font-normal lowercase">(opsional)</span></label>
                     <input
                       type="text"
                       value={nik}
                       onChange={e => setNik(e.target.value)}
                       className="w-full glass-input rounded-xl px-3 py-2 font-mono-code mt-1 text-slate-900 bg-white border border-slate-200"
-                      placeholder="PRIME-2026-..."
-                      required
+                      placeholder="Kosongkan jika belum ada NIK"
                     />
                   </div>
 
@@ -1844,7 +1845,7 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                 <div>
                   <div className="font-bold text-slate-900 text-xs sm:text-sm">{rosterTargetEmp.name}</div>
                   <div className="text-[11px] text-slate-500 font-mono-code">
-                    NIK: {rosterTargetEmp.nik} • {rosterTargetEmp.position}
+                    {rosterTargetEmp.loginId ? `ID: ${rosterTargetEmp.loginId} • ` : ''}{rosterTargetEmp.nik && rosterTargetEmp.nik.trim() ? `NIK: ${rosterTargetEmp.nik} • ` : ''}{rosterTargetEmp.position}
                   </div>
                 </div>
               </div>

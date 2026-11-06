@@ -480,7 +480,10 @@ export const BiometricEnrollmentModal: React.FC<BiometricEnrollmentModalProps> =
                 </span>
               </div>
               <p className="text-xs text-slate-500">
-                Perekaman wajah multi-sudut untuk verifikasi presensi anti-titip absen: <strong className="text-slate-800">{targetEmployee.name}</strong> ({targetEmployee.nik})
+                Perekaman wajah multi-sudut untuk verifikasi presensi anti-titip absen: <strong className="text-slate-800">{targetEmployee.name}</strong> • <span className="font-mono-code font-bold text-indigo-700">{targetEmployee.loginId || (targetEmployee.id === 'EMP-001' ? 'admin' : targetEmployee.id)}</span>
+                {targetEmployee.nik && targetEmployee.nik.trim() && targetEmployee.nik !== '-' && !targetEmployee.nik.startsWith('PRIME-') ? (
+                  <span className="text-slate-400 font-mono-code ml-1">({targetEmployee.nik})</span>
+                ) : null}
               </p>
             </div>
           </div>

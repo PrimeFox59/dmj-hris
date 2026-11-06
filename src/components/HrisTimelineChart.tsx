@@ -721,7 +721,10 @@ export const HrisTimelineChart: React.FC<HrisTimelineChartProps> = ({
 
                         {/* Tag details on hover */}
                         <div className="hidden group-hover/pin:block absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-slate-950 text-white rounded-xl p-2.5 text-[10px] font-medium shadow-xl whitespace-nowrap z-50 pointer-events-none">
-                          <p className="font-bold text-[#FF6B00]">{employee.name} ({employee.nik})</p>
+                          <p className="font-bold text-[#FF6B00]">
+                            {employee.name} • {employee.loginId || employee.id}
+                            {employee.nik && employee.nik.trim() && !employee.nik.startsWith('PRIME-') ? ` (${employee.nik})` : ''}
+                          </p>
                           <p className="text-slate-300">Proyek: <span className="font-bold text-white">{item.schedule.projectName}</span></p>
                           <p>Masuk: <span className="font-bold">{attendance?.checkInTime} WIB</span> ({status === 'ON_TIME' ? 'Tepat Waktu' : status === 'LATE' ? `Terlambat (Batas: ${item.schedule.cutoffTime})` : status})</p>
                           {attendance?.checkOutTime && (
@@ -837,7 +840,12 @@ export const HrisTimelineChart: React.FC<HrisTimelineChartProps> = ({
               />
               <div>
                 <h3 className="text-base font-black text-slate-900">{selectedRecord.employeeName}</h3>
-                <p className="text-xs text-slate-500 font-mono-code">{selectedRecord.employeeNik ? selectedRecord.employeeNik.replace(/^DMJ-/i, 'PRIME-') : ''}</p>
+                <p className="text-xs text-indigo-600 font-mono-code font-bold">
+                  {selectedRecord.employeeLoginId || (selectedRecord.employeeId === 'EMP-001' ? 'admin' : selectedRecord.employeeId)}
+                  {selectedRecord.employeeNik && selectedRecord.employeeNik.trim() && !selectedRecord.employeeNik.startsWith('PRIME-') && !selectedRecord.employeeNik.startsWith('DMJ-') ? (
+                    <span className="text-slate-400 font-normal ml-1.5 font-mono">({selectedRecord.employeeNik})</span>
+                  ) : null}
+                </p>
                 <p className="text-xs font-semibold text-slate-700 mt-0.5">{selectedRecord.department}</p>
               </div>
             </div>

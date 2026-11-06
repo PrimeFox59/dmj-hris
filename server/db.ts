@@ -454,7 +454,7 @@ export function seedInitialData(db: DatabaseSync) {
       appr.type,
       appr.employeeId,
       appr.employeeName,
-      appr.employeeNik,
+      appr.employeeNik || '',
       appr.department,
       appr.title,
       appr.description,
@@ -578,6 +578,17 @@ export function getAllData() {
       if (item.proofAttachment && item.proofAttachment.startsWith('data:image')) {
         item.hasAttachment = true;
         delete item.proofAttachment;
+      }
+      const canonicalLoginId = (item.employeeId === 'EMP-001')
+        ? 'admin'
+        : (empLoginMap.get(item.employeeId) || 
+           (item.employeeNik && empLoginMap.get(item.employeeNik)) || 
+           (item.employeeName && empLoginMap.get(item.employeeName.toLowerCase().trim())));
+
+      if (canonicalLoginId) {
+        item.employeeLoginId = canonicalLoginId;
+      } else if (!item.employeeLoginId) {
+        item.employeeLoginId = item.employeeId || '-';
       }
       return item;
     });
@@ -816,7 +827,7 @@ export function saveAttendance(record: AttendanceRecord): {
       approvalItem.type,
       approvalItem.employeeId,
       approvalItem.employeeName,
-      approvalItem.employeeNik,
+      approvalItem.employeeNik || '',
       approvalItem.department,
       approvalItem.title,
       approvalItem.description,

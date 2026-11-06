@@ -1146,10 +1146,14 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
     });
     const timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' WIB';
 
+    const loginId = currentUser.loginId || (currentUser.id === 'EMP-001' ? 'admin' : currentUser.id);
+    const hasNik = Boolean(currentUser.nik && currentUser.nik.trim() && currentUser.nik !== '-' && !currentUser.nik.startsWith('PRIME-'));
+    const nikPart = hasNik ? `${currentUser.nik} • ` : '';
+
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 14px monospace';
     ctx.textAlign = 'left';
-    ctx.fillText(`KARYAWAN : ${currentUser.nik} • ${currentUser.name.toUpperCase()}`, 16, 372);
+    ctx.fillText(`KARYAWAN : ${nikPart}${currentUser.name.toUpperCase()} (${loginId})`, 16, 372);
 
     ctx.fillStyle = '#00E2B0';
     ctx.font = '12px monospace';
@@ -2533,7 +2537,15 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                     </div>
                     <div className="mt-3 p-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs space-y-1">
                       <p><span className="font-bold text-slate-700">Waktu & Tipe:</span> <span className="font-mono-code font-bold text-slate-900">{isMasuk ? `Absen Masuk (${selectedHistoryItem.checkInTime || '-'} WIB)` : `Absen Pulang (${selectedHistoryItem.checkOutTime || '-'} WIB)`}</span></p>
-                      <p><span className="font-bold text-slate-700">Karyawan:</span> {selectedHistoryItem.employeeName} • <span className="text-indigo-600 font-mono-code font-bold">{getRecordLoginBadgeId(selectedHistoryItem)}</span> ({selectedHistoryItem.employeeNik})</p>
+                      <p>
+                        <span className="font-bold text-slate-700">Karyawan:</span> {selectedHistoryItem.employeeName} • <span className="text-indigo-600 font-mono-code font-bold">{getRecordLoginBadgeId(selectedHistoryItem)}</span>
+                        {(() => {
+                          const recNik = (selectedHistoryItem.employeeNik || '').trim();
+                          return (recNik && recNik !== '-' && !recNik.startsWith('PRIME-')) ? (
+                            <span className="text-slate-400 font-mono-code ml-1.5">({recNik})</span>
+                          ) : null;
+                        })()}
+                      </p>
                       <p><span className="font-bold text-slate-700">Catatan:</span> {selectedHistoryItem.note || '-'}</p>
                       <p><span className="font-bold text-slate-700">Geofence:</span> <span className="font-mono-code font-semibold">{formatDistanceKm(selectedHistoryItem.location.distanceMeters)}</span> • {selectedHistoryItem.location.inGeofence ? 'Dalam Area Geofence Resmi' : 'Luar Radius'}</p>
                       <p><span className="font-bold text-slate-700">Lokasi:</span> {selectedHistoryItem.location.address}</p>

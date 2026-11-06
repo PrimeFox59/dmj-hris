@@ -888,6 +888,19 @@ export function getAllData() {
       item.hasAttachment = true;
       delete item.proofAttachment;
     }
+    // Canonical Login ID resolution from Master Data (SSOT)
+    const canonicalLoginId = (item.employeeId === 'EMP-001')
+      ? 'admin'
+      : (empLoginMap.get(item.employeeId) || 
+         (item.employeeNik && empLoginMap.get(item.employeeNik)) || 
+         (item.employeeName && empLoginMap.get(item.employeeName.toLowerCase().trim())) || 
+         userMap.get(item.employeeId));
+
+    if (canonicalLoginId) {
+      item.employeeLoginId = canonicalLoginId;
+    } else if (!item.employeeLoginId) {
+      item.employeeLoginId = item.employeeId || '-';
+    }
     return item;
   });
   const rulesRow = db.prepare('SELECT config_json FROM salary_rules WHERE id = ?;').get('default');
@@ -2219,6 +2232,23 @@ export function saveEmployee(emp, operatorUser = null) {
         }
       } catch (eAttSync) {
         console.warn('Error cascading employee update to attendances:', eAttSync.message);
+      }
+
+      // Auto-cascade updated loginId, name, and NIK to approvals table (SSOT)
+      try {
+        const apprRows = db.prepare('SELECT id, data_json FROM approvals WHERE employeeId = ?;').all(emp.id);
+        const updateApprStmt = db.prepare('UPDATE approvals SET employeeName = ?, employeeNik = ?, data_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?;');
+        for (const ap of apprRows) {
+          try {
+            const parsed = JSON.parse(ap.data_json);
+            if (cleanLoginId) parsed.employeeLoginId = cleanLoginId;
+            parsed.employeeName = emp.name;
+            if (emp.nik !== undefined) parsed.employeeNik = emp.nik || '';
+            updateApprStmt.run(emp.name, emp.nik || '', JSON.stringify(parsed), ap.id);
+          } catch (eApprParsed) {}
+        }
+      } catch (eApprSync) {
+        console.warn('Error cascading employee update to approvals:', eApprSync.message);
       }
     }
 
@@ -4464,7 +4494,7 @@ export function getWaOptIns() {
   const db = getDatabase();
   try {
     // 1. Ambil seluruh karyawan terdaftar
-    const employees = db.prepare('SELECT id, name, phone, department, position FROM employees;').all();
+    const employees = db.prepare('SELECT id, name, phone, department, position, data_json FROM employees;').all();
     
     // 2. Ambil seluruh rekaman opt-in / preferensi yang ada di wa_opt_ins
     const optInRows = db.prepare('SELECT * FROM wa_opt_ins;').all();
@@ -4492,9 +4522,16 @@ export function getWaOptIns() {
       const isActive = rec ? (rec.is_active === 1) : false; // Default OFF!
       const manualOverride = rec ? (rec.manual_override === 1) : false;
 
+      let empLoginId = emp.id;
+      try {
+        const p = JSON.parse(emp.data_json || '{}');
+        empLoginId = p.loginId || (emp.id === 'EMP-001' ? 'admin' : emp.id);
+      } catch (e) {}
+
       result.push({
         phone: eDigits,
         employee_id: emp.id,
+        employee_login_id: empLoginId,
         employee_name: emp.name,
         department: emp.department || '-',
         position: emp.position || '-',

@@ -1486,7 +1486,18 @@ export const LeaveGanttChartTab: React.FC<LeaveGanttChartTabProps> = ({
                   </span>
                 </div>
                 <h3 className="text-lg font-black text-slate-900">{selectedSpan.employeeName}</h3>
-                <p className="text-xs text-slate-500">{selectedSpan.position} • {selectedSpan.employeeNik}</p>
+                {(() => {
+                  const sEmp = employees.find(e => e.id === selectedSpan.employeeId);
+                  const sLoginId = sEmp?.loginId || (selectedSpan.employeeId === 'EMP-001' ? 'admin' : '');
+                  const hasNik = Boolean(selectedSpan.employeeNik && selectedSpan.employeeNik.trim() && !selectedSpan.employeeNik.startsWith('PRIME-'));
+                  return (
+                    <p className="text-xs text-slate-500">
+                      {selectedSpan.position}
+                      {sLoginId ? ` • ID: ${sLoginId}` : ''}
+                      {hasNik ? ` • NIK: ${selectedSpan.employeeNik}` : ''}
+                    </p>
+                  );
+                })()}
               </div>
 
               <button
@@ -1612,7 +1623,7 @@ export const LeaveGanttChartTab: React.FC<LeaveGanttChartTabProps> = ({
                 >
                   {employees.map(emp => (
                     <option key={emp.id} value={emp.id}>
-                      {emp.name} ({emp.nik}) - {emp.workLocationType || (emp.nonLokalLeaveConfig ? 'NON-LOKAL' : 'LOKAL')}
+                      {emp.name} • {emp.loginId || (emp.id === 'EMP-001' ? 'admin' : emp.id)}{emp.nik && emp.nik.trim() && !emp.nik.startsWith('PRIME-') ? ` (${emp.nik})` : ''} - {emp.workLocationType || (emp.nonLokalLeaveConfig ? 'NON-LOKAL' : 'LOKAL')}
                     </option>
                   ))}
                 </select>

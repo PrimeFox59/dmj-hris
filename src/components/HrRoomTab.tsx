@@ -1656,7 +1656,10 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                 {/* Meta details */}
                 <div className="grid grid-cols-2 gap-3 p-3.5 rounded-2xl bg-slate-50 border border-slate-200 font-mono-code text-[11px]">
                   <div>
-                    <span className="text-slate-400">NIK:</span> <b className="text-slate-900">{inspectedEmployee.nik}</b>
+                    <span className="text-slate-400">ID Login:</span> <b className="text-indigo-600 font-bold">{inspectedEmployee.loginId || (inspectedEmployee.id === 'EMP-001' ? 'admin' : inspectedEmployee.id)}</b>
+                  </div>
+                  <div>
+                    <span className="text-slate-400">NIK:</span> <b className="text-slate-900">{inspectedEmployee.nik && inspectedEmployee.nik.trim() && !inspectedEmployee.nik.startsWith('PRIME-') ? inspectedEmployee.nik : '-'}</b>
                   </div>
                   <div>
                     <span className="text-slate-400">Dept:</span> <b className="text-slate-900">{inspectedEmployee.department || '-'}</b>

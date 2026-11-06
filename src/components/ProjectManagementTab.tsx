@@ -1180,7 +1180,7 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
                       <option value="">-- Belum Ditentukan (Tanpa PM Khusus) --</option>
                       {employees.map(emp => (
                         <option key={emp.id} value={emp.id}>
-                          {emp.name} — {emp.position} ({emp.nik})
+                          {emp.name} — {emp.position} • {emp.loginId || (emp.id === 'EMP-001' ? 'admin' : emp.id)}{emp.nik && emp.nik.trim() && !emp.nik.startsWith('PRIME-') ? ` (${emp.nik})` : ''}
                         </option>
                       ))}
                     </select>
@@ -1333,7 +1333,7 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
                           const currProj = projects.find(p => p.id === emp.assignedProjectId);
                           return (
                             <option key={emp.id} value={emp.id}>
-                              {emp.name} ({emp.nik}) - {emp.position} [{currProj ? `Saat ini di: ${currProj.code}` : 'Belum Ditugaskan'}]
+                              {emp.name} • {emp.loginId || (emp.id === 'EMP-001' ? 'admin' : emp.id)}{emp.nik && emp.nik.trim() && !emp.nik.startsWith('PRIME-') ? ` (${emp.nik})` : ''} - {emp.position} [{currProj ? `Saat ini di: ${currProj.code}` : 'Belum Ditugaskan'}]
                             </option>
                           );
                         })}

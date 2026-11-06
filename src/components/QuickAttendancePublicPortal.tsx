@@ -470,11 +470,15 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
     });
     const timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' WIB';
 
-    // Line 1: Karyawan NIK & Nama
+    // Line 1: Karyawan NIK & Nama (ID Login Utilitas)
+    const loginId = emp.loginId || (emp.id === 'EMP-001' ? 'admin' : emp.id);
+    const hasNik = Boolean(emp.nik && emp.nik.trim() && emp.nik !== '-' && !emp.nik.startsWith('PRIME-'));
+    const nikPart = hasNik ? `${emp.nik} • ` : '';
+
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 14px monospace';
     ctx.textAlign = 'left';
-    ctx.fillText(`KARYAWAN : ${emp.nik || 'KIOSK-001'} • ${emp.name.toUpperCase()}`, 16, 372);
+    ctx.fillText(`KARYAWAN : ${nikPart}${emp.name.toUpperCase()} (${loginId})`, 16, 372);
 
     // Line 2: Waktu Presensi
     ctx.fillStyle = '#00E2B0';

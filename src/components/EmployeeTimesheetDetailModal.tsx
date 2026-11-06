@@ -1047,7 +1047,9 @@ export const EmployeeTimesheetDetailModal: React.FC<EmployeeTimesheetDetailModal
               {/* Verified Details */}
               <div className="p-4 bg-white text-xs">
                 <h4 className="font-bold text-slate-900 text-sm mb-1">{zoomedPhoto.employeeName}</h4>
-                <p className="text-slate-500 text-[11px] font-mono-code mb-3">NIK: {zoomedPhoto.employeeNik}</p>
+                {zoomedPhoto.employeeNik && zoomedPhoto.employeeNik.trim() && zoomedPhoto.employeeNik !== '-' ? (
+                  <p className="text-slate-500 text-[11px] font-mono-code mb-3">NIK: {zoomedPhoto.employeeNik}</p>
+                ) : null}
 
                 <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-700 space-y-1">
                   <div className="flex justify-between">
