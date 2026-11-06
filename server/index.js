@@ -410,6 +410,22 @@ async function triggerBiometricBackgroundScan(attendanceRecord) {
     const photo = attendanceRecord.photoUrl || attendanceRecord.photoOutUrl || attendanceRecord.checkInPhotoUrl;
     if (!photo || typeof photo !== 'string' || !photo.startsWith('data:image/')) return;
 
+    // Verify employee has actually registered biometric samples before running background scan
+    const db = getDatabase();
+    const empRow = db.prepare('SELECT data_json FROM employees WHERE id = ? OR nik = ?;').get(attendanceRecord.employeeId || '', attendanceRecord.employeeNik || '');
+    let empHasBio = false;
+    if (empRow && empRow.data_json) {
+      try {
+        const empData = JSON.parse(empRow.data_json);
+        empHasBio = Boolean(empData.biometric?.isEnrolled || empData.hasBiometric || (empData.biometric?.samples && (empData.biometric.samples.front || empData.biometric.samples.smile)));
+      } catch (e) {}
+    }
+
+    if (!empHasBio) {
+      // Employee has not registered face biometrics: do not run verification or assign false mismatch
+      return;
+    }
+
     const resp = await fetch('http://103.31.205.218:8599/verify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

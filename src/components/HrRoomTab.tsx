@@ -1478,39 +1478,66 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
 
                       {/* 8. Biometrik (Icon & Angka Saja, Tanpa Teks) */}
                       <td className="py-2 px-0.5 text-center whitespace-nowrap">
-                        {item.biometricVerification ? (
-                          item.biometricVerification.matchScore !== undefined && item.biometricVerification.matchScore !== null ? (
-                            item.biometricVerification.matchScore >= 70 ? (
+                        {(() => {
+                          const hasEnrolledBiometric = Boolean(
+                            emp?.biometric?.isEnrolled || 
+                            (emp as any)?.hasBiometric || 
+                            (emp?.biometric?.samples && (emp.biometric.samples.front || emp.biometric.samples.smile))
+                          );
+
+                          if (!hasEnrolledBiometric) {
+                            return (
+                              <span
+                                className="inline-flex items-center justify-center p-1 rounded-full bg-amber-50 text-amber-600 border border-amber-200/80 shadow-2xs"
+                                title="Wajah Belum Terdaftar (Belum Registrasi Biometrik)"
+                              >
+                                <UserX className="w-2.5 h-2.5 text-amber-600" />
+                              </span>
+                            );
+                          }
+
+                          if (!item.biometricVerification || item.biometricVerification.matchScore === undefined || item.biometricVerification.matchScore === null) {
+                            return (
+                              <span className="text-slate-400 font-mono-code hr-text-auto-sm" title="Non-Biometrik">-</span>
+                            );
+                          }
+
+                          const score = item.biometricVerification.matchScore;
+                          if (score >= 70) {
+                            return (
                               <span
                                 className="px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 hr-text-auto-sm font-bold font-mono-code inline-flex items-center gap-0.5 shadow-2xs"
-                                title={`Biometrik Cocok: ${item.biometricVerification.matchScore}%`}
+                                title={`Biometrik Cocok: ${score}%`}
                               >
                                 <ShieldCheck className="w-2.5 h-2.5 text-emerald-600 shrink-0" />
-                                <span>{item.biometricVerification.matchScore}%</span>
+                                <span>{score}%</span>
                               </span>
-                            ) : item.biometricVerification.matchScore >= 60 ? (
+                            );
+                          }
+
+                          if (score >= 60) {
+                            return (
                               <span
                                 className="px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 hr-text-auto-sm font-bold font-mono-code inline-flex items-center gap-0.5 shadow-2xs"
-                                title={`Biometrik Memadai: ${item.biometricVerification.matchScore}%`}
+                                title={`Biometrik Memadai: ${score}%`}
                               >
                                 <ShieldCheck className="w-2.5 h-2.5 text-blue-600 shrink-0" />
-                                <span>{item.biometricVerification.matchScore}%</span>
+                                <span>{score}%</span>
                               </span>
-                            ) : (
-                              <span
-                                className="px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 hr-text-auto-sm font-bold font-mono-code inline-flex items-center gap-0.5 shadow-2xs"
-                                title={item.biometricVerification.details || `Skor Rendah / Tanpa Wajah: ${item.biometricVerification.matchScore || 0}%`}
-                              >
-                                <ShieldAlert className="w-2.5 h-2.5 text-rose-600 shrink-0" />
-                                <span>{item.biometricVerification.matchScore || 0}%</span>
-                              </span>
-                            )
-                          ) : (
-                            <span className="text-slate-400 font-mono-code hr-text-auto-sm" title="Non-Biometrik">-</span>
-                          )
-                        ) : (
-                          <span className="text-slate-400 font-mono-code hr-text-auto-sm" title="Belum Enroll Biometrik">-</span>
-                        )}
+                            );
+                          }
+
+                          const isNoFace = score === 0 || item.biometricVerification.details?.toLowerCase().includes('tidak terdeteksi');
+                          return (
+                            <span
+                              className="px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 hr-text-auto-sm font-bold font-mono-code inline-flex items-center gap-0.5 shadow-2xs"
+                              title={item.biometricVerification.details || `Skor Rendah / Mismatch: ${score}%`}
+                            >
+                              <ShieldAlert className="w-2.5 h-2.5 text-rose-600 shrink-0" />
+                              <span>{isNoFace ? '0%' : `${score}%`}</span>
+                            </span>
+                          );
+                        })()}
                       </td>
 
                       {/* 9. Lokasi & Geofence */}
