@@ -961,7 +961,6 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                   <th className="py-3 px-3 text-center w-24 whitespace-nowrap">Tipe & Rute</th>
                   <th className="py-3 px-3 min-w-[200px] max-w-[240px] whitespace-nowrap">Detail Pengajuan</th>
                   <th className="py-3 px-3 text-center w-28 whitespace-nowrap">Tanggal</th>
-                  <th className="py-3 px-3 text-center w-16 whitespace-nowrap">Lampiran</th>
                   <th className="py-3 px-3 text-center w-24 whitespace-nowrap">Status</th>
                   <th className="py-3 px-3 text-center w-36 whitespace-nowrap sticky right-0 bg-slate-50/95 shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.06)] z-10">Aksi Otorisasi</th>
                 </tr>
@@ -1186,6 +1185,19 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                                 ⚠️ Potong Gaji ({item.unpaidLeaveDays} Hr)
                               </span>
                             )}
+
+                            {item.proofAttachment && (
+                              <a
+                                href={item.proofAttachment}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.2 rounded border border-indigo-200 transition-colors"
+                                title="Buka Dokumen Bukti Lampiran"
+                              >
+                                <Paperclip className="w-2.5 h-2.5" />
+                                <span>Lampiran</span>
+                              </a>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -1203,24 +1215,6 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                             </span>
                           ) : null}
                         </div>
-                      </td>
-
-                      {/* Lampiran Dokumen */}
-                      <td className="py-3 px-3 text-center whitespace-nowrap">
-                        {item.proofAttachment ? (
-                          <a
-                            href={item.proofAttachment}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-[10.5px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded-lg border border-indigo-200 transition-colors cursor-pointer"
-                            title="Buka Dokumen Bukti Lampiran"
-                          >
-                            <Paperclip className="w-3 h-3" />
-                            <span>File</span>
-                          </a>
-                        ) : (
-                          <span className="text-slate-300 font-mono-code text-xs">-</span>
-                        )}
                       </td>
 
                       {/* Status Pengajuan */}
