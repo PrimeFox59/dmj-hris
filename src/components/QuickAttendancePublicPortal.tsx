@@ -686,8 +686,10 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
         status: isClockIn ? (isLate ? 'LATE' : 'ON_TIME') : (existingToday?.checkInTime ? 'ON_TIME' : 'ALPA'),
         mode: (isInsideRadius ? 'WFO' : 'DINAS_LUAR') as any,
         department: emp.department || 'Operasional',
-        photoUrl: isClockIn ? photoData : (existingToday?.photoUrl || photoData),
+        photoUrl: isClockIn ? photoData : (existingToday?.photoUrl || undefined),
+        checkInPhotoUrl: isClockIn ? photoData : (existingToday?.checkInPhotoUrl || existingToday?.photoUrl || undefined),
         photoOutUrl: !isClockIn ? photoData : (existingToday?.photoOutUrl || undefined),
+        checkOutPhotoUrl: !isClockIn ? photoData : (existingToday?.checkOutPhotoUrl || undefined),
         location: {
           lat: gpsLocation.lat,
           lng: gpsLocation.lng,

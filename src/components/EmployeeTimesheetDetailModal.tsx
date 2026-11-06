@@ -156,6 +156,11 @@ export const EmployeeTimesheetDetailModal: React.FC<EmployeeTimesheetDetailModal
           }
         }
 
+        const isCheckoutWithoutIn = record.attendanceType === 'CHECK_OUT' && 
+          (!record.checkInTime || record.note?.toLowerCase().includes('tanpa absen masuk'));
+        const resolvedPhotoIn = record.checkInPhotoUrl || (!isCheckoutWithoutIn ? record.photoUrl : undefined);
+        const resolvedPhotoOut = record.checkOutPhotoUrl || record.photoOutUrl || (isCheckoutWithoutIn ? record.photoUrl : undefined);
+
         items.push({
           date: dateStr,
           dayName,
@@ -168,8 +173,8 @@ export const EmployeeTimesheetDetailModal: React.FC<EmployeeTimesheetDetailModal
           workDuration: durationStr,
           isLate: !!record.isLate,
           lateMinutes: record.lateMinutes || 0,
-          photoInUrl: record.photoUrl || defaultFacePhoto,
-          photoOutUrl: record.photoOutUrl || (record.checkOutTime ? defaultSmilePhoto : undefined),
+          photoInUrl: resolvedPhotoIn || (record.checkInTime && record.checkInTime !== '-' ? defaultFacePhoto : undefined),
+          photoOutUrl: resolvedPhotoOut || (record.checkOutTime && record.checkOutTime !== '-' ? defaultSmilePhoto : undefined),
           locationText: record.location?.address || (project?.location ? `Site Proyek ${project.name}` : 'Workshop Utama Surabaya'),
           inGeofence: record.location?.inGeofence ?? true,
           distanceMeters: record.location?.distanceMeters ?? 18,

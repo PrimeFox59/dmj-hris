@@ -35,7 +35,8 @@ import {
   FlipHorizontal,
   SlidersHorizontal,
   Trash2,
-  UserX
+  UserX,
+  CameraOff
 } from 'lucide-react';
 import { Employee, AttendanceRecord, AttendanceMode, AttendanceStatus, SalaryRuleConfig, SystemRole, getEffectiveSystemRole, Project, BiometricProfile, BiometricVerificationResult } from '../types';
 import { rtcService } from '../services/rtcService';
@@ -1488,8 +1489,10 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
       earlyCheckOutMinutes: effectiveEarlyMinutes,
       earlyCheckOutReason: effectiveIsEarlyOut ? (earlyCheckOutReason.trim() || 'Izin pulang lebih awal') : undefined,
       scheduledCheckOutTime: userSchedule.checkOutTime || '17:00',
-      photoUrl: isCheckIn ? photoToUse : (existingToday?.photoUrl || photoToUse),
+      photoUrl: isCheckIn ? photoToUse : (isClockOutWithoutCheckIn ? undefined : (existingToday?.photoUrl || undefined)),
+      checkInPhotoUrl: isCheckIn ? photoToUse : (isClockOutWithoutCheckIn ? undefined : (existingToday?.checkInPhotoUrl || existingToday?.photoUrl || undefined)),
       photoOutUrl: !isCheckIn ? photoToUse : (existingToday?.photoOutUrl || undefined),
+      checkOutPhotoUrl: !isCheckIn ? photoToUse : (existingToday?.checkOutPhotoUrl || undefined),
       location: {
         lat: coords.lat,
         lng: coords.lng,
@@ -2456,53 +2459,81 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
               </button>
             </div>
 
-            {/* Toggle Switch between Foto Masuk & Foto Pulang */}
-            {selectedHistoryItem.checkOutTime && (
-              <div className="px-4 pt-3 flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setSelectedPhotoType('CHECK_IN')}
-                  className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${selectedPhotoType === 'CHECK_IN'
-                      ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-300'
-                      : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
-                    }`}
-                >
-                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                  <span>Foto Masuk ({selectedHistoryItem.checkInTime || '-'})</span>
-                </button>
+            {(() => {
+              const isCheckoutWithoutIn = selectedHistoryItem.attendanceType === 'CHECK_OUT' && 
+                (!selectedHistoryItem.checkInTime || selectedHistoryItem.note?.toLowerCase().includes('tanpa absen masuk'));
 
-                <button
-                  type="button"
-                  onClick={() => setSelectedPhotoType('CHECK_OUT')}
-                  className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${selectedPhotoType === 'CHECK_OUT'
-                      ? 'bg-blue-600 text-white shadow-sm ring-2 ring-blue-300'
-                      : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
-                    }`}
-                >
-                  <span className="w-2 h-2 rounded-full bg-blue-400" />
-                  <span>Foto Pulang ({selectedHistoryItem.checkOutTime || '-'})</span>
-                </button>
-              </div>
-            )}
+              const rawIn = selectedHistoryItem.checkInPhotoUrl || (!isCheckoutWithoutIn ? selectedHistoryItem.photoUrl : null);
+              const rawOut = selectedHistoryItem.checkOutPhotoUrl || selectedHistoryItem.photoOutUrl || (isCheckoutWithoutIn ? selectedHistoryItem.photoUrl : null);
 
-            <div className="p-4">
-              {(() => {
-                const isMasuk = selectedPhotoType === 'CHECK_IN';
-                const activePhoto = isMasuk
-                  ? (selectedHistoryItem.photoUrl || (selectedHistoryItem as any).checkInPhotoUrl)
-                  : ((selectedHistoryItem as any).checkOutPhotoUrl || selectedHistoryItem.photoOutUrl || selectedHistoryItem.photoUrl);
+              const photoMasuk = (rawIn && rawIn !== rawOut) || (!isCheckoutWithoutIn && rawIn) ? rawIn : null;
+              const photoPulang = rawOut || (selectedHistoryItem.checkOutTime && selectedHistoryItem.photoUrl ? selectedHistoryItem.photoUrl : null);
 
-                return (
-                  <>
-                    <img
-                      src={activePhoto}
-                      alt={isMasuk ? "Bukti Foto Absen Masuk" : "Bukti Foto Absen Pulang"}
-                      className="w-full rounded-2xl border border-slate-200 object-cover shadow-sm max-h-[380px]"
-                    />
+              const hasBothOrCheckout = Boolean(selectedHistoryItem.checkOutTime || photoPulang);
+              const isMasuk = selectedPhotoType === 'CHECK_IN';
+              const activePhoto = isMasuk ? photoMasuk : photoPulang;
+
+              return (
+                <>
+                  {/* Toggle Switch between Foto Masuk & Foto Pulang */}
+                  {hasBothOrCheckout && (
+                    <div className="px-4 pt-3 flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPhotoType('CHECK_IN')}
+                        className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                          selectedPhotoType === 'CHECK_IN'
+                            ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-300'
+                            : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                        }`}
+                      >
+                        <span className={`w-2 h-2 rounded-full ${photoMasuk ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                        <span>Foto Masuk {photoMasuk ? `(${selectedHistoryItem.checkInTime || '-'})` : '(Tanpa Foto)'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPhotoType('CHECK_OUT')}
+                        className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                          selectedPhotoType === 'CHECK_OUT'
+                            ? 'bg-blue-600 text-white shadow-sm ring-2 ring-blue-300'
+                            : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                        }`}
+                      >
+                        <span className={`w-2 h-2 rounded-full ${photoPulang ? 'bg-blue-400' : 'bg-slate-400'}`} />
+                        <span>Foto Pulang {photoPulang ? `(${selectedHistoryItem.checkOutTime || '-'})` : '(Belum Pulang)'}</span>
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="p-4">
+                    <div className="rounded-2xl overflow-hidden border border-slate-200 shadow-inner bg-slate-900 flex items-center justify-center min-h-[220px] max-h-[380px]">
+                      {activePhoto ? (
+                        <img
+                          src={activePhoto}
+                          alt={isMasuk ? "Bukti Foto Absen Masuk" : "Bukti Foto Absen Pulang"}
+                          className="w-full object-contain max-h-[380px]"
+                        />
+                      ) : (
+                        <div className="py-12 px-4 text-center flex flex-col items-center justify-center gap-2">
+                          <div className="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center text-amber-400 mb-1">
+                            <CameraOff className="w-6 h-6" />
+                          </div>
+                          <p className="text-sm font-bold text-white font-mono-code">
+                            {isMasuk ? 'Tidak Ada Bukti Foto Absen Masuk' : 'Tidak Ada Bukti Foto Absen Pulang'}
+                          </p>
+                          <p className="text-xs font-mono-code text-slate-400 max-w-sm">
+                            {isMasuk
+                              ? (isCheckoutWithoutIn ? 'Karyawan melakukan presensi pulang langsung tanpa merekam foto presensi masuk.' : 'Bukti foto selfie presensi masuk tidak tersedia untuk rekaman ini.')
+                              : 'Karyawan belum melakukan presensi pulang atau tidak ada rekam foto pulang.'}
+                          </p>
+                        </div>
+                      )}
+                    </div>
                     <div className="mt-3 p-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs space-y-1">
-                      <p><span className="font-bold text-slate-700">Waktu & Tipe:</span> <span className="font-mono-code font-bold text-slate-900">{isMasuk ? `Absen Masuk (${selectedHistoryItem.checkInTime} WIB)` : `Absen Pulang (${selectedHistoryItem.checkOutTime || '-'} WIB)`}</span></p>
+                      <p><span className="font-bold text-slate-700">Waktu & Tipe:</span> <span className="font-mono-code font-bold text-slate-900">{isMasuk ? `Absen Masuk (${selectedHistoryItem.checkInTime || '-'} WIB)` : `Absen Pulang (${selectedHistoryItem.checkOutTime || '-'} WIB)`}</span></p>
                       <p><span className="font-bold text-slate-700">Karyawan:</span> {selectedHistoryItem.employeeName} • <span className="text-indigo-600 font-mono-code font-bold">{getRecordLoginBadgeId(selectedHistoryItem)}</span> ({selectedHistoryItem.employeeNik})</p>
-                      <p><span className="font-bold text-slate-700">Catatan:</span> {selectedHistoryItem.note}</p>
+                      <p><span className="font-bold text-slate-700">Catatan:</span> {selectedHistoryItem.note || '-'}</p>
                       <p><span className="font-bold text-slate-700">Geofence:</span> <span className="font-mono-code font-semibold">{formatDistanceKm(selectedHistoryItem.location.distanceMeters)}</span> • {selectedHistoryItem.location.inGeofence ? 'Dalam Area Geofence Resmi' : 'Luar Radius'}</p>
                       <p><span className="font-bold text-slate-700">Lokasi:</span> {selectedHistoryItem.location.address}</p>
                       <p><span className="font-bold text-slate-700">Skor Biometrik:</span> <span className={`font-mono-code font-bold ${
@@ -2512,9 +2543,6 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                         {selectedHistoryItem.biometricVerification?.matchScore !== undefined ? `${selectedHistoryItem.biometricVerification.matchScore}% Match` : 'Belum Terdaftar'}
                       </span> {selectedHistoryItem.biometricVerification?.details ? `• ${selectedHistoryItem.biometricVerification.details}` : ''}</p>
                     </div>
-                  </>
-                );
-              })()}
               {currentRole === 'superuser' && onDeleteAttendance && (
                 <div className="mt-4 pt-3 border-t border-slate-100 flex justify-end">
                   <button
@@ -2536,8 +2564,11 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                 </div>
               )}
             </div>
-          </div>
-        </div>,
+          </>
+        );
+      })()}
+    </div>
+  </div>,
         document.body
       )}
 

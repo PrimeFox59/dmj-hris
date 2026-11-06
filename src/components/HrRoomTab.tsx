@@ -26,7 +26,8 @@ import {
   Award,
   AlertCircle,
   HelpCircle,
-  Camera
+  Camera,
+  CameraOff
 } from 'lucide-react';
 import { Employee, AttendanceRecord, ApprovalItem, Project, SalaryRuleConfig } from '../types';
 
@@ -1778,46 +1779,54 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
               </button>
             </div>
 
-            {/* Toggle Check-in / Check-out if both photos exist */}
-            {(selectedPhotoItem.checkOutTime || selectedPhotoItem.photoOutUrl || (selectedPhotoItem as any).checkOutPhotoUrl) && (
-              <div className="px-5 pt-4 flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setPhotoType('CHECK_IN')}
-                  className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold font-mono-code transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                    photoType === 'CHECK_IN'
-                      ? 'bg-emerald-600 text-white shadow-xs'
-                      : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
-                  }`}
-                >
-                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                  <span>Foto Masuk ({selectedPhotoItem.checkInTime || '-'})</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPhotoType('CHECK_OUT')}
-                  className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold font-mono-code transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                    photoType === 'CHECK_OUT'
-                      ? 'bg-blue-600 text-white shadow-xs'
-                      : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
-                  }`}
-                >
-                  <span className="w-2 h-2 rounded-full bg-blue-400" />
-                  <span>Foto Pulang ({selectedPhotoItem.checkOutTime || '-'})</span>
-                </button>
-              </div>
-            )}
+            {(() => {
+              const isCheckoutWithoutIn = selectedPhotoItem.attendanceType === 'CHECK_OUT' && 
+                (!selectedPhotoItem.checkInTime || selectedPhotoItem.note?.toLowerCase().includes('tanpa absen masuk'));
 
-            <div className="p-5 space-y-4">
-              {(() => {
-                const isMasuk = photoType === 'CHECK_IN';
-                const activePhoto = isMasuk
-                  ? (selectedPhotoItem.photoUrl || (selectedPhotoItem as any).checkInPhotoUrl)
-                  : ((selectedPhotoItem as any).checkOutPhotoUrl || selectedPhotoItem.photoOutUrl || selectedPhotoItem.photoUrl);
+              const rawIn = selectedPhotoItem.checkInPhotoUrl || (!isCheckoutWithoutIn ? selectedPhotoItem.photoUrl : null);
+              const rawOut = selectedPhotoItem.checkOutPhotoUrl || selectedPhotoItem.photoOutUrl || (isCheckoutWithoutIn ? selectedPhotoItem.photoUrl : null);
 
-                return (
-                  <>
-                    <div className="rounded-2xl overflow-hidden border border-slate-200 shadow-inner bg-slate-900 flex items-center justify-center max-h-[380px]">
+              const photoMasuk = (rawIn && rawIn !== rawOut) || (!isCheckoutWithoutIn && rawIn) ? rawIn : null;
+              const photoPulang = rawOut || (selectedPhotoItem.checkOutTime && selectedPhotoItem.photoUrl ? selectedPhotoItem.photoUrl : null);
+
+              const hasBothOrCheckout = Boolean(selectedPhotoItem.checkOutTime || photoPulang);
+              const isMasuk = photoType === 'CHECK_IN';
+              const activePhoto = isMasuk ? photoMasuk : photoPulang;
+
+              return (
+                <>
+                  {/* Toggle Check-in / Check-out if both photos exist */}
+                  {hasBothOrCheckout && (
+                    <div className="px-5 pt-4 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setPhotoType('CHECK_IN')}
+                        className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold font-mono-code transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                          photoType === 'CHECK_IN'
+                            ? 'bg-emerald-600 text-white shadow-xs ring-2 ring-emerald-300'
+                            : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                        }`}
+                      >
+                        <span className={`w-2 h-2 rounded-full ${photoMasuk ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                        <span>Foto Masuk {photoMasuk ? `(${selectedPhotoItem.checkInTime || '-'})` : '(Tanpa Foto)'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPhotoType('CHECK_OUT')}
+                        className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold font-mono-code transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                          photoType === 'CHECK_OUT'
+                            ? 'bg-blue-600 text-white shadow-xs ring-2 ring-blue-300'
+                            : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                        }`}
+                      >
+                        <span className={`w-2 h-2 rounded-full ${photoPulang ? 'bg-blue-400' : 'bg-slate-400'}`} />
+                        <span>Foto Pulang {photoPulang ? `(${selectedPhotoItem.checkOutTime || '-'})` : '(Belum Pulang)'}</span>
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="p-5 space-y-4">
+                    <div className="rounded-2xl overflow-hidden border border-slate-200 shadow-inner bg-slate-900 flex items-center justify-center min-h-[220px] max-h-[380px]">
                       {activePhoto ? (
                         <img
                           src={activePhoto}
@@ -1825,8 +1834,18 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                           className="w-full object-contain max-h-[380px]"
                         />
                       ) : (
-                        <div className="py-16 text-slate-500 text-xs font-mono-code text-center">
-                          Tidak ada rekaman foto tersedia
+                        <div className="py-12 px-4 text-center flex flex-col items-center justify-center gap-2">
+                          <div className="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center text-amber-400 mb-1">
+                            <CameraOff className="w-6 h-6" />
+                          </div>
+                          <p className="text-sm font-bold text-white font-mono-code">
+                            {isMasuk ? 'Tidak Ada Bukti Foto Absen Masuk' : 'Tidak Ada Bukti Foto Absen Pulang'}
+                          </p>
+                          <p className="text-xs font-mono-code text-slate-400 max-w-sm">
+                            {isMasuk
+                              ? (isCheckoutWithoutIn ? 'Karyawan melakukan presensi pulang langsung tanpa merekam foto presensi masuk.' : 'Bukti foto selfie presensi masuk tidak tersedia untuk rekaman ini.')
+                              : 'Karyawan belum melakukan presensi pulang atau tidak ada rekam foto pulang.'}
+                          </p>
                         </div>
                       )}
                     </div>
@@ -1836,7 +1855,7 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                         <div>
                           <span className="text-[10px] text-slate-400 uppercase font-mono-code font-bold block">Tipe Presensi</span>
                           <span className="font-mono-code font-bold text-slate-900">
-                            {isMasuk ? `Absen Masuk (${selectedPhotoItem.checkInTime} WIB)` : `Absen Pulang (${selectedPhotoItem.checkOutTime || '-'} WIB)`}
+                            {isMasuk ? `Absen Masuk (${selectedPhotoItem.checkInTime || '-'} WIB)` : `Absen Pulang (${selectedPhotoItem.checkOutTime || '-'} WIB)`}
                           </span>
                         </div>
                         <div className="text-right">
@@ -1893,10 +1912,10 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                         </div>
                       </div>
                     </div>
-                  </>
-                );
-              })()}
-            </div>
+                  </div>
+                </>
+              );
+            })()}
 
             {/* Footer */}
             <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex justify-end">

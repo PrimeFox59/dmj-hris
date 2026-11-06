@@ -302,7 +302,7 @@ export interface AttendanceRecord {
   attendanceType?: 'CHECK_IN' | 'CHECK_OUT';
   mode: AttendanceMode;
   status: AttendanceStatus;
-  photoUrl: string;
+  photoUrl?: string;
   location: {
     lat: number;
     lng: number;
@@ -343,6 +343,8 @@ export interface AttendanceRecord {
   isEarlyCheckOutApproved?: boolean;
   biometricVerification?: BiometricVerificationResult;
   photoOutUrl?: string;
+  checkInPhotoUrl?: string;
+  checkOutPhotoUrl?: string;
   isHrCorrected?: boolean;
   hrCorrectionNotes?: string;
   hrCorrectedBy?: string;

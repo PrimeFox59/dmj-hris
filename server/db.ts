@@ -318,7 +318,7 @@ export function seedInitialData(db: DatabaseSync) {
       att.checkOutTime || null,
       att.mode,
       att.status,
-      att.photoUrl,
+      att.photoUrl || null,
       att.isLate ? 1 : 0,
       att.lateMinutes,
       att.lateReason || null,
@@ -410,6 +410,28 @@ export function getAllData() {
   const attendances: AttendanceRecord[] = (db.prepare('SELECT id, data_json FROM attendances ORDER BY date DESC, checkInTime DESC LIMIT 200;').all() as any[])
     .map(row => {
       const item = JSON.parse(row.data_json);
+
+      const isCheckoutWithoutIn = 
+        item.attendanceType === 'CHECK_OUT' && 
+        (!item.checkInTime || (item.note && item.note.toLowerCase().includes('tanpa absen masuk')));
+
+      if (isCheckoutWithoutIn) {
+        if (!item.photoOutUrl && item.photoUrl) {
+          item.photoOutUrl = item.photoUrl;
+        }
+        if (!item.checkOutPhotoUrl && item.photoOutUrl) {
+          item.checkOutPhotoUrl = item.photoOutUrl;
+        }
+        item.checkInPhotoUrl = null;
+        item.photoUrl = null;
+      } else {
+        const outP = item.photoOutUrl || item.checkOutPhotoUrl;
+        if (outP && item.photoUrl === outP && item.attendanceType === 'CHECK_OUT') {
+          item.photoUrl = null;
+          item.checkInPhotoUrl = null;
+        }
+      }
+
       if (item.photoUrl && item.photoUrl.startsWith('data:image')) {
         item.photoUrl = `/api/attendance/${item.id || row.id}/photo`;
       }
@@ -465,7 +487,20 @@ export function getAttendancePhoto(id: string): string | null {
     const row = db.prepare('SELECT data_json FROM attendances WHERE id = ?').get(id) as any;
     if (!row) return null;
     const item = JSON.parse(row.data_json);
-    return item.photoUrl || item.checkInPhotoUrl || null;
+    const isCheckoutWithoutIn = 
+      item.attendanceType === 'CHECK_OUT' && 
+      (!item.checkInTime || (item.note && item.note.toLowerCase().includes('tanpa absen masuk')));
+    if (isCheckoutWithoutIn) {
+      return item.checkInPhotoUrl || null;
+    }
+    if (item.checkInPhotoUrl) {
+      return item.checkInPhotoUrl;
+    }
+    const outPhoto = item.checkOutPhotoUrl || item.photoOutUrl;
+    if (outPhoto && item.photoUrl === outPhoto && item.attendanceType === 'CHECK_OUT') {
+      return null;
+    }
+    return item.photoUrl || null;
   } catch (e) {
     return null;
   }
@@ -477,7 +512,7 @@ export function getAttendancePhotoOut(id: string): string | null {
     const row = db.prepare('SELECT data_json FROM attendances WHERE id = ?').get(id) as any;
     if (!row) return null;
     const item = JSON.parse(row.data_json);
-    return item.photoOutUrl || item.checkOutPhotoUrl || null;
+    return item.photoOutUrl || item.checkOutPhotoUrl || (item.attendanceType === 'CHECK_OUT' ? item.photoUrl : null);
   } catch (e) {
     return null;
   }
@@ -575,7 +610,7 @@ export function saveAttendance(record: AttendanceRecord): {
     record.checkOutTime || null,
     record.mode,
     record.status,
-    record.photoUrl,
+    record.photoUrl || record.photoOutUrl || null,
     record.isLate ? 1 : 0,
     record.lateMinutes,
     record.lateReason || null,
