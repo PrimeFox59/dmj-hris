@@ -607,6 +607,26 @@ export const api = {
     return res.json();
   },
 
+  async toggleWaOptIn(phone: string, isActive: boolean, manualOverride?: boolean): Promise<{ success: boolean; result: any }> {
+    const res = await fetch('/api/wa/opt-ins/toggle', {
+      method: 'POST',
+      headers: api.getAuthHeaders(),
+      body: JSON.stringify({ phone, isActive, manualOverride })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}: Gagal mengubah preferensi WA`);
+    return res.json();
+  },
+
+  async bulkToggleWaOptIns(phones: string[] | 'ALL', isActive: boolean, manualOverride?: boolean): Promise<{ success: boolean; result: any }> {
+    const res = await fetch('/api/wa/opt-ins/bulk-toggle', {
+      method: 'POST',
+      headers: api.getAuthHeaders(),
+      body: JSON.stringify({ phones, isActive, manualOverride })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}: Gagal mengubah preferensi masal WA`);
+    return res.json();
+  },
+
   async sendTestWa(phone: string, message?: string, force?: boolean): Promise<{ success: boolean; message?: string; error?: string }> {
     const res = await fetch('/api/wa/test', {
       method: 'POST',

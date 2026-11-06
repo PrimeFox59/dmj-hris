@@ -33,6 +33,8 @@ import {
   authenticateByBiometric,
   getWaNotificationLogs,
   getWaOptIns,
+  toggleWaOptIn,
+  bulkToggleWaOptIns,
   recordWaOptIn,
   getEmailNotificationLogs,
   getWorkCalendarConfig,
@@ -1800,6 +1802,53 @@ const server = http.createServer(async (req, res) => {
         }
         const optIns = getWaOptIns();
         return sendJson(200, { success: true, optIns, count: optIns.length });
+      }
+
+      // Toggle Single User WA Notification Preference
+      if (cleanUrl === '/api/wa/opt-ins/toggle' && method === 'POST') {
+        const token = getAuthToken();
+        const user = token ? getCurrentUserFromToken(token) : null;
+        if (!user || !['admin', 'superuser', 'hr', 'finance'].includes(user.systemRole)) {
+          return sendJson(403, { success: false, error: 'Forbidden' });
+        }
+        const body = await readBody();
+        if (!body.phone) {
+          return sendJson(400, { success: false, error: 'Nomor telepon wajib disertakan' });
+        }
+        const result = toggleWaOptIn(body.phone, body.isActive, body.manualOverride);
+        addAuditLog({
+          action: 'WA_OPT_IN_TOGGLED',
+          entity: 'wa_opt_ins',
+          entityId: body.phone,
+          userName: user?.name || user?.username || 'Admin HR',
+          userRole: user?.systemRole || 'admin',
+          module: 'SYSTEM',
+          status: 'SUCCESS',
+          details: `Preferensi notifikasi WhatsApp untuk +${body.phone} diubah menjadi: ${body.isActive ? 'AKTIF (ON)' : 'NONAKTIF (OFF)'}.`
+        });
+        return sendJson(200, { success: true, result });
+      }
+
+      // Bulk Toggle WA Notification Preferences (Mass Actions)
+      if (cleanUrl === '/api/wa/opt-ins/bulk-toggle' && method === 'POST') {
+        const token = getAuthToken();
+        const user = token ? getCurrentUserFromToken(token) : null;
+        if (!user || !['admin', 'superuser', 'hr', 'finance'].includes(user.systemRole)) {
+          return sendJson(403, { success: false, error: 'Forbidden' });
+        }
+        const body = await readBody();
+        const result = bulkToggleWaOptIns(body.phones, body.isActive, body.manualOverride);
+        addAuditLog({
+          action: 'WA_OPT_IN_BULK_TOGGLED',
+          entity: 'wa_opt_ins',
+          entityId: 'BULK',
+          userName: user?.name || user?.username || 'Admin HR',
+          userRole: user?.systemRole || 'admin',
+          module: 'SYSTEM',
+          status: 'SUCCESS',
+          details: `Preferensi notifikasi WhatsApp masal (${result.count} kontak) diubah menjadi: ${body.isActive ? 'AKTIF (ON)' : 'NONAKTIF (OFF)'}.`
+        });
+        return sendJson(200, { success: true, result });
       }
 
       // Webhook for incoming WhatsApp message from gateway

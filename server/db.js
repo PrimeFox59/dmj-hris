@@ -350,10 +350,12 @@ try {
       employee_id TEXT,
       employee_name TEXT,
       first_message TEXT,
-      first_message_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      first_message_at TEXT,
       last_message TEXT,
-      last_message_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      message_count INTEGER DEFAULT 1
+      last_message_at TEXT,
+      message_count INTEGER DEFAULT 0,
+      is_active INTEGER DEFAULT 0,
+      manual_override INTEGER DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS email_notifications (
@@ -371,6 +373,28 @@ try {
       sent_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
   `);
+
+  // Schema migration & purge synthetic opt-in rows in wa_opt_ins
+  try {
+    const waCols = db.prepare("PRAGMA table_info(wa_opt_ins);").all();
+    const colNames = waCols.map(c => c.name);
+    if (!colNames.includes('is_active')) {
+      db.exec("ALTER TABLE wa_opt_ins ADD COLUMN is_active INTEGER DEFAULT 0;");
+    }
+    if (!colNames.includes('manual_override')) {
+      db.exec("ALTER TABLE wa_opt_ins ADD COLUMN manual_override INTEGER DEFAULT 0;");
+    }
+
+    // Purge fake synthetic opt-in entries previously generated from Master Data
+    db.exec(`
+      DELETE FROM wa_opt_ins 
+      WHERE first_message LIKE '%Master Data%' 
+         OR first_message LIKE '%Terverifikasi%'
+         OR (message_count = 1 AND first_message = last_message AND first_message IS NOT NULL);
+    `);
+  } catch (errMigWa) {
+    console.warn('[DB Migration] wa_opt_ins migration notice:', errMigWa.message);
+  }
 
   // Ensure systemRole is populated & normalized in existing employees data_json
   try {
@@ -2074,7 +2098,7 @@ export function saveEmployee(emp, operatorUser = null) {
       `).run(emp.name, emp.id);
     } catch (ePm) {}
 
-    // Auto-sync employee phone into wa_opt_ins (enterprise ID contacts are pre-verified)
+    // Auto-sync employee phone mapping into wa_opt_ins (without fake messages; default is_active = 0)
     if (emp.phone) {
       let eDigits = String(emp.phone).replace(/\D+/g, '');
       if (eDigits.startsWith('0')) eDigits = '62' + eDigits.slice(1);
@@ -2083,9 +2107,9 @@ export function saveEmployee(emp, operatorUser = null) {
       if (eDigits.startsWith('62') && eDigits.length >= 10) {
         try {
           db.prepare(`
-            INSERT INTO wa_opt_ins (phone, employee_id, employee_name, first_message, first_message_at, last_message, last_message_at, message_count)
-            VALUES (?, ?, ?, 'Terverifikasi dari ID Master Data', CURRENT_TIMESTAMP, 'Sinkronisasi Profil ID', CURRENT_TIMESTAMP, 1)
-            ON CONFLICT(phone) DO UPDATE SET employee_id = excluded.employee_id, employee_name = excluded.employee_name, last_message_at = CURRENT_TIMESTAMP;
+            INSERT INTO wa_opt_ins (phone, employee_id, employee_name, is_active, manual_override, message_count)
+            VALUES (?, ?, ?, 0, 0, 0)
+            ON CONFLICT(phone) DO UPDATE SET employee_id = excluded.employee_id, employee_name = excluded.employee_name;
           `).run(eDigits, emp.id, emp.name);
         } catch (errOpt) {}
       }
@@ -2188,7 +2212,7 @@ export function updateUserProfile(profileData, operatorUser = null) {
     `).run(emp.email || null, emp.id, emp.id);
   } catch (errUa) {}
 
-  // Sync phone to wa_opt_ins
+  // Sync phone mapping to wa_opt_ins (without fake messages; default is_active = 0)
   if (emp.phone) {
     let eDigits = String(emp.phone).replace(/\D+/g, '');
     if (eDigits.startsWith('0')) eDigits = '62' + eDigits.slice(1);
@@ -2197,9 +2221,9 @@ export function updateUserProfile(profileData, operatorUser = null) {
     if (eDigits.startsWith('62') && eDigits.length >= 10) {
       try {
         db.prepare(`
-          INSERT INTO wa_opt_ins (phone, employee_id, employee_name, first_message, first_message_at, last_message, last_message_at, message_count)
-          VALUES (?, ?, ?, 'Terverifikasi dari ID Master Data', CURRENT_TIMESTAMP, 'Pembaruan Profil Mandiri', CURRENT_TIMESTAMP, 1)
-          ON CONFLICT(phone) DO UPDATE SET employee_id = excluded.employee_id, employee_name = excluded.employee_name, last_message_at = CURRENT_TIMESTAMP;
+          INSERT INTO wa_opt_ins (phone, employee_id, employee_name, is_active, manual_override, message_count)
+          VALUES (?, ?, ?, 0, 0, 0)
+          ON CONFLICT(phone) DO UPDATE SET employee_id = excluded.employee_id, employee_name = excluded.employee_name;
         `).run(eDigits, emp.id, emp.name);
       } catch (errOpt) {}
     }
@@ -4215,30 +4239,13 @@ export function isWaOptedIn(phone) {
 
   const db = getDatabase();
   try {
-    // 1. Cek langsung di tabel wa_opt_ins
-    const row = db.prepare('SELECT phone FROM wa_opt_ins WHERE phone = ?;').get(norm);
-    if (row) return true;
-
-    // 2. Cek apakah nomor ini terdaftar di master data ID karyawan aktif
-    const empRows = db.prepare('SELECT id, name, phone, data_json FROM employees;').all();
-    for (const emp of empRows) {
-      if (!emp.phone) continue;
-      let eDigits = String(emp.phone).replace(/\D+/g, '');
-      if (eDigits.startsWith('0')) eDigits = `62${eDigits.slice(1)}`;
-      else if (eDigits.startsWith('8')) eDigits = `62${eDigits}`;
-      else if (eDigits.startsWith('620')) eDigits = `62${eDigits.slice(3)}`;
-      if (eDigits === norm) {
-        try {
-          db.prepare(`
-            INSERT INTO wa_opt_ins (phone, employee_id, employee_name, first_message, first_message_at, last_message, last_message_at, message_count)
-            VALUES (?, ?, ?, 'Terverifikasi Otomatis dari ID Master Data', CURRENT_TIMESTAMP, 'Sinkronisasi Otomatis ID', CURRENT_TIMESTAMP, 1)
-            ON CONFLICT(phone) DO UPDATE SET employee_id = excluded.employee_id, employee_name = excluded.employee_name;
-          `).run(norm, emp.id, emp.name);
-        } catch (e) {}
-        return true;
-      }
-    }
-    return false;
+    const row = db.prepare('SELECT phone, is_active, manual_override, message_count, first_message FROM wa_opt_ins WHERE phone = ?;').get(norm);
+    if (!row) return false;
+    // Syarat 1: Toggle preferensi notifikasi WA wajib ON (is_active === 1; default adalah 0 / OFF)
+    if (row.is_active !== 1) return false;
+    // Syarat 2: User wajib pernah mengetik minimal 1 pesan masuk ATAU telah diotorisasi manual oleh Admin/HR
+    const hasRealChat = row.message_count > 0 && row.first_message && !row.first_message.includes('Master Data');
+    return Boolean(hasRealChat || row.manual_override === 1);
   } catch (e) {
     return false;
   }
@@ -4284,9 +4291,11 @@ export function recordWaOptIn(phone, messageText = '', pushName = '') {
 
   try {
     db.prepare(`
-      INSERT INTO wa_opt_ins (phone, employee_id, employee_name, first_message, first_message_at, last_message, last_message_at, message_count)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+      INSERT INTO wa_opt_ins (phone, employee_id, employee_name, first_message, first_message_at, last_message, last_message_at, message_count, is_active, manual_override)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 1, 0, 0)
       ON CONFLICT(phone) DO UPDATE SET
+        first_message = COALESCE(wa_opt_ins.first_message, excluded.first_message),
+        first_message_at = COALESCE(wa_opt_ins.first_message_at, excluded.first_message_at),
         last_message = excluded.last_message,
         last_message_at = excluded.last_message_at,
         message_count = wa_opt_ins.message_count + 1,
@@ -4294,7 +4303,16 @@ export function recordWaOptIn(phone, messageText = '', pushName = '') {
         employee_name = COALESCE(excluded.employee_name, wa_opt_ins.employee_name);
     `).run(norm, matchedEmpId, matchedEmpName, messageText, now, messageText, now);
 
-    addAuditLog('WA_OPT_IN_RECORDED', 'wa_opt_ins', norm, `User +${norm} (${matchedEmpName || pushName || 'Tamu'}) mengetik pesan ke bot WhatsApp dan berhasil terverifikasi untuk notifikasi.`);
+    addAuditLog({
+      action: 'WA_OPT_IN_RECORDED',
+      entity: 'wa_opt_ins',
+      entityId: norm,
+      userName: matchedEmpName || pushName || 'User Tamu',
+      userRole: 'user',
+      module: 'NOTIFICATION',
+      status: 'SUCCESS',
+      details: `Pesan masuk asli diterima dari +${norm} (${matchedEmpName || pushName || 'Tamu'}): "${messageText}".`
+    });
   } catch (err) {
     console.warn('[SQLite] recordWaOptIn error:', err.message);
   }
@@ -4312,27 +4330,158 @@ export function recordWaOptIn(phone, messageText = '', pushName = '') {
 export function getWaOptIns() {
   const db = getDatabase();
   try {
-    // Pastikan seluruh karyawan yang memiliki nomor telepon terdaftar ke wa_opt_ins
-    const employees = db.prepare('SELECT id, name, phone, data_json FROM employees;').all();
+    // 1. Ambil seluruh karyawan terdaftar
+    const employees = db.prepare('SELECT id, name, phone, department, position FROM employees;').all();
+    
+    // 2. Ambil seluruh rekaman opt-in / preferensi yang ada di wa_opt_ins
+    const optInRows = db.prepare('SELECT * FROM wa_opt_ins;').all();
+    const optInMap = new Map();
+    for (const row of optInRows) {
+      if (row.phone) optInMap.set(row.phone, row);
+    }
+
+    const result = [];
+    const processedPhones = new Set();
+
+    // 3. Gabungkan kontak karyawan dengan status opt-in asli (default is_active = 0 / OFF)
     for (const emp of employees) {
       if (!emp.phone) continue;
       let eDigits = String(emp.phone).replace(/\D+/g, '');
       if (eDigits.startsWith('0')) eDigits = `62${eDigits.slice(1)}`;
       else if (eDigits.startsWith('8')) eDigits = `62${eDigits}`;
       else if (eDigits.startsWith('620')) eDigits = `62${eDigits.slice(3)}`;
-      if (eDigits.startsWith('62') && eDigits.length >= 10) {
-        try {
-          db.prepare(`
-            INSERT INTO wa_opt_ins (phone, employee_id, employee_name, first_message, first_message_at, last_message, last_message_at, message_count)
-            VALUES (?, ?, ?, 'Terverifikasi dari ID Master Data', CURRENT_TIMESTAMP, 'Terkoneksi ke Master Data HRIS', CURRENT_TIMESTAMP, 1)
-            ON CONFLICT(phone) DO UPDATE SET employee_id = excluded.employee_id, employee_name = excluded.employee_name;
-          `).run(eDigits, emp.id, emp.name);
-        } catch (e) {}
+      if (!eDigits.startsWith('62') || eDigits.length < 10) continue;
+
+      processedPhones.add(eDigits);
+      const rec = optInMap.get(eDigits);
+
+      const hasChatted = Boolean(rec && rec.message_count > 0 && rec.first_message && !rec.first_message.includes('Master Data'));
+      const isActive = rec ? (rec.is_active === 1) : false; // Default OFF!
+      const manualOverride = rec ? (rec.manual_override === 1) : false;
+
+      result.push({
+        phone: eDigits,
+        employee_id: emp.id,
+        employee_name: emp.name,
+        department: emp.department || '-',
+        position: emp.position || '-',
+        first_message: hasChatted ? rec.first_message : null,
+        first_message_at: hasChatted ? rec.first_message_at : null,
+        last_message: hasChatted ? rec.last_message : null,
+        last_message_at: hasChatted ? rec.last_message_at : null,
+        message_count: hasChatted ? rec.message_count : 0,
+        is_active: isActive ? 1 : 0,
+        manual_override: manualOverride ? 1 : 0,
+        has_chatted: hasChatted
+      });
+    }
+
+    // 4. Sertakan juga nomor telepon eksternal yang pernah mengirim chat ke bot (jika ada)
+    for (const [phone, row] of optInMap.entries()) {
+      if (!processedPhones.has(phone)) {
+        const hasChatted = Boolean(row.message_count > 0 && row.first_message && !row.first_message.includes('Master Data'));
+        result.push({
+          phone: row.phone,
+          employee_id: row.employee_id || null,
+          employee_name: row.employee_name || 'Tamu / Eksternal',
+          department: '-',
+          position: '-',
+          first_message: hasChatted ? row.first_message : null,
+          first_message_at: hasChatted ? row.first_message_at : null,
+          last_message: hasChatted ? row.last_message : null,
+          last_message_at: hasChatted ? row.last_message_at : null,
+          message_count: hasChatted ? row.message_count : 0,
+          is_active: row.is_active === 1 ? 1 : 0,
+          manual_override: row.manual_override === 1 ? 1 : 0,
+          has_chatted: hasChatted
+        });
       }
     }
-    return db.prepare('SELECT * FROM wa_opt_ins ORDER BY last_message_at DESC;').all();
+
+    // Urutkan: Yang aktif (ON) lebih dulu, lalu karyawan berdasarkan nama
+    return result.sort((a, b) => {
+      if (b.is_active !== a.is_active) return b.is_active - a.is_active;
+      if (b.has_chatted !== a.has_chatted) return (b.has_chatted ? 1 : 0) - (a.has_chatted ? 1 : 0);
+      return (a.employee_name || '').localeCompare(b.employee_name || '');
+    });
   } catch (e) {
+    console.error('[DB] getWaOptIns error:', e);
     return [];
   }
+}
+
+export function toggleWaOptIn(phone, isActive, manualOverride = null) {
+  if (!phone) return null;
+  const digits = String(phone).replace(/\D+/g, '');
+  let norm = digits;
+  if (norm.startsWith('0')) norm = `62${norm.slice(1)}`;
+  else if (norm.startsWith('8')) norm = `62${norm}`;
+  else if (norm.startsWith('620')) norm = `62${norm.slice(3)}`;
+  if (!norm.startsWith('62') || norm.length < 10) return null;
+
+  const db = getDatabase();
+  const valActive = isActive ? 1 : 0;
+  const valOverride = manualOverride !== null ? (manualOverride ? 1 : 0) : (valActive ? 1 : 0);
+
+  // Cocokkan data karyawan jika ada
+  let empId = null;
+  let empName = null;
+  try {
+    const empRows = db.prepare('SELECT id, name, phone FROM employees;').all();
+    for (const emp of empRows) {
+      if (!emp.phone) continue;
+      let eDigits = String(emp.phone).replace(/\D+/g, '');
+      if (eDigits.startsWith('0')) eDigits = `62${eDigits.slice(1)}`;
+      else if (eDigits.startsWith('8')) eDigits = `62${eDigits}`;
+      if (eDigits === norm) {
+        empId = emp.id;
+        empName = emp.name;
+        break;
+      }
+    }
+  } catch (e) {}
+
+  db.prepare(`
+    INSERT INTO wa_opt_ins (phone, employee_id, employee_name, is_active, manual_override, message_count)
+    VALUES (?, ?, ?, ?, ?, 0)
+    ON CONFLICT(phone) DO UPDATE SET
+      is_active = excluded.is_active,
+      manual_override = excluded.manual_override,
+      employee_id = COALESCE(excluded.employee_id, wa_opt_ins.employee_id),
+      employee_name = COALESCE(excluded.employee_name, wa_opt_ins.employee_name);
+  `).run(norm, empId, empName, valActive, valOverride);
+
+  return { phone: norm, is_active: valActive, manual_override: valOverride };
+}
+
+export function bulkToggleWaOptIns(phones, isActive, manualOverride = null) {
+  const db = getDatabase();
+  const valActive = isActive ? 1 : 0;
+  const valOverride = manualOverride !== null ? (manualOverride ? 1 : 0) : (valActive ? 1 : 0);
+
+  let targetPhones = [];
+  if (!phones || phones.length === 0 || phones === 'ALL') {
+    const empRows = db.prepare('SELECT phone FROM employees WHERE phone IS NOT NULL AND phone != "";').all();
+    targetPhones = empRows.map(r => {
+      let d = String(r.phone).replace(/\D+/g, '');
+      if (d.startsWith('0')) d = `62${d.slice(1)}`;
+      else if (d.startsWith('8')) d = `62${d}`;
+      return d;
+    }).filter(d => d.startsWith('62') && d.length >= 10);
+  } else {
+    targetPhones = (Array.isArray(phones) ? phones : [phones]).map(p => {
+      let d = String(p).replace(/\D+/g, '');
+      if (d.startsWith('0')) d = `62${d.slice(1)}`;
+      else if (d.startsWith('8')) d = `62${d}`;
+      return d;
+    }).filter(d => d.startsWith('62') && d.length >= 10);
+  }
+
+  const uniquePhones = [...new Set(targetPhones)];
+  for (const p of uniquePhones) {
+    toggleWaOptIn(p, valActive, valOverride);
+  }
+
+  return { success: true, count: uniquePhones.length, is_active: valActive };
 }
 

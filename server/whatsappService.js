@@ -181,10 +181,12 @@ export async function sendWhatsAppMessage(phone, message, meta = {}) {
     sentAt: new Date().toISOString()
   };
 
-  // Seluruh ID karyawan terdaftar di sistem HRIS dianggap TERVERIFIKASI secara otomatis
-  const isOptedIn = meta.force || Boolean(targetEmp) || isWaOptedIn(normPhone);
+  // Notifikasi WA HANYA dikirim jika:
+  // 1. Preferensi notifikasi user AKTIF (is_active === 1; secara default adalah OFF)
+  // 2. User telah mengetik minimal 1 pesan masuk ke bot WA (syarat opt-in) ATAU telah diotorisasi manual oleh Admin/HR (manual_override === 1)
+  const isOptedIn = meta.force || isWaOptedIn(normPhone);
   if (!isOptedIn) {
-    const errMsg = `Penerima (+${normPhone} - ${targetName}) belum terdaftar di database HRIS atau belum pernah mengetik pesan ke bot WhatsApp.`;
+    const errMsg = `Pengiriman notifikasi WhatsApp ke (+${normPhone} - ${targetName}) ditahan: Preferensi notifikasi WA dinonaktifkan (Default OFF) atau user belum pernah mengetik pesan masuk ke bot.`;
     console.warn(`[WA Gateway Opt-In Gate] 🚫 ${errMsg}`);
 
     logEntry.status = 'OPT_IN_REQUIRED';

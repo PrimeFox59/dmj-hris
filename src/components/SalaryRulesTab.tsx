@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Sliders,
   CheckCircle2,
@@ -29,7 +29,15 @@ import {
   Info,
   ExternalLink,
   Zap,
-  Calendar
+  Calendar,
+  Search,
+  Filter,
+  ToggleLeft,
+  ToggleRight,
+  CheckSquare,
+  Square,
+  Users,
+  X
 } from 'lucide-react';
 import {
   SalaryRuleConfig,
@@ -101,6 +109,130 @@ export const SalaryRulesTab: React.FC<SalaryRulesTabProps> = ({
     } finally {
       setLoadingWaOptIns(false);
     }
+  };
+
+  // WhatsApp Filters & Bulk Selection State
+  const [waSearchQuery, setWaSearchQuery] = useState<string>('');
+  const [waStatusFilter, setWaStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE' | 'CHATTED' | 'NOT_CHATTED'>('ALL');
+  const [selectedWaPhones, setSelectedWaPhones] = useState<Set<string>>(new Set());
+  const [waActionNotice, setWaActionNotice] = useState<{ type: 'success' | 'info' | 'error'; text: string } | null>(null);
+  const [togglingPhones, setTogglingPhones] = useState<Set<string>>(new Set());
+
+  const waMetrics = useMemo(() => {
+    const total = waOptIns.length;
+    const active = waOptIns.filter((o: WaOptInRecord) => Boolean(o.is_active)).length;
+    const inactive = total - active;
+    const chatted = waOptIns.filter((o: WaOptInRecord) => Boolean(o.has_chatted)).length;
+    const notChatted = total - chatted;
+    return { total, active, inactive, chatted, notChatted };
+  }, [waOptIns]);
+
+  const filteredWaOptIns = useMemo(() => {
+    return waOptIns.filter((opt: WaOptInRecord) => {
+      // 1. Status Filter
+      if (waStatusFilter === 'ACTIVE' && !opt.is_active) return false;
+      if (waStatusFilter === 'INACTIVE' && opt.is_active) return false;
+      if (waStatusFilter === 'CHATTED' && !opt.has_chatted) return false;
+      if (waStatusFilter === 'NOT_CHATTED' && opt.has_chatted) return false;
+
+      // 2. Search Query
+      if (waSearchQuery.trim()) {
+        const q = waSearchQuery.toLowerCase().trim();
+        const p = (opt.phone || '').toLowerCase();
+        const name = (opt.employee_name || '').toLowerCase();
+        const id = (opt.employee_id || '').toLowerCase();
+        const dept = (opt.department || '').toLowerCase();
+        if (!p.includes(q) && !name.includes(q) && !id.includes(q) && !dept.includes(q)) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [waOptIns, waStatusFilter, waSearchQuery]);
+
+  const handleToggleUserWa = async (phone: string, targetActive: boolean) => {
+    setTogglingPhones(prev => new Set(prev).add(phone));
+    // Optimistic update
+    setWaOptIns(prev =>
+      prev.map(item => (item.phone === phone ? { ...item, is_active: targetActive ? 1 : 0, manual_override: targetActive ? 1 : 0 } : item))
+    );
+
+    try {
+      await api.toggleWaOptIn(phone, targetActive, targetActive);
+      setWaActionNotice({
+        type: 'success',
+        text: `Preferensi notifikasi WhatsApp untuk +${phone} berhasil diubah ke ${targetActive ? 'AKTIF (ON)' : 'NONAKTIF (OFF)'}.`
+      });
+      setTimeout(() => setWaActionNotice(null), 4000);
+    } catch (err: any) {
+      alert(`Gagal mengubah preferensi: ${err.message}`);
+      fetchWaOptIns();
+    } finally {
+      setTogglingPhones(prev => {
+        const next = new Set(prev);
+        next.delete(phone);
+        return next;
+      });
+    }
+  };
+
+  const handleBulkToggle = async (targetActive: boolean, onlySelected: boolean) => {
+    let phonesToUpdate: string[] = [];
+    if (onlySelected) {
+      phonesToUpdate = Array.from(selectedWaPhones);
+      if (phonesToUpdate.length === 0) {
+        alert('Silakan pilih minimal 1 kontak menggunakan kotak centang di tabel.');
+        return;
+      }
+    } else {
+      phonesToUpdate = filteredWaOptIns.map((o: WaOptInRecord) => o.phone);
+      if (phonesToUpdate.length === 0) {
+        alert('Tidak ada kontak yang cocok dengan filter aktif.');
+        return;
+      }
+    }
+
+    const actionLabel = targetActive ? 'MENGAKTIFKAN' : 'MENONAKTIFKAN';
+    const confirmMsg = onlySelected
+      ? `Apakah Anda yakin ingin ${actionLabel} notifikasi WhatsApp untuk ${phonesToUpdate.length} kontak terpilih?`
+      : `Apakah Anda yakin ingin ${actionLabel} notifikasi WhatsApp untuk SEMUA ${phonesToUpdate.length} kontak yang tampil?`;
+
+    if (!window.confirm(confirmMsg)) return;
+
+    setLoadingWaOptIns(true);
+    try {
+      await api.bulkToggleWaOptIns(phonesToUpdate, targetActive, targetActive);
+      setWaActionNotice({
+        type: 'success',
+        text: `Berhasil ${actionLabel.toLowerCase()} notifikasi WhatsApp untuk ${phonesToUpdate.length} kontak.`
+      });
+      setSelectedWaPhones(new Set());
+      await fetchWaOptIns();
+      setTimeout(() => setWaActionNotice(null), 5000);
+    } catch (err: any) {
+      alert(`Gagal aksi masal: ${err.message}`);
+      setLoadingWaOptIns(false);
+    }
+  };
+
+  const isAllVisibleSelected = filteredWaOptIns.length > 0 && filteredWaOptIns.every((o: WaOptInRecord) => selectedWaPhones.has(o.phone));
+  const isSomeVisibleSelected = filteredWaOptIns.some((o: WaOptInRecord) => selectedWaPhones.has(o.phone)) && !isAllVisibleSelected;
+
+  const handleToggleSelectAll = () => {
+    if (isAllVisibleSelected) {
+      setSelectedWaPhones(new Set());
+    } else {
+      setSelectedWaPhones(new Set(filteredWaOptIns.map((o: WaOptInRecord) => o.phone)));
+    }
+  };
+
+  const handleToggleSelectRow = (phone: string) => {
+    setSelectedWaPhones(prev => {
+      const next = new Set(prev);
+      if (next.has(phone)) next.delete(phone);
+      else next.add(phone);
+      return next;
+    });
   };
 
   const [waStatus, setWaStatus] = useState<{
@@ -968,27 +1100,38 @@ export const SalaryRulesTab: React.FC<SalaryRulesTabProps> = ({
 
           {/* Mandatory WhatsApp Opt-In Registry & Policy Card */}
           <div className="glass-card rounded-3xl p-5 sm:p-6 space-y-4 motion-fade-in-up border border-emerald-200/80 bg-gradient-to-br from-white to-emerald-50/20 shadow-sm">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-emerald-100 border border-emerald-200 flex items-center justify-center text-emerald-700 shrink-0">
-                  <ShieldCheck className="w-4 h-4" />
+            
+            {/* Header & Metric Counters */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+              <div className="flex items-start gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-emerald-100 border border-emerald-200 flex items-center justify-center text-emerald-700 shrink-0 mt-0.5">
+                  <ShieldCheck className="w-5 h-5" />
                 </div>
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider font-mono-code">
-                      Daftar Kontak Terverifikasi & Syarat Opt-In WhatsApp
+                      Daftar Kontak &amp; Preferensi Notifikasi WhatsApp
                     </h2>
+                    <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-mono-code font-bold">
+                      {waMetrics.total} Nomor
+                    </span>
                     <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-mono-code font-bold">
-                      {waOptIns.length} Nomor Terdaftar
+                      {waMetrics.active} Aktif (ON)
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full bg-slate-200 text-slate-600 text-[10px] font-mono-code font-bold">
+                      {waMetrics.inactive} Nonaktif (Default OFF)
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 text-[10px] font-mono-code font-bold">
+                      {waMetrics.chatted} Sudah Chat Bot
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-500">
-                    Kebijakan Anti-Spam: Bot hanya mengirim notifikasi ke user yang telah mengetik minimal 1 pesan masuk.
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Kebijakan Anti-Spam: Notifikasi secara <b>default OFF</b>. User wajib mengirim minimal 1 pesan masuk ke bot WA &amp; preferensi diaktifkan.
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-2 flex-wrap self-start lg:self-center">
                 {waStatus?.clientInfo?.phone && (
                   <a
                     href={`https://wa.me/${waStatus.clientInfo.phone}?text=Halo%20PRIME%20HRIS`}
@@ -1014,69 +1157,340 @@ export const SalaryRulesTab: React.FC<SalaryRulesTabProps> = ({
               </div>
             </div>
 
+            {/* Action Feedback Notice Banner */}
+            {waActionNotice && (
+              <div className={`p-3 rounded-2xl text-xs flex items-center justify-between gap-2 transition-all ${
+                waActionNotice.type === 'success' ? 'bg-emerald-50 text-emerald-900 border border-emerald-200' : 'bg-blue-50 text-blue-900 border border-blue-200'
+              }`}>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span className="font-medium">{waActionNotice.text}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setWaActionNotice(null)}
+                  className="text-slate-400 hover:text-slate-600 p-1"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
             {/* Informational Policy Banner */}
             <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200 text-amber-900 text-xs flex items-start gap-2.5 leading-relaxed">
               <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-              <div>
-                <p className="font-bold text-amber-950">Aturan Mutlak Aktivasi Notifikasi WhatsApp:</p>
-                <p className="text-[11px] text-amber-900/90 mt-0.5">
-                  Setiap karyawan/user yang ingin menerima notifikasi otomatis (presensi kehadiran, status persetujuan tiket / approval) <b>wajib mengetik minimal 1 pesan ke nomor bot di atas</b>. Pesan dapat berupa ID Karyawan (contoh: <code className="bg-amber-100/80 px-1 rounded font-mono text-[10px]">EMP-001</code>), NIK, atau sapaan apa pun. Sebelum ada 1 pesan masuk, sistem secara otomatis menahan pengiriman notifikasi (<code className="bg-amber-100/80 px-1 rounded font-mono text-[10px]">OPT_IN_REQUIRED</code>). Sesuai kebijakan manajemen, notifikasi slip gaji/payroll tidak dikirimkan otomatis melalui WA/Email.
+              <div className="space-y-1">
+                <p className="font-bold text-amber-950">Aturan Mutlak Aktivasi &amp; Privasi Notifikasi WhatsApp:</p>
+                <p className="text-[11px] text-amber-900/90 leading-normal">
+                  • <b>Kondisi Default:</b> Seluruh user secara sistematis berstatus <b>Default OFF</b> untuk mencegah spam dan mematuhi privasi karyawan.<br />
+                  • <b>Syarat Chat Bot (Opt-In Masuk):</b> Agar nomor bot WhatsApp tidak diblokir oleh Meta, user wajib mengirim minimal 1 pesan masuk (contoh: <code className="bg-amber-100/80 px-1 rounded font-mono text-[10px]">EMP-001</code> atau salam) sebelum notifikasi otomatis dikirimkan.<br />
+                  • <b>Otorisasi Manual &amp; Masal:</b> Admin/HR dapat mengaktifkan toggle preferensi per user atau secara masal melalui tombol aksi di bawah.
                 </p>
               </div>
             </div>
 
+            {/* Controls Toolbar: Search, Filters & Mass Actions */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs">
+              
+              {/* Search Box */}
+              <div className="relative flex-1 max-w-sm">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={waSearchQuery}
+                  onChange={e => setWaSearchQuery(e.target.value)}
+                  placeholder="Cari nama, ID (EMP-...), nomor WA, dept..."
+                  className="w-full pl-8 pr-7 py-1.5 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-medium text-slate-800"
+                />
+                {waSearchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setWaSearchQuery('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+
+              {/* Status Filter Pills */}
+              <div className="flex items-center gap-1 overflow-x-auto pb-1 md:pb-0">
+                <button
+                  type="button"
+                  onClick={() => setWaStatusFilter('ALL')}
+                  className={`px-2.5 py-1 rounded-lg text-[10.5px] font-bold font-mono-code transition-all cursor-pointer whitespace-nowrap ${
+                    waStatusFilter === 'ALL' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  Semua ({waMetrics.total})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWaStatusFilter('ACTIVE')}
+                  className={`px-2.5 py-1 rounded-lg text-[10.5px] font-bold font-mono-code transition-all cursor-pointer whitespace-nowrap ${
+                    waStatusFilter === 'ACTIVE' ? 'bg-emerald-600 text-white shadow-2xs' : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                  }`}
+                >
+                  Aktif ON ({waMetrics.active})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWaStatusFilter('INACTIVE')}
+                  className={`px-2.5 py-1 rounded-lg text-[10.5px] font-bold font-mono-code transition-all cursor-pointer whitespace-nowrap ${
+                    waStatusFilter === 'INACTIVE' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  Nonaktif OFF ({waMetrics.inactive})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWaStatusFilter('CHATTED')}
+                  className={`px-2.5 py-1 rounded-lg text-[10.5px] font-bold font-mono-code transition-all cursor-pointer whitespace-nowrap ${
+                    waStatusFilter === 'CHATTED' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-800 hover:bg-blue-100'
+                  }`}
+                >
+                  Sudah Chat ({waMetrics.chatted})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWaStatusFilter('NOT_CHATTED')}
+                  className={`px-2.5 py-1 rounded-lg text-[10.5px] font-bold font-mono-code transition-all cursor-pointer whitespace-nowrap ${
+                    waStatusFilter === 'NOT_CHATTED' ? 'bg-amber-600 text-white' : 'bg-amber-50 text-amber-800 hover:bg-amber-100'
+                  }`}
+                >
+                  Belum Chat ({waMetrics.notChatted})
+                </button>
+              </div>
+            </div>
+
+            {/* Mass Actions Toolbar */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-slate-50/80 px-3 py-2 rounded-xl border border-slate-200 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-slate-700 font-mono-code">Aksi Masal:</span>
+                <span className="text-slate-500 text-[11px]">
+                  {selectedWaPhones.size > 0 ? (
+                    <strong className="text-emerald-700">{selectedWaPhones.size} kontak dipilih</strong>
+                  ) : (
+                    <span>Pilih kontak via checkbox atau operasikan seluruh filter</span>
+                  )}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {selectedWaPhones.size > 0 ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => handleBulkToggle(true, true)}
+                      className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[10.5px] font-bold flex items-center gap-1 shadow-2xs transition-all cursor-pointer"
+                    >
+                      <Zap className="w-3 h-3" />
+                      <span>Aktifkan Terpilih ({selectedWaPhones.size})</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleBulkToggle(false, true)}
+                      className="px-2.5 py-1 rounded-lg bg-slate-700 hover:bg-slate-800 text-white text-[10.5px] font-bold flex items-center gap-1 shadow-2xs transition-all cursor-pointer"
+                    >
+                      <Lock className="w-3 h-3" />
+                      <span>Nonaktifkan Terpilih ({selectedWaPhones.size})</span>
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => handleBulkToggle(true, false)}
+                      className="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10.5px] font-bold flex items-center gap-1 transition-all cursor-pointer"
+                      title="Aktifkan seluruh kontak yang sedang tampil"
+                    >
+                      <Zap className="w-3 h-3 text-emerald-600" />
+                      <span>Aktifkan Masal ({filteredWaOptIns.length})</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleBulkToggle(false, false)}
+                      className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 text-[10.5px] font-bold flex items-center gap-1 transition-all cursor-pointer"
+                      title="Nonaktifkan seluruh kontak yang sedang tampil"
+                    >
+                      <Lock className="w-3 h-3 text-slate-500" />
+                      <span>Nonaktifkan Masal ({filteredWaOptIns.length})</span>
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+
             {/* Verified Contacts Table */}
-            {waOptIns.length === 0 ? (
+            {filteredWaOptIns.length === 0 ? (
               <div className="p-8 text-center bg-slate-50/60 rounded-2xl border border-dashed border-slate-200 text-slate-500">
                 <Smartphone className="w-8 h-8 mx-auto text-slate-400 mb-2 opacity-60" />
-                <p className="text-xs font-bold text-slate-700">Belum Ada Kontak yang Melakukan Opt-In</p>
+                <p className="text-xs font-bold text-slate-700">Tidak Ada Kontak yang Cocok</p>
                 <p className="text-[11px] text-slate-500 mt-1 max-w-md mx-auto">
-                  Arahkan karyawan untuk membuka WhatsApp dan mengirim minimal 1 pesan sapaan atau ID Karyawan ke nomor bot WhatsApp yang terhubung.
+                  Coba ubah kata kunci pencarian atau sesuaikan filter status notifikasi di atas.
                 </p>
               </div>
             ) : (
-              <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+              <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-2xs">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
-                    <tr className="bg-slate-100/80 border-b border-slate-200 font-mono-code text-[11px] text-slate-600">
-                      <th className="py-2 px-3">Nomor WhatsApp</th>
-                      <th className="py-2 px-3">Karyawan Terkait</th>
-                      <th className="py-2 px-3">Pesan Pertama</th>
-                      <th className="py-2 px-3">Pesan Terakhir</th>
-                      <th className="py-2 px-3 text-center">Pesan</th>
-                      <th className="py-2 px-3">Status</th>
+                    <tr className="bg-slate-100/90 border-b border-slate-200 font-mono-code text-[11px] text-slate-600">
+                      <th className="py-2.5 px-3 w-10 text-center">
+                        <input
+                          type="checkbox"
+                          checked={isAllVisibleSelected}
+                          ref={el => {
+                            if (el) el.indeterminate = isSomeVisibleSelected;
+                          }}
+                          onChange={handleToggleSelectAll}
+                          className="w-3.5 h-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                          title="Pilih semua kontak yang tampil"
+                        />
+                      </th>
+                      <th className="py-2.5 px-3">Nomor WhatsApp</th>
+                      <th className="py-2.5 px-3">Karyawan Terkait</th>
+                      <th className="py-2.5 px-3 text-center">Status Chat Bot</th>
+                      <th className="py-2.5 px-3">Pesan Terakhir</th>
+                      <th className="py-2.5 px-3 text-center">Preferensi WA (Toggle)</th>
+                      <th className="py-2.5 px-3 text-center">Status Efektif</th>
+                      <th className="py-2.5 px-3 text-center">Aksi</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-mono-code text-[11px]">
-                    {waOptIns.map(opt => (
-                      <tr key={opt.phone} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="py-2.5 px-3 font-bold text-slate-900">+{opt.phone}</td>
-                        <td className="py-2.5 px-3">
-                          {opt.employee_name ? (
-                            <span className="font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                              {opt.employee_name} ({opt.employee_id || 'ID'})
-                            </span>
-                          ) : (
-                            <span className="text-slate-400 italic">Tamu / Belum Ditautkan</span>
-                          )}
-                        </td>
-                        <td className="py-2.5 px-3 text-slate-600 truncate max-w-[140px]" title={opt.first_message || '-'}>
-                          {opt.first_message || '-'}
-                        </td>
-                        <td className="py-2.5 px-3 text-slate-600 truncate max-w-[140px]" title={opt.last_message || '-'}>
-                          {opt.last_message || '-'}
-                        </td>
-                        <td className="py-2.5 px-3 text-center font-bold text-slate-700">
-                          {opt.message_count || 1}
-                        </td>
-                        <td className="py-2.5 px-3">
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
-                            <Check className="w-3 h-3 text-emerald-600" />
-                            Aktif Notifikasi
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
+                    {filteredWaOptIns.map((opt: WaOptInRecord) => {
+                      const isSelected = selectedWaPhones.has(opt.phone);
+                      const isToggling = togglingPhones.has(opt.phone);
+                      const isOptActive = Boolean(opt.is_active);
+                      const hasChatted = Boolean(opt.has_chatted);
+                      const isManualOverridden = Boolean(opt.manual_override);
+
+                      return (
+                        <tr
+                          key={opt.phone}
+                          className={`hover:bg-slate-50/90 transition-colors ${isSelected ? 'bg-emerald-50/30' : ''}`}
+                        >
+                          {/* Selection Checkbox */}
+                          <td className="py-2.5 px-3 text-center">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => handleToggleSelectRow(opt.phone)}
+                              className="w-3.5 h-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                            />
+                          </td>
+
+                          {/* WhatsApp Number */}
+                          <td className="py-2.5 px-3 font-bold text-slate-900 whitespace-nowrap">
+                            +{opt.phone}
+                          </td>
+
+                          {/* Employee Associated */}
+                          <td className="py-2.5 px-3">
+                            {opt.employee_name ? (
+                              <div className="space-y-0.5">
+                                <div className="font-bold text-slate-900">
+                                  {opt.employee_name}
+                                </div>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.2 rounded text-[10px] border border-emerald-200">
+                                    {opt.employee_id || 'ID'}
+                                  </span>
+                                  {opt.department && opt.department !== '-' && (
+                                    <span className="text-slate-400 text-[10px]">
+                                      • {opt.department}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-slate-400 italic">Tamu / Belum Ditautkan</span>
+                            )}
+                          </td>
+
+                          {/* Inbound Chat Opt-In Status */}
+                          <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                            {hasChatted ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 text-[10px] font-bold" title={`Pesan Pertama: ${opt.first_message || '-'}\nPesan Terakhir: ${opt.last_message || '-'}`}>
+                                <Check className="w-3 h-3 text-blue-600" />
+                                Sudah Chat ({opt.message_count || 1})
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[10px] font-bold" title="User belum pernah mengetik pesan apa pun ke nomor bot WhatsApp">
+                                ⚪ Belum Chat (0)
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Last Message Text */}
+                          <td className="py-2.5 px-3 text-slate-600 truncate max-w-[150px]" title={opt.last_message || 'Belum ada pesan masuk'}>
+                            {opt.last_message ? (
+                              <span className="text-slate-800 font-medium">"{opt.last_message}"</span>
+                            ) : (
+                              <span className="text-slate-300 italic font-mono">-</span>
+                            )}
+                          </td>
+
+                          {/* Notification Preference Toggle */}
+                          <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                            <div className="inline-flex items-center gap-2">
+                              <button
+                                type="button"
+                                disabled={isToggling}
+                                onClick={() => handleToggleUserWa(opt.phone, !isOptActive)}
+                                className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50 ${
+                                  isOptActive ? 'bg-emerald-600' : 'bg-slate-300 hover:bg-slate-400'
+                                }`}
+                                title={isOptActive ? 'Notifikasi WA Aktif (Klik untuk Matikan)' : 'Notifikasi WA Nonaktif (Klik untuk Aktifkan)'}
+                              >
+                                <span
+                                  className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                                    isOptActive ? 'translate-x-4' : 'translate-x-0'
+                                  }`}
+                                />
+                              </button>
+                              <span className={`text-[10px] font-black w-6 text-left ${isOptActive ? 'text-emerald-700' : 'text-slate-400'}`}>
+                                {isOptActive ? 'ON' : 'OFF'}
+                              </span>
+                            </div>
+                          </td>
+
+                          {/* Effective Delivery Status */}
+                          <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                            {isOptActive && (hasChatted || isManualOverridden) ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold shadow-2xs" title="Notifikasi aktif dan memenuhi syarat pengiriman">
+                                🟢 Siap Menerima
+                              </span>
+                            ) : isOptActive && !hasChatted && !isManualOverridden ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold shadow-2xs" title="Preferensi ON, namun user wajib chat bot minimal 1x agar tidak tertahan anti-spam gate">
+                                🟡 Tunggu Chat Bot
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 text-[10px] font-bold" title="Notifikasi dinonaktifkan (Default OFF)">
+                                ⚪ Nonaktif (OFF)
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Row Action (Invite Chat Bot) */}
+                          <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                            {waStatus?.clientInfo?.phone ? (
+                              <a
+                                href={`https://wa.me/${waStatus.clientInfo.phone}?text=Halo%20PRIME%20HRIS%20${opt.employee_id || ''}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-200 hover:border-emerald-300 bg-white hover:bg-emerald-50 text-slate-600 hover:text-emerald-700 text-[10px] font-bold transition-all"
+                                title="Buka WhatsApp untuk kirim sapaan aktivasi bot"
+                              >
+                                <MessageSquare className="w-3 h-3 text-emerald-600" />
+                                <span>Undang</span>
+                              </a>
+                            ) : (
+                              <span className="text-slate-300">-</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

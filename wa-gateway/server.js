@@ -124,7 +124,6 @@ function saveOptInsToFile() {
 function hasOptedIn(phone) {
   const norm = normalizePhone(phone);
   if (!norm) return false;
-  if (optInsCache[norm]) return true;
 
   // Check persistent SQLite database
   try {
@@ -132,10 +131,13 @@ function hasOptedIn(phone) {
     const sqlitePath = path.join(__dirname, '..', 'data', 'hris.sqlite');
     if (fs.existsSync(sqlitePath)) {
       const db = new DatabaseSync(sqlitePath);
-      const row = db.prepare('SELECT phone FROM wa_opt_ins WHERE phone = ?;').get(norm);
+      const row = db.prepare('SELECT is_active, manual_override, message_count, first_message FROM wa_opt_ins WHERE phone = ?;').get(norm);
       if (row) {
-        optInsCache[norm] = { phone: norm, optedIn: true };
-        return true;
+        // Syarat 1: Preferensi wajib aktif (is_active === 1; default adalah 0 / OFF)
+        if (row.is_active !== 1) return false;
+        // Syarat 2: Wajib telah mengirim minimal 1 pesan masuk ATAU otorisasi manual
+        const hasRealChat = row.message_count > 0 && row.first_message && !row.first_message.includes('Master Data');
+        return Boolean(hasRealChat || row.manual_override === 1);
       }
     }
   } catch (e) {}
@@ -552,13 +554,13 @@ app.post('/send', async (req, res) => {
   const rawDigits = jid.replace('@s.whatsapp.net', '').replace(/\D+/g, '');
 
   // MANDATORY SECURITY GATE:
-  // User HARUS minimal mengetik 1 pesan masuk ke nomor BOT
+  // User HARUS minimal mengetik 1 pesan masuk ke nomor BOT dan preferensi ON
   if (!force && !hasOptedIn(rawDigits)) {
-    console.warn(`[PRIME WA OPT-IN GATE] 🚫 Pengiriman ke +${rawDigits} ditolak: User belum pernah mengirim pesan masuk ke bot.`);
+    console.warn(`[PRIME WA OPT-IN GATE] 🚫 Pengiriman ke +${rawDigits} ditolak: User belum memenuhi syarat opt-in atau preferensi notifikasi OFF.`);
     return res.status(403).json({
       success: false,
       optInRequired: true,
-      error: `Penerima (+${rawDigits}) belum pernah mengetik pesan ke bot WhatsApp. Sesuai kebijakan, user minimal harus mengirim 1 pesan masuk (berisi ID user atau sapaan apa pun) ke nomor bot terlebih dahulu.`
+      error: `Penerima (+${rawDigits}) dinonaktifkan dari notifikasi WhatsApp (Default OFF) atau belum pernah mengetik pesan masuk ke bot. User wajib minimal mengirim 1 pesan masuk terlebih dahulu dan diaktifkan via menu WA.`
     });
   }
 

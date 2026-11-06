@@ -194,12 +194,34 @@ function initializeSchema(db: DatabaseSync) {
       employee_id TEXT,
       employee_name TEXT,
       first_message TEXT,
-      first_message_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      first_message_at TEXT,
       last_message TEXT,
-      last_message_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      message_count INTEGER DEFAULT 1
+      last_message_at TEXT,
+      message_count INTEGER DEFAULT 0,
+      is_active INTEGER DEFAULT 0,
+      manual_override INTEGER DEFAULT 0
     );
   `);
+
+  // Schema migration & purge synthetic opt-in rows in wa_opt_ins
+  try {
+    const waCols = (db.prepare("PRAGMA table_info(wa_opt_ins);").all() as any[]).map(c => c.name);
+    if (!waCols.includes('is_active')) {
+      db.exec("ALTER TABLE wa_opt_ins ADD COLUMN is_active INTEGER DEFAULT 0;");
+    }
+    if (!waCols.includes('manual_override')) {
+      db.exec("ALTER TABLE wa_opt_ins ADD COLUMN manual_override INTEGER DEFAULT 0;");
+    }
+
+    db.exec(`
+      DELETE FROM wa_opt_ins 
+      WHERE first_message LIKE '%Master Data%' 
+         OR first_message LIKE '%Terverifikasi%'
+         OR (message_count = 1 AND first_message = last_message AND first_message IS NOT NULL);
+    `);
+  } catch (errMigWa: any) {
+    console.warn('[DB Migration] wa_opt_ins migration notice:', errMigWa.message);
+  }
 
   // Ensure audit_logs columns exist (backward-compatible schema migration)
   try {

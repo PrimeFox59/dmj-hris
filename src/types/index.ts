@@ -825,9 +825,14 @@ export interface WaOptInRecord {
   phone: string;
   employee_id?: string | null;
   employee_name?: string | null;
-  first_message?: string;
-  first_message_at?: string;
-  last_message?: string;
-  last_message_at?: string;
+  department?: string | null;
+  position?: string | null;
+  first_message?: string | null;
+  first_message_at?: string | null;
+  last_message?: string | null;
+  last_message_at?: string | null;
   message_count: number;
+  is_active?: number | boolean;
+  manual_override?: number | boolean;
+  has_chatted?: boolean;
 }
