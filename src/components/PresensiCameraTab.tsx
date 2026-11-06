@@ -164,9 +164,8 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
     return map;
   }, [employees]);
 
-  // Helper to resolve canonical login ID badge (d001, d014, admin, etc.) matching Master Karyawan
+  // Helper to resolve canonical login ID badge (d001, d014, admin, etc.) matching Master Karyawan (SSOT)
   const getRecordLoginBadgeId = (record: AttendanceRecord): string => {
-    if (record.employeeLoginId) return record.employeeLoginId;
     const empId = record.employeeId;
     const empNik = record.employeeNik;
     const empName = record.employeeName ? record.employeeName.toLowerCase().trim() : '';
@@ -178,6 +177,8 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
       if (currentUser.loginId) return currentUser.loginId;
     }
     if (record.employeeId === 'EMP-001') return 'admin';
+    if (record.employeeLoginId && !record.employeeLoginId.includes('1793')) return record.employeeLoginId;
+    if (record.employeeLoginId) return record.employeeLoginId;
     return record.employeeId || '';
   };
 

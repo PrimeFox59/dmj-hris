@@ -143,24 +143,32 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
     return Array.from(set).sort();
   }, [employees]);
 
-  // Employee Login ID Map
+  // Employee Login ID Map (Master Data SSOT)
   const empLoginMap = useMemo(() => {
     const map = new Map<string, string>();
     employees.forEach(e => {
-      if (e.id && e.loginId) map.set(e.id, e.loginId);
-      if (e.nik && e.loginId) map.set(e.nik, e.loginId);
-      if (e.name && e.loginId) map.set(e.name.toLowerCase().trim(), e.loginId);
+      const lid = e.loginId || (e.id === 'EMP-001' ? 'admin' : undefined);
+      if (lid) {
+        if (e.id) map.set(e.id, lid);
+        if (e.nik) map.set(e.nik, lid);
+        if (e.name) map.set(e.name.toLowerCase().trim(), lid);
+      }
     });
     return map;
   }, [employees]);
 
   const getLoginBadge = (item: AttendanceRecord): string => {
-    if (item.employeeLoginId) return item.employeeLoginId;
+    // 1. Single Source of Truth: Check current Master Karyawan first!
     if (item.employeeId && empLoginMap.has(item.employeeId)) return empLoginMap.get(item.employeeId)!;
     if (item.employeeNik && empLoginMap.has(item.employeeNik)) return empLoginMap.get(item.employeeNik)!;
     if (item.employeeName && empLoginMap.has(item.employeeName.toLowerCase().trim())) {
       return empLoginMap.get(item.employeeName.toLowerCase().trim())!;
     }
+    // 2. Special Superuser alias
+    if (item.employeeId === 'EMP-001') return 'admin';
+    // 3. Fallback to frozen record loginId if valid and not an obsolete raw timestamp
+    if (item.employeeLoginId && !item.employeeLoginId.includes('1793')) return item.employeeLoginId;
+    if (item.employeeLoginId) return item.employeeLoginId;
     return item.employeeId || '-';
   };
 

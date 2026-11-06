@@ -466,16 +466,17 @@ export function getAllData() {
       if (item.checkOutPhotoUrl && item.checkOutPhotoUrl.startsWith('data:image')) {
         item.checkOutPhotoUrl = `/api/attendance/${item.id || row.id}/photo-out`;
       }
-      if (!item.employeeLoginId) {
-        if (item.employeeId === 'EMP-001') {
-          item.employeeLoginId = 'admin';
-        } else if (empLoginMap.has(item.employeeId)) {
-          item.employeeLoginId = empLoginMap.get(item.employeeId);
-        } else if (item.employeeNik && empLoginMap.has(item.employeeNik)) {
-          item.employeeLoginId = empLoginMap.get(item.employeeNik);
-        } else if (item.employeeName && empLoginMap.has(item.employeeName.toLowerCase().trim())) {
-          item.employeeLoginId = empLoginMap.get(item.employeeName.toLowerCase().trim());
-        }
+      // Canonical Login ID resolution from Master Data (SSOT)
+      const canonicalLoginId = (item.employeeId === 'EMP-001')
+        ? 'admin'
+        : (empLoginMap.get(item.employeeId) || 
+           (item.employeeNik && empLoginMap.get(item.employeeNik)) || 
+           (item.employeeName && empLoginMap.get(item.employeeName.toLowerCase().trim())));
+
+      if (canonicalLoginId) {
+        item.employeeLoginId = canonicalLoginId;
+      } else if (!item.employeeLoginId) {
+        item.employeeLoginId = item.employeeId || '-';
       }
       return item;
     });
@@ -920,6 +921,26 @@ export function saveEmployee(emp: Employee) {
       SET system_role = ?, role = ?, status = ?, updated_at = CURRENT_TIMESTAMP 
       WHERE employee_id = ?;
     `).run(targetSysRole, targetRole, userAccountStatus, emp.id);
+
+    // Auto-cascade updated loginId, name, and NIK to attendances table (SSOT)
+    const cleanLId = emp.loginId ? String(emp.loginId).trim().toLowerCase() : null;
+    if (cleanLId || emp.name) {
+      try {
+        const attRows = (db.prepare('SELECT id, data_json FROM attendances WHERE employeeId = ? OR employeeNik = ?;').all(emp.id, emp.nik || emp.id) as any[]);
+        const updateAttStmt = db.prepare('UPDATE attendances SET employeeName = ?, employeeNik = ?, data_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?;');
+        for (const ar of attRows) {
+          try {
+            const parsed = JSON.parse(ar.data_json);
+            if (cleanLId) parsed.employeeLoginId = cleanLId;
+            parsed.employeeName = emp.name;
+            if (emp.nik) parsed.employeeNik = emp.nik;
+            updateAttStmt.run(emp.name, emp.nik || parsed.employeeNik || null, JSON.stringify(parsed), ar.id);
+          } catch (eParsed) {}
+        }
+      } catch (eAttSync: any) {
+        console.warn('Error cascading employee update to attendances:', eAttSync.message);
+      }
+    }
   } catch (err) {
     console.error('Error syncing user_accounts status & system_role for employee', emp.id, err);
   }
