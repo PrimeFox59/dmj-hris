@@ -703,33 +703,30 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
         </div>
       </div>
 
-      {/* View Switcher: Daftar Pengajuan vs Gantt Chart Jadwal Cuti */}
-      <div className="flex items-center gap-2 p-1.5 bg-slate-100 rounded-2xl border border-slate-200/80 w-fit">
+      {/* View Switcher: Daftar Pengajuan vs Gantt Chart Jadwal Cuti (Icon Buttons) */}
+      <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl border border-slate-200/80 w-fit">
         <button
           onClick={() => setActiveSubTab('list')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+          title="Daftar Pengajuan & Otorisasi"
+          className={`p-2.5 rounded-xl transition-all cursor-pointer flex items-center justify-center ${
             activeSubTab === 'list'
-              ? 'bg-white text-slate-900 shadow-xs'
-              : 'text-slate-600 hover:text-slate-900'
+              ? 'bg-white text-slate-900 shadow-xs ring-1 ring-slate-200'
+              : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/50'
           }`}
         >
           <FileText className="w-4 h-4 text-[#FF6B00]" />
-          <span>Daftar Pengajuan & Otorisasi</span>
         </button>
 
         <button
           onClick={() => setActiveSubTab('gantt')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+          title="Gantt Chart Jadwal Cuti (Plan vs Aktual) - Roster & Lokal"
+          className={`p-2.5 rounded-xl transition-all cursor-pointer flex items-center justify-center ${
             activeSubTab === 'gantt'
-              ? 'bg-white text-slate-900 shadow-xs'
-              : 'text-slate-600 hover:text-slate-900'
+              ? 'bg-white text-slate-900 shadow-xs ring-1 ring-slate-200'
+              : 'text-slate-500 hover:text-slate-900 hover:bg-slate-200/50'
           }`}
         >
           <Layers className="w-4 h-4 text-[#FF6B00]" />
-          <span>Gantt Chart Jadwal Cuti (Plan vs Aktual)</span>
-          <span className="px-1.5 py-0.2 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[9px] font-black rounded-md font-mono-code uppercase">
-            Roster & Lokal
-          </span>
         </button>
       </div>
 
@@ -748,32 +745,55 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
         <>
           {/* Filter & Search Bar */}
       <div className="glass-card rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 motion-fade-in-up stagger-1">
-        {/* Category Pills */}
+        {/* Category Pills (Button Icons Tanpa Teks) */}
         <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
           {[
-            { id: 'ALL', label: 'Semua Kategori' },
-            { id: 'LEAVE', label: 'Cuti Tahunan & Roster' },
-            { id: 'PERMIT', label: 'Izin Sakit / Pribadi' },
-            { id: 'ATTENDANCE_CORRECTION', label: 'Koreksi Absensi Mandiri' },
-            { id: 'LATE_JUSTIFICATION', label: 'Keterlambatan' },
-            { id: 'EARLY_CHECKOUT', label: 'Pulang Lebih Awal' },
-            { id: 'OUT_OF_GEOFENCE', label: 'Presensi Luar Area' },
-            { id: 'DINAS_LUAR', label: 'Dinas Luar Mendadak' },
-            { id: 'KASBON', label: 'Kasbon Pribadi' },
-            { id: 'SLIP_ACCESS', label: 'Izin Buka Slip (10 Mnt)' }
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setFilterType(tab.id)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
-                filterType === tab.id
-                  ? 'bg-slate-900 text-white shadow-xs'
-                  : 'bg-white/80 text-slate-600 hover:bg-slate-100'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+            { id: 'ALL', label: 'Semua Kategori', icon: Filter },
+            { id: 'LEAVE', label: 'Cuti Tahunan & Roster', icon: Plane },
+            { id: 'PERMIT', label: 'Izin Sakit / Pribadi', icon: FileText },
+            { id: 'ATTENDANCE_CORRECTION', label: 'Koreksi Absensi Mandiri', icon: CheckSquare },
+            { id: 'LATE_JUSTIFICATION', label: 'Keterlambatan', icon: Clock },
+            { id: 'EARLY_CHECKOUT', label: 'Pulang Lebih Awal', icon: LogOut },
+            { id: 'OUT_OF_GEOFENCE', label: 'Presensi Luar Area', icon: MapPin },
+            { id: 'DINAS_LUAR', label: 'Dinas Luar Mendadak', icon: Briefcase },
+            { id: 'KASBON', label: 'Kasbon Pribadi', icon: CreditCard },
+            { id: 'SLIP_ACCESS', label: 'Izin Buka Slip (10 Mnt)', icon: Lock }
+          ].map(tab => {
+            const Icon = tab.icon;
+            const isActive = filterType === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setFilterType(tab.id)}
+                title={tab.label}
+                className={`p-2 rounded-xl transition-all cursor-pointer flex items-center justify-center ${
+                  isActive
+                    ? 'bg-slate-900 text-white shadow-xs ring-2 ring-slate-700'
+                    : 'bg-white/80 text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200'
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+              </button>
+            );
+          })}
+          {/* Active Category Indicator Label */}
+          {filterType !== 'ALL' && (
+            <span className="text-[11px] font-mono-code font-bold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200 whitespace-nowrap ml-1 animate-in fade-in">
+              {
+                [
+                  { id: 'LEAVE', label: 'Cuti Tahunan & Roster' },
+                  { id: 'PERMIT', label: 'Izin Sakit / Pribadi' },
+                  { id: 'ATTENDANCE_CORRECTION', label: 'Koreksi Absensi' },
+                  { id: 'LATE_JUSTIFICATION', label: 'Keterlambatan' },
+                  { id: 'EARLY_CHECKOUT', label: 'Pulang Lebih Awal' },
+                  { id: 'OUT_OF_GEOFENCE', label: 'Presensi Luar Area' },
+                  { id: 'DINAS_LUAR', label: 'Dinas Luar' },
+                  { id: 'KASBON', label: 'Kasbon' },
+                  { id: 'SLIP_ACCESS', label: 'Buka Slip' }
+                ].find(t => t.id === filterType)?.label
+              }
+            </span>
+          )}
         </div>
 
         {/* Status Filter & Search */}
