@@ -1,5 +1,6 @@
 import { createPortal } from 'react-dom';
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
+import * as echarts from 'echarts';
 import {
   Banknote,
   TrendingUp,
@@ -54,6 +55,8 @@ export const FinanceTimelineChart: React.FC<FinanceTimelineChartProps> = ({
   const [scrubberDay, setScrubberDay] = useState<number>(8); // Defaults to Day 8 (Today: Sep 8)
   const [selectedMilestone, setSelectedMilestone] = useState<FinancialMilestone | null>(null);
   const [showChartNominal, setShowChartNominal] = useState<boolean>(false);
+  const chartRef = useRef<HTMLDivElement>(null);
+  const chartInstance = useRef<echarts.ECharts | null>(null);
 
   // Filtered Project stats
   const activeProject = selectedProjectId === 'ALL' ? null : projects.find(p => p.id === selectedProjectId);
@@ -286,36 +289,301 @@ export const FinanceTimelineChart: React.FC<FinanceTimelineChartProps> = ({
     });
   }, [activeNetDisbursement]);
 
-  // SVG dimensions for smooth curve
-  const svgWidth = 840;
-  const svgHeight = 230;
-  const maxCash = (activeNetDisbursement > 0 ? activeNetDisbursement : 15000000) * 1.15;
-
-  // Convert points to smooth bezier path
-  const svgPathData = useMemo(() => {
-    const coords = curvePoints.map((pt, idx) => {
-      const x = (idx / (daysInMonth - 1)) * (svgWidth - 70) + 35;
-      const y = svgHeight - 40 - (pt.cash / maxCash) * (svgHeight - 75);
-      return { x, y };
-    });
-
-    if (coords.length === 0) return { pathLine: '', pathArea: '' };
-
-    let pathLine = `M ${coords[0].x},${coords[0].y}`;
-    for (let i = 0; i < coords.length - 1; i++) {
-      const current = coords[i];
-      const next = coords[i + 1];
-      const controlX = (current.x + next.x) / 2;
-      pathLine += ` C ${controlX},${current.y} ${controlX},${next.y} ${next.x},${next.y}`;
+  // ECharts Timeline Instance Setup & Responsive Rendering
+  useEffect(() => {
+    if (!chartRef.current) return;
+    if (!chartInstance.current) {
+      chartInstance.current = echarts.init(chartRef.current);
     }
 
-    const firstX = coords[0].x;
-    const lastX = coords[coords.length - 1].x;
-    const bottomY = svgHeight - 40;
-    const pathArea = `${pathLine} L ${lastX},${bottomY} L ${firstX},${bottomY} Z`;
+    const daysLabels = curvePoints.map(p => `Tgl ${p.day}`);
+    const cashData = curvePoints.map(p => p.cash);
+    const peak = activeNetDisbursement > 0 ? activeNetDisbursement : 15000000;
 
-    return { pathLine, pathArea };
-  }, [curvePoints, maxCash]);
+    const option: echarts.EChartsOption = {
+      backgroundColor: 'transparent',
+      animationDuration: 600,
+      animationEasing: 'cubicOut',
+      grid: {
+        top: 36,
+        left: 14,
+        right: 28,
+        bottom: 24,
+        containLabel: true
+      },
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: {
+          type: 'line',
+          lineStyle: {
+            color: '#FF6B00',
+            width: 1.5,
+            type: 'dashed'
+          }
+        },
+        backgroundColor: 'rgba(15, 23, 42, 0.95)',
+        borderColor: '#334155',
+        borderWidth: 1,
+        borderRadius: 12,
+        padding: [10, 14],
+        shadowColor: 'rgba(0, 0, 0, 0.25)',
+        shadowBlur: 14,
+        formatter: (params: any) => {
+          if (!Array.isArray(params) || params.length === 0) return '';
+          const idx = params[0].dataIndex;
+          const day = idx + 1;
+          const cash = curvePoints[idx]?.cash || 0;
+          const pct = peak > 0 ? Math.round((cash / peak) * 100) : 0;
+          const m = milestones.find(item => item.day === day);
+
+          const isDisbursement = day === 25;
+          const isToday = day === 8;
+
+          return `
+            <div style="font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; min-width: 220px; color: #F8FAFC;">
+              <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.15); padding-bottom: 6px; margin-bottom: 8px;">
+                <span style="font-weight: 800; font-size: 12.5px; color: #FFFFFF;">${day} September 2026</span>
+                ${isToday ? '<span style="background: #FF6B00; color: #fff; font-size: 9px; font-weight: bold; padding: 2px 6px; border-radius: 4px;">HARI INI</span>' : ''}
+                ${isDisbursement ? '<span style="background: #10B981; color: #fff; font-size: 9px; font-weight: bold; padding: 2px 6px; border-radius: 4px;">DISBURSEMENT</span>' : ''}
+              </div>
+              <div style="display: flex; justify-content: space-between; gap: 12px; margin-bottom: 4px; font-size: 11px;">
+                <span style="color: #94A3B8;">Komitmen Kas:</span>
+                <span style="font-weight: bold; color: #34D399; font-size: 12px;">${formatSalaryDisplay(cash, showChartNominal)}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; gap: 12px; margin-bottom: 6px; font-size: 11px;">
+                <span style="color: #94A3B8;">Progres Siklus:</span>
+                <span style="font-weight: bold; color: #FF8533;">${pct}% dari Puncak</span>
+              </div>
+              ${m ? `
+                <div style="background: rgba(255,255,255,0.08); border-radius: 6px; padding: 6px 8px; margin-top: 6px; border-left: 3px solid ${m.category === 'DISBURSEMENT' ? '#FF6B00' : '#00E2B0'};">
+                  <div style="font-size: 8.5px; color: #94A3B8; text-transform: uppercase; font-weight: bold;">Milestone: ${m.phase}</div>
+                  <div style="font-weight: bold; color: #FFFFFF; font-size: 11px; margin-top: 2px;">${m.title}</div>
+                </div>
+              ` : ''}
+              <div style="margin-top: 6px; font-size: 8.5px; color: #64748B; text-align: center; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 5px;">
+                💡 Klik untuk sinkronisasi scrubber & milestone
+              </div>
+            </div>
+          `;
+        }
+      },
+      xAxis: {
+        type: 'category',
+        data: daysLabels,
+        boundaryGap: false,
+        axisLine: { lineStyle: { color: '#CBD5E1' } },
+        axisTick: { show: false },
+        axisLabel: {
+          color: (_value?: string | number, index?: number) => {
+            const day = (index ?? 0) + 1;
+            if (day === scrubberDay) return '#FF6B00';
+            if (day === 8) return '#0F172A';
+            return '#64748B';
+          },
+          fontSize: 10,
+          fontFamily: 'monospace',
+          interval: (index: number) => {
+            const day = index + 1;
+            return [1, 5, 8, 12, 15, 20, 25, 28, 30].includes(day);
+          },
+          formatter: (val: string) => val
+        }
+      },
+      yAxis: [
+        {
+          type: 'value',
+          name: showChartNominal ? 'Komitmen Kas (Rp)' : 'Komitmen Kas',
+          nameTextStyle: { color: '#64748B', fontSize: 10, fontFamily: 'monospace' },
+          splitLine: { lineStyle: { color: '#F1F5F9', type: 'dashed' } },
+          axisLabel: {
+            color: '#64748B',
+            fontSize: 10,
+            fontFamily: 'monospace',
+            formatter: (val: number) => {
+              if (!showChartNominal) return 'Rp •••••';
+              if (val >= 1000000000) return `Rp ${(val / 1000000000).toFixed(1)} M`;
+              if (val >= 1000000) return `Rp ${(val / 1000000).toFixed(0)} Jt`;
+              if (val >= 1000) return `Rp ${(val / 1000).toFixed(0)} Rb`;
+              return `Rp ${val}`;
+            }
+          }
+        },
+        {
+          type: 'value',
+          min: 0,
+          max: 100,
+          name: '% Puncak',
+          nameTextStyle: { color: '#64748B', fontSize: 10, fontFamily: 'monospace' },
+          splitLine: { show: false },
+          axisLabel: {
+            color: '#FF6B00',
+            fontSize: 10,
+            fontFamily: 'monospace',
+            formatter: '{value}%'
+          }
+        }
+      ],
+      series: [
+        {
+          name: 'Akumulasi Kas',
+          type: 'line',
+          smooth: 0.35,
+          data: cashData,
+          showSymbol: false,
+          lineStyle: {
+            width: 3.5,
+            color: '#FF6B00',
+            shadowColor: 'rgba(255, 107, 0, 0.4)',
+            shadowBlur: 10,
+            shadowOffsetY: 4
+          },
+          itemStyle: {
+            color: '#FF6B00',
+            borderColor: '#FFFFFF',
+            borderWidth: 2
+          },
+          areaStyle: {
+            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+              { offset: 0, color: 'rgba(255, 107, 0, 0.40)' },
+              { offset: 0.5, color: 'rgba(255, 133, 51, 0.15)' },
+              { offset: 0.85, color: 'rgba(16, 185, 129, 0.05)' },
+              { offset: 1, color: 'rgba(255, 255, 255, 0.0)' }
+            ])
+          },
+          markPoint: {
+            data: milestones.map(m => {
+              const isDisb = m.category === 'DISBURSEMENT';
+              const isToday = m.day === 8;
+              return {
+                name: m.title,
+                coord: [`Tgl ${m.day}`, curvePoints[m.day - 1]?.cash || 0],
+                symbol: isDisb ? 'diamond' : 'circle',
+                symbolSize: isDisb ? 14 : 9,
+                itemStyle: {
+                  color: isDisb ? '#FF6B00' : isToday ? '#EA580C' : '#00E2B0',
+                  borderColor: '#FFFFFF',
+                  borderWidth: 2,
+                  shadowColor: isDisb ? 'rgba(255, 107, 0, 0.7)' : 'rgba(0, 226, 176, 0.7)',
+                  shadowBlur: 8
+                }
+              };
+            })
+          },
+          markLine: {
+            silent: false,
+            symbol: ['none', 'none'],
+            data: [
+              {
+                name: 'HARI INI',
+                xAxis: 'Tgl 8',
+                lineStyle: { color: '#FF6B00', width: 1.8, type: 'dashed' },
+                label: {
+                  show: true,
+                  formatter: 'HARI INI',
+                  position: 'insideStartTop',
+                  color: '#FFFFFF',
+                  backgroundColor: '#FF6B00',
+                  padding: [3, 7],
+                  borderRadius: 6,
+                  fontSize: 9.5,
+                  fontWeight: 'bold',
+                  fontFamily: 'monospace'
+                }
+              },
+              {
+                name: 'PAYROLL DISBURSEMENT',
+                xAxis: 'Tgl 25',
+                lineStyle: { color: '#10B981', width: 1.8, type: 'dashed' },
+                label: {
+                  show: true,
+                  formatter: 'PAYROLL RUN',
+                  position: 'insideStartTop',
+                  color: '#FFFFFF',
+                  backgroundColor: '#10B981',
+                  padding: [3, 7],
+                  borderRadius: 6,
+                  fontSize: 9.5,
+                  fontWeight: 'bold',
+                  fontFamily: 'monospace'
+                }
+              },
+              {
+                name: 'SCRUBBER',
+                xAxis: `Tgl ${scrubberDay}`,
+                lineStyle: { color: '#0F172A', width: 2, type: 'solid' },
+                label: {
+                  show: true,
+                  formatter: `Tgl ${scrubberDay}`,
+                  position: 'insideEndBottom',
+                  color: '#FFFFFF',
+                  backgroundColor: '#0F172A',
+                  padding: [3, 7],
+                  borderRadius: 6,
+                  fontSize: 9.5,
+                  fontWeight: 'bold',
+                  fontFamily: 'monospace'
+                }
+              }
+            ]
+          }
+        }
+      ]
+    };
+
+    chartInstance.current.setOption(option, true);
+
+    // Click handler on chart
+    chartInstance.current.off('click');
+    chartInstance.current.on('click', (params: any) => {
+      if (params.dataIndex !== undefined) {
+        const day = params.dataIndex + 1;
+        setScrubberDay(day);
+        const m = milestones.find(item => item.day === day);
+        if (m) {
+          setSelectedMilestone(m);
+        }
+      }
+    });
+  }, [curvePoints, activeNetDisbursement, milestones, scrubberDay, showChartNominal]);
+
+  // Synchronize tooltip highlight when scrubberDay changes
+  useEffect(() => {
+    if (chartInstance.current) {
+      chartInstance.current.dispatchAction({
+        type: 'showTip',
+        seriesIndex: 0,
+        dataIndex: scrubberDay - 1
+      });
+    }
+  }, [scrubberDay]);
+
+  // Handle Resize & Observer
+  useEffect(() => {
+    const handleResize = () => {
+      chartInstance.current?.resize();
+    };
+    window.addEventListener('resize', handleResize);
+
+    const resizeObserver = new ResizeObserver(() => {
+      chartInstance.current?.resize();
+    });
+    if (chartRef.current) {
+      resizeObserver.observe(chartRef.current);
+    }
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      resizeObserver.disconnect();
+    };
+  }, []);
+
+  // Dispose on unmount
+  useEffect(() => {
+    return () => {
+      chartInstance.current?.dispose();
+      chartInstance.current = null;
+    };
+  }, []);
 
   // Current scrubbed point values
   const currentScrubbedCash = curvePoints[scrubberDay - 1]?.cash || 0;
@@ -573,214 +841,45 @@ export const FinanceTimelineChart: React.FC<FinanceTimelineChartProps> = ({
           </div>
         </div>
 
-        {/* SVG Interactive Wave Chart Container */}
-        <div className="relative w-full overflow-hidden rounded-2xl bg-white p-3.5 sm:p-5 border border-slate-200/90 shadow-sm">
+        {/* Interactive ECharts Wave Chart Container */}
+        <div className="relative w-full overflow-hidden rounded-2xl bg-white p-3.5 sm:p-5 border border-slate-200/90 shadow-sm space-y-3">
           
-          {/* Chart Header Labels */}
-          <div className="flex items-center justify-between text-xs font-mono-code font-bold text-slate-500 mb-3 px-2 border-b border-slate-100 pb-2">
-            <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-slate-300"></span>
-              Awal Periode: {showChartNominal ? 'Rp 0' : 'Rp ••••••••'}
-            </span>
-            <span className="text-[#FF6B00] font-black flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-[#FF6B00] animate-pulse"></span>
-              Puncak Disbursement: {formatSalaryDisplay(activeNetDisbursement, showChartNominal)} (Tgl 25)
-            </span>
+          {/* Chart Header Labels & Legend */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs font-mono-code font-bold text-slate-500 gap-2 px-2 border-b border-slate-100 pb-2.5">
+            <div className="flex items-center gap-3">
+              <span className="flex items-center gap-1.5 text-slate-600">
+                <span className="w-2.5 h-2.5 rounded-full bg-slate-300"></span>
+                Awal Periode: <strong className="text-slate-800">{showChartNominal ? 'Rp 0' : 'Rp ••••••••'}</strong>
+              </span>
+              <span className="text-slate-300">|</span>
+              <span className="flex items-center gap-1.5 text-orange-600">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#FF6B00]"></span>
+                Tgl 8: <strong>HARI INI</strong>
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-[#FF6B00] font-black flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#FF6B00] animate-pulse"></span>
+                Puncak Disbursement: {formatSalaryDisplay(activeNetDisbursement, showChartNominal)} (Tgl 25)
+              </span>
+            </div>
           </div>
 
-          {/* The Chart SVG */}
-          <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} className="w-full h-56 sm:h-64 select-none">
-            <defs>
-              <linearGradient id="financeWaveGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#FF6B00" stopOpacity="0.45" />
-                <stop offset="60%" stopColor="#00E2B0" stopOpacity="0.12" />
-                <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0.0" />
-              </linearGradient>
-            </defs>
+          {/* The ECharts Interactive Canvas */}
+          <div ref={chartRef} className="w-full h-72 sm:h-80 select-none" />
 
-            {/* Horizontal Grid Guides */}
-            {[0.25, 0.5, 0.75, 1].map((ratio, idx) => {
-              const yVal = svgHeight - 40 - ratio * (svgHeight - 75);
-              return (
-                <g key={idx}>
-                  <line
-                    x1="35"
-                    y1={yVal}
-                    x2={svgWidth - 35}
-                    y2={yVal}
-                    stroke="#F1F5F9"
-                    strokeDasharray="4 4"
-                    strokeWidth="1.2"
-                  />
-                  <text
-                    x={svgWidth - 30}
-                    y={yVal + 3}
-                    textAnchor="start"
-                    fontSize="9"
-                    fill="#94A3B8"
-                    fontFamily="monospace"
-                  >
-                    {Math.round(ratio * 100)}%
-                  </text>
-                </g>
-              );
-            })}
-
-            {/* Smooth Area Fill */}
-            {svgPathData.pathArea && (
-              <path
-                d={svgPathData.pathArea}
-                fill="url(#financeWaveGrad)"
-              />
-            )}
-
-            {/* Main Smooth Trend Line */}
-            {svgPathData.pathLine && (
-              <path
-                d={svgPathData.pathLine}
-                fill="none"
-                stroke="#FF6B00"
-                strokeWidth="3.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            )}
-
-            {/* Today Indicator Line (Day 8 Fixed Marker) */}
-            {(() => {
-              const xToday = ((8 - 1) / (daysInMonth - 1)) * (svgWidth - 70) + 35;
-              const yToday = svgHeight - 40 - ((curvePoints[7]?.cash || 0) / maxCash) * (svgHeight - 75);
-              return (
-                <g>
-                  <line
-                    x1={xToday}
-                    y1="20"
-                    x2={xToday}
-                    y2={svgHeight - 40}
-                    stroke="#FF6B00"
-                    strokeWidth="1.5"
-                    strokeDasharray="3 3"
-                    opacity="0.7"
-                  />
-                  <circle cx={xToday} cy={yToday} r="5" fill="#FF6B00" stroke="#FFFFFF" strokeWidth="2" />
-                  <rect
-                    x={xToday - 38}
-                    y="10"
-                    width="76"
-                    height="18"
-                    rx="9"
-                    fill="#FF6B00"
-                    opacity="0.9"
-                  />
-                  <text
-                    x={xToday}
-                    y="22"
-                    textAnchor="middle"
-                    fontSize="9"
-                    fill="#FFFFFF"
-                    fontWeight="bold"
-                    fontFamily="monospace"
-                  >
-                    HARI INI
-                  </text>
-                </g>
-              );
-            })()}
-
-            {/* Milestone Markers along the Curve */}
-            {milestones.map((m, idx) => {
-              const x = ((m.day - 1) / (daysInMonth - 1)) * (svgWidth - 70) + 35;
-              const y = svgHeight - 40 - ((curvePoints[m.day - 1]?.cash || 0) / maxCash) * (svgHeight - 75);
-              const isDisbursement = m.category === 'DISBURSEMENT';
-
-              return (
-                <g
-                  key={idx}
-                  className="cursor-pointer group"
-                  onClick={() => {
-                    setScrubberDay(m.day);
-                    setSelectedMilestone(m);
-                  }}
-                >
-                  <circle
-                    cx={x}
-                    cy={y}
-                    r={isDisbursement ? 8 : 5.5}
-                    fill={isDisbursement ? '#FF6B00' : '#00E2B0'}
-                    stroke="#FFFFFF"
-                    strokeWidth="2.5"
-                    className="transition-transform group-hover:scale-150"
-                  />
-                </g>
-              );
-            })}
-
-            {/* Dynamic Scrubber Interactive Cursor */}
-            {(() => {
-              const xScrubber = ((scrubberDay - 1) / (daysInMonth - 1)) * (svgWidth - 70) + 35;
-              const yScrubber = svgHeight - 40 - (currentScrubbedCash / maxCash) * (svgHeight - 75);
-              return (
-                <g>
-                  <line
-                    x1={xScrubber}
-                    y1="34"
-                    x2={xScrubber}
-                    y2={svgHeight - 40}
-                    stroke="#0F172A"
-                    strokeWidth="2"
-                  />
-                  <circle cx={xScrubber} cy={yScrubber} r="7" fill="#0F172A" stroke="#FFFFFF" strokeWidth="2.5" />
-                  
-                  {/* Floating Tooltip Pill Above Cursor */}
-                  <g transform={`translate(${Math.min(Math.max(xScrubber, 60), svgWidth - 60)}, 40)`}>
-                    <rect
-                      x="-42"
-                      y="-18"
-                      width="84"
-                      height="20"
-                      rx="10"
-                      fill="#0F172A"
-                      className="shadow-md"
-                    />
-                    <text
-                      x="0"
-                      y="-5"
-                      textAnchor="middle"
-                      fontSize="9.5"
-                      fill="#FFFFFF"
-                      fontWeight="bold"
-                      fontFamily="monospace"
-                    >
-                      Tgl {scrubberDay}
-                    </text>
-                  </g>
-                </g>
-              );
-            })()}
-
-            {/* X-Axis Days Labels */}
-            {[1, 5, 8, 12, 15, 20, 25, 28, 30].map(d => {
-              const x = ((d - 1) / (daysInMonth - 1)) * (svgWidth - 70) + 35;
-              const isSelected = d === scrubberDay;
-              const isToday = d === 8;
-              return (
-                <text
-                  key={d}
-                  x={x}
-                  y={svgHeight - 16}
-                  textAnchor="middle"
-                  fontSize={isSelected ? "11" : "10"}
-                  fontWeight={isSelected || isToday ? "bold" : "normal"}
-                  fill={isSelected ? "#FF6B00" : isToday ? "#0F172A" : "#94A3B8"}
-                  fontFamily="monospace"
-                  className="cursor-pointer"
-                  onClick={() => setScrubberDay(d)}
-                >
-                  Tgl {d}
-                </text>
-              );
-            })}
-          </svg>
+          {/* Immersive Interactive Hint Bar */}
+          <div className="flex items-center justify-between text-[11px] font-mono-code text-slate-500 px-2 pt-1 border-t border-slate-100/80">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+              <span>Interaktif: Geser slider, klik tombol tanggal, atau klik titik chart untuk inspeksi detail.</span>
+            </div>
+            <div className="hidden md:flex items-center gap-3 text-slate-400">
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[#00E2B0]"></span> Milestone Khusus</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-[#FF6B00]"></span> Hari Ini</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-emerald-600"></span> Disbursement</span>
+            </div>
+          </div>
         </div>
 
         {/* 3.5. Proportional Multi-Project Salary Allocation Ledger */}
