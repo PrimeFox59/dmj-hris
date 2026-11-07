@@ -25,6 +25,8 @@ import { AnnualWorkCalendarTab } from './components/AnnualWorkCalendarTab';
 import { CasualWorkerAttendanceTab } from './components/CasualWorkerAttendanceTab';
 import { PwaInstallPrompt } from './components/PwaInstallPrompt';
 import { PwaUpdateToast } from './components/PwaUpdateToast';
+import { BiometricDailyReminderModal } from './components/BiometricDailyReminderModal';
+import { BiometricEnrollmentModal } from './components/BiometricEnrollmentModal';
 
 import {
   INITIAL_EMPLOYEES,
@@ -33,7 +35,7 @@ import {
   INITIAL_APPROVALS,
   INITIAL_SALARY_RULES
 } from './data/mockData';
-import { Employee, AttendanceRecord, AttendanceMode, AttendanceStatus, ApprovalItem, Project, SalaryRuleConfig, getEffectiveSystemRole, isHrEmployee, isFinanceEmployee, AuthUser, canAccessProjectModule, isProjectManager, AnnualWorkCalendarConfig } from './types';
+import { Employee, AttendanceRecord, AttendanceMode, AttendanceStatus, ApprovalItem, Project, SalaryRuleConfig, getEffectiveSystemRole, isHrEmployee, isFinanceEmployee, AuthUser, canAccessProjectModule, isProjectManager, AnnualWorkCalendarConfig, BiometricProfile } from './types';
 import { api } from './services/api';
 import { rtcService } from './services/rtcService';
 
@@ -53,7 +55,7 @@ export function App() {
   });
 
   // Auto-invalidation build ID (Membersihkan cache lama saat versi baru dirilis)
-  const APP_BUILD_ID = '20261107_v1_audit_table';
+  const APP_BUILD_ID = '20261107_v2_biometric_daily';
   if (typeof window !== 'undefined') {
     try {
       const savedBuild = localStorage.getItem('prime_hris_build_id');
@@ -136,6 +138,39 @@ export function App() {
     setProfileModalInitialTab(tab);
     setIsProfileModalOpen(true);
   };
+
+  // Biometric Daily Reminder Modal State (1 hari muncul sekali jika belum terdaftar)
+  const [isBiometricReminderOpen, setIsBiometricReminderOpen] = useState<boolean>(false);
+  const [isDirectBiometricEnrollOpen, setIsDirectBiometricEnrollOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!currentUser || impersonatorUser || isKioskPortalActive) return;
+
+    const isEnrolled = Boolean(
+      currentUser.biometric?.isEnrolled &&
+      currentUser.biometric?.samples &&
+      (currentUser.biometric.samples.front || currentUser.biometric.samples.smile)
+    );
+
+    if (isEnrolled) {
+      setIsBiometricReminderOpen(false);
+      return;
+    }
+
+    if (typeof window !== 'undefined') {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const storageKey = `prime_hris_biometric_daily_prompt_${currentUser.id}`;
+      const lastPromptDate = localStorage.getItem(storageKey);
+
+      if (lastPromptDate !== todayStr) {
+        const timer = setTimeout(() => {
+          setIsBiometricReminderOpen(true);
+          localStorage.setItem(storageKey, todayStr);
+        }, 1200);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [currentUser?.id, currentUser?.biometric?.isEnrolled, impersonatorUser, isKioskPortalActive]);
 
   // SQLite Database Sync State
   const [isDbLoading, setIsDbLoading] = useState<boolean>(true);
@@ -1346,6 +1381,18 @@ export function App() {
     }
   };
 
+  const handleSaveDirectBiometric = async (profile: BiometricProfile, updateAvatarAsWell: boolean) => {
+    try {
+      const res = await api.saveBiometricProfile(currentUser.id, profile, updateAvatarAsWell);
+      handleUpdateEmployee(res.employee);
+      setIsDirectBiometricEnrollOpen(false);
+      showLiveToast('Profil biometrik wajah 4-pose berhasil didaftarkan!', 'success');
+    } catch (err: any) {
+      console.error('Failed to save biometric profile:', err);
+      showLiveToast(err?.message || 'Gagal menyimpan profil biometrik', 'warn');
+    }
+  };
+
   const handleDeleteEmployee = async (id: string) => {
     // 1. Optimistic UI update
     setEmployees(prev => prev.filter(e => e.id !== id));
@@ -1886,6 +1933,25 @@ export function App() {
 
       {/* Live OTA PWA Update Prompt */}
       <PwaUpdateToast />
+
+      {/* Himbauan Pengisian Biometrik Wajah 3D (1 Hari Sekali jika Belum Terdaftar) */}
+      <BiometricDailyReminderModal
+        isOpen={isBiometricReminderOpen}
+        onClose={() => setIsBiometricReminderOpen(false)}
+        onOpenEnrollment={() => setIsDirectBiometricEnrollOpen(true)}
+        currentUser={currentUser}
+      />
+
+      {/* Modal Perekaman 4 Pose Biometrik Langsung dari Himbauan */}
+      {isDirectBiometricEnrollOpen && (
+        <BiometricEnrollmentModal
+          isOpen={isDirectBiometricEnrollOpen}
+          onClose={() => setIsDirectBiometricEnrollOpen(false)}
+          targetEmployee={currentUser}
+          onSaveBiometric={handleSaveDirectBiometric}
+          operatorName={currentUser.name}
+        />
+      )}
 
       {/* Floating Real-Time Sync Notification Toast */}
       {liveToast && (
