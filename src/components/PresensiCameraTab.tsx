@@ -1645,6 +1645,38 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
       {/* Permanent Hidden Canvas for Watermark Processing */}
       <canvas ref={canvasRef} className="hidden" />
 
+      {/* Banner Peringatan Biometrik Belum Terdaftar */}
+      {!currentUser.biometric?.isEnrolled && (
+        <div className="glass-card rounded-3xl p-4 sm:p-5 border border-amber-300/80 bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/5 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3.5 motion-fade-in-up">
+          <div className="flex items-start sm:items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/40 text-amber-700 flex items-center justify-center shrink-0">
+              <ShieldAlert className="w-5 h-5 text-[#FF6B00]" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase font-mono-code bg-orange-100 text-[#FF6B00] border border-orange-200">
+                  HIMBAUAN SISTEM
+                </span>
+                <span className="text-xs font-black text-slate-900 font-sans">
+                  Profil Biometrik Wajah 4-Pose Belum Terdaftar
+                </span>
+              </div>
+              <p className="text-[11.5px] text-slate-600 mt-0.5">
+                Daftarkan 4 sudut wajah Anda (Depan, Kanan, Kiri, Senyum) untuk validasi presensi instan anti-titip absen & standar ISO 27001.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsBiometricModalOpen(true)}
+            className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#FF6B00] to-amber-500 hover:from-[#e56000] hover:to-amber-600 text-white text-xs font-black shadow-md shadow-orange-500/20 transition-all cursor-pointer flex items-center justify-center gap-1.5 shrink-0 active:scale-95"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Daftar Biometrik Sekarang (30 Detik)</span>
+          </button>
+        </div>
+      )}
+
       {/* Attendance Action Deck: HANYA 2 Tombol Utama Eksklusif (Absen Masuk & Absen Pulang) */}
       <div className="glass-card rounded-3xl p-4 sm:p-5 border border-slate-200/80 shadow-sm space-y-3.5 motion-fade-in-up">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 pb-2 border-b border-slate-100">

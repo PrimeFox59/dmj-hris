@@ -55,7 +55,7 @@ export function App() {
   });
 
   // Auto-invalidation build ID (Membersihkan cache lama saat versi baru dirilis)
-  const APP_BUILD_ID = '20261107_v2_biometric_daily';
+  const APP_BUILD_ID = '20261107_v3_biometric_all_users';
   if (typeof window !== 'undefined') {
     try {
       const savedBuild = localStorage.getItem('prime_hris_build_id');
@@ -144,12 +144,16 @@ export function App() {
   const [isDirectBiometricEnrollOpen, setIsDirectBiometricEnrollOpen] = useState<boolean>(false);
 
   useEffect(() => {
-    if (!currentUser || impersonatorUser || isKioskPortalActive) return;
+    // Abaikan jika user belum ada, sedang initial checking auth, atau portal kiosk publik aktif
+    if (!currentUser || isAuthChecking || isKioskPortalActive) return;
 
+    // Evaluasi status enrollment biometrik
     const isEnrolled = Boolean(
       currentUser.biometric?.isEnrolled &&
-      currentUser.biometric?.samples &&
-      (currentUser.biometric.samples.front || currentUser.biometric.samples.smile)
+      (
+        (currentUser.biometric?.samples && (currentUser.biometric.samples.front || currentUser.biometric.samples.smile)) ||
+        (typeof currentUser.biometric?.qualityScore === 'number' && currentUser.biometric.qualityScore > 0)
+      )
     );
 
     if (isEnrolled) {
@@ -161,16 +165,39 @@ export function App() {
       const todayStr = new Date().toISOString().slice(0, 10);
       const storageKey = `prime_hris_biometric_daily_prompt_${currentUser.id}`;
       const lastPromptDate = localStorage.getItem(storageKey);
+      const forcePrompt = window.location.search.includes('force_bio_prompt');
 
-      if (lastPromptDate !== todayStr) {
+      if (forcePrompt || lastPromptDate !== todayStr) {
         const timer = setTimeout(() => {
           setIsBiometricReminderOpen(true);
-          localStorage.setItem(storageKey, todayStr);
-        }, 1200);
+        }, 800);
         return () => clearTimeout(timer);
+      } else {
+        setIsBiometricReminderOpen(false);
       }
     }
-  }, [currentUser?.id, currentUser?.biometric?.isEnrolled, impersonatorUser, isKioskPortalActive]);
+  }, [currentUser?.id, currentUser?.biometric?.isEnrolled, isAuthChecking, isKioskPortalActive]);
+
+  const handleDismissBiometricReminder = () => {
+    setIsBiometricReminderOpen(false);
+    if (currentUser?.id && typeof window !== 'undefined') {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      try {
+        localStorage.setItem(`prime_hris_biometric_daily_prompt_${currentUser.id}`, todayStr);
+      } catch (e) {}
+    }
+  };
+
+  const handleOpenDirectEnrollFromReminder = () => {
+    if (currentUser?.id && typeof window !== 'undefined') {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      try {
+        localStorage.setItem(`prime_hris_biometric_daily_prompt_${currentUser.id}`, todayStr);
+      } catch (e) {}
+    }
+    setIsBiometricReminderOpen(false);
+    setIsDirectBiometricEnrollOpen(true);
+  };
 
   // SQLite Database Sync State
   const [isDbLoading, setIsDbLoading] = useState<boolean>(true);
@@ -192,14 +219,19 @@ export function App() {
   // Project Filter state for Payroll
   const [selectedProjectId, setSelectedProjectId] = useState<string>('ALL');
 
-  // Pastikan currentUser selalu terupdate reaktif jika data penugasan proyeknya diubah di tab lain
+  // Pastikan currentUser selalu terupdate reaktif jika data penugasan proyek atau profil biometrik diubah di tab lain
   useEffect(() => {
     const updated = employees.find(e => e.id === currentUser.id);
-    if (updated && updated.assignedProjectId !== currentUser.assignedProjectId) {
-      setCurrentUser(updated);
-      try { localStorage.setItem('prime_hris_current_user', JSON.stringify(updated)); } catch (e) {}
+    if (updated) {
+      const bioChanged = JSON.stringify(updated.biometric) !== JSON.stringify(currentUser.biometric);
+      const projChanged = updated.assignedProjectId !== currentUser.assignedProjectId;
+      const avatarChanged = updated.avatar !== currentUser.avatar;
+      if (bioChanged || projChanged || avatarChanged) {
+        setCurrentUser(updated);
+        try { localStorage.setItem('prime_hris_current_user', JSON.stringify(updated)); } catch (e) {}
+      }
     }
-  }, [employees, currentUser.id, currentUser.assignedProjectId]);
+  }, [employees, currentUser.id, currentUser.assignedProjectId, currentUser.biometric, currentUser.avatar]);
 
   // SubView state for Unified Dashboard (hris, finance, performance)
   const [dashboardSubView, setDashboardSubView] = useState<'hris' | 'finance' | 'performance'>('hris');
@@ -1937,8 +1969,8 @@ export function App() {
       {/* Himbauan Pengisian Biometrik Wajah 3D (1 Hari Sekali jika Belum Terdaftar) */}
       <BiometricDailyReminderModal
         isOpen={isBiometricReminderOpen}
-        onClose={() => setIsBiometricReminderOpen(false)}
-        onOpenEnrollment={() => setIsDirectBiometricEnrollOpen(true)}
+        onClose={handleDismissBiometricReminder}
+        onOpenEnrollment={handleOpenDirectEnrollFromReminder}
         currentUser={currentUser}
       />
 
