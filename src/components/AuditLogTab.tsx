@@ -297,37 +297,34 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
   const totalApprCount = logs.filter(l => l.module === 'APPROVALS').length;
 
   return (
-    <div className="space-y-6 motion-fade-in-up" ref={scrollContainerRef}>
+    <div className="space-y-3 motion-fade-in-up" ref={scrollContainerRef}>
       {/* =========================================================================
-          1. HEADER & EXECUTIVE METRICS STRIP
+          1. COMPACT EXECUTIVE HEADER & SUMMARY METRICS (FIT WITHIN 1 SCREEN)
          ========================================================================= */}
-      <div className="glass-card rounded-3xl p-6 sm:p-7 border border-slate-200/80 shadow-sm relative overflow-hidden bg-gradient-to-r from-white via-slate-50/50 to-white">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
-          <div className="space-y-1.5 max-w-2xl">
+      <div className="glass-card rounded-2xl p-3.5 sm:p-4 border border-slate-200/80 shadow-2xs bg-white/95 space-y-2.5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="space-y-0.5">
             <div className="flex items-center gap-2">
-              <span className="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider font-mono-code bg-gradient-to-r from-[#FF6B00] to-amber-600 text-white shadow-2xs">
-                ISO 27001 & IATF 16949 COMPLIANT
+              <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider font-mono-code bg-[#FF6B00] text-white">
+                ISO 27001 & IATF 16949
               </span>
-              <span className="text-[11px] text-slate-500 font-mono-code flex items-center gap-1">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+              <span className="text-[10px] text-slate-500 font-mono-code flex items-center gap-1">
+                <ShieldCheck className="w-3 h-3 text-emerald-600" />
                 Immutable Audit Trail
               </span>
             </div>
-            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2.5 font-mono-code">
-              <History className="w-6 h-6 text-[#FF6B00]" />
+            <h1 className="text-base sm:text-lg font-black text-slate-900 tracking-tight flex items-center gap-2 font-mono-code">
+              <History className="w-5 h-5 text-[#FF6B00]" />
               Audit Log & Aktivitas Pengguna
             </h1>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Pusat rekonsiliasi seluruh riwayat aktivitas sistem, verifikasi keamanan login, presensi selfie anti-fraud, disposisi approval, hingga perubahan parameter kebijakan SDM.
-            </p>
           </div>
 
           {/* Action Buttons */}
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex items-center gap-2">
             <button
               onClick={fetchInitialLogs}
               disabled={isLoading}
-              className="px-3.5 py-2 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-xs font-bold text-slate-700 flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer disabled:opacity-50"
+              className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-xs font-bold text-slate-700 flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer disabled:opacity-50"
               title="Perbarui log aktivitas terbaru"
             >
               <RefreshCw className={`w-3.5 h-3.5 text-slate-500 ${isLoading ? 'animate-spin text-[#FF6B00]' : ''}`} />
@@ -337,7 +334,7 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
             <button
               onClick={handleExportCsv}
               disabled={logs.length === 0}
-              className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#FF6B00] to-[#FF8533] hover:from-[#e56000] hover:to-[#e5752c] text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-orange-500/25 transition-all cursor-pointer active:scale-95 disabled:opacity-50"
+              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-[#FF6B00] to-[#FF8533] hover:from-[#e56000] hover:to-[#e5752c] text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer active:scale-95 disabled:opacity-50"
             >
               <Download className="w-3.5 h-3.5" />
               <span>Ekspor CSV</span>
@@ -345,53 +342,33 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
           </div>
         </div>
 
-        {/* 4 Quick KPI Summary Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-5 border-t border-slate-200/80">
-          <div className="p-3.5 rounded-2xl bg-orange-50/70 border border-orange-200/70">
-            <span className="text-[10px] font-black uppercase tracking-wider text-[#FF6B00] font-mono-code block">
-              Total Log Tercatat
-            </span>
-            <div className="text-xl sm:text-2xl font-black text-slate-900 font-mono-code mt-0.5">
+        {/* 4 Compact KPI Strip Pills */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-100 font-mono-code">
+          <div className="px-3 py-1 rounded-xl bg-orange-50/70 border border-orange-200/60 flex items-center justify-between">
+            <span className="text-[10px] font-bold text-orange-800">Total Log</span>
+            <span className="text-xs font-black text-slate-900">
               {auditStats ? auditStats.total : totalRows}
-            </div>
-            <span className="text-[10px] text-slate-500 font-mono-code">
-              Dimuat: {logs.length} data
             </span>
           </div>
 
-          <div className="p-3.5 rounded-2xl bg-purple-50/70 border border-purple-200/70">
-            <span className="text-[10px] font-black uppercase tracking-wider text-purple-700 font-mono-code block">
-              Sesi Auth & Login
-            </span>
-            <div className="text-xl sm:text-2xl font-black text-purple-950 font-mono-code mt-0.5">
+          <div className="px-3 py-1 rounded-xl bg-purple-50/70 border border-purple-200/60 flex items-center justify-between">
+            <span className="text-[10px] font-bold text-purple-800">Sesi Auth</span>
+            <span className="text-xs font-black text-purple-950">
               {auditStats ? auditStats.auth : totalAuthCount}
-            </div>
-            <span className="text-[10px] text-purple-600 font-mono-code">
-              Zero-Trust Gate
             </span>
           </div>
 
-          <div className="p-3.5 rounded-2xl bg-blue-50/70 border border-blue-200/70">
-            <span className="text-[10px] font-black uppercase tracking-wider text-blue-700 font-mono-code block">
-              Presensi & Geofence
-            </span>
-            <div className="text-xl sm:text-2xl font-black text-blue-950 font-mono-code mt-0.5">
+          <div className="px-3 py-1 rounded-xl bg-blue-50/70 border border-blue-200/60 flex items-center justify-between">
+            <span className="text-[10px] font-bold text-blue-800">Presensi</span>
+            <span className="text-xs font-black text-blue-950">
               {auditStats ? auditStats.attendance : totalAttCount}
-            </div>
-            <span className="text-[10px] text-blue-600 font-mono-code">
-              Audit Watermark
             </span>
           </div>
 
-          <div className="p-3.5 rounded-2xl bg-emerald-50/70 border border-emerald-200/70">
-            <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 font-mono-code block">
-              Disposisi Approval
-            </span>
-            <div className="text-xl sm:text-2xl font-black text-emerald-950 font-mono-code mt-0.5">
+          <div className="px-3 py-1 rounded-xl bg-emerald-50/70 border border-emerald-200/60 flex items-center justify-between">
+            <span className="text-[10px] font-bold text-emerald-800">Approval</span>
+            <span className="text-xs font-black text-emerald-950">
               {auditStats ? auditStats.approvals : totalApprCount}
-            </div>
-            <span className="text-[10px] text-emerald-700 font-mono-code">
-              Cuti & Dispensasi
             </span>
           </div>
         </div>
@@ -400,22 +377,22 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
       {/* =========================================================================
           2. FILTER & SEARCH CONTROL BAR
          ========================================================================= */}
-      <div className="glass-card rounded-2xl p-4 border border-slate-200/80 shadow-2xs space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="glass-card rounded-2xl p-3 sm:p-3.5 border border-slate-200/80 shadow-2xs space-y-2 bg-white/95">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
           {/* Search Box */}
           <div className="relative">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
             <input
               type="text"
               placeholder="Cari ID login, user, aksi, modul, IP..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/30 transition-all"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8.5 pr-8 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/30 transition-all"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"
+                className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -427,7 +404,7 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
             <select
               value={selectedModule}
               onChange={e => setSelectedModule(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/30 cursor-pointer font-medium"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/30 cursor-pointer font-medium"
             >
               <option value="ALL">📁 Semua Modul Sistem</option>
               <option value="AUTH">🔐 Auth & Keamanan Akun</option>
@@ -446,7 +423,7 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
             <select
               value={selectedRole}
               onChange={e => setSelectedRole(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/30 cursor-pointer font-medium"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/30 cursor-pointer font-medium"
             >
               <option value="ALL">👤 Semua Hak Akses / Role</option>
               <option value="superuser">⚡ Superuser (Direksi / Lead)</option>
@@ -461,7 +438,7 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
             <select
               value={selectedStatus}
               onChange={e => setSelectedStatus(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/30 cursor-pointer font-medium"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/30 cursor-pointer font-medium"
             >
               <option value="ALL">✨ Semua Status Event</option>
               <option value="SUCCESS">✅ Berhasil (Success)</option>
@@ -472,7 +449,7 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
         </div>
 
         {/* Date Range Filter Bar */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pt-2 border-t border-slate-100">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2 pt-1.5 border-t border-slate-100">
           <div className="flex items-center gap-2 flex-wrap text-xs">
             <span className="font-bold text-slate-700 flex items-center gap-1 font-mono-code text-[11px]">
               <Calendar className="w-3.5 h-3.5 text-[#FF6B00]" />
@@ -486,7 +463,7 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
                   setAuditStartDate(e.target.value);
                   setAuditDatePreset('ALL');
                 }}
-                className="px-2.5 py-1 rounded-xl bg-slate-50 border border-slate-200 text-xs font-mono-code text-slate-800 shadow-2xs focus:ring-1 focus:ring-[#FF6B00]"
+                className="px-2 py-1 rounded-lg bg-slate-50 border border-slate-200 text-xs font-mono-code text-slate-800 shadow-2xs focus:ring-1 focus:ring-[#FF6B00]"
                 title="Tanggal Mulai"
               />
               <span className="text-slate-400 text-xs font-mono-code">s/d</span>
@@ -497,7 +474,7 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
                   setAuditEndDate(e.target.value);
                   setAuditDatePreset('ALL');
                 }}
-                className="px-2.5 py-1 rounded-xl bg-slate-50 border border-slate-200 text-xs font-mono-code text-slate-800 shadow-2xs focus:ring-1 focus:ring-[#FF6B00]"
+                className="px-2 py-1 rounded-lg bg-slate-50 border border-slate-200 text-xs font-mono-code text-slate-800 shadow-2xs focus:ring-1 focus:ring-[#FF6B00]"
                 title="Tanggal Akhir"
               />
             </div>
@@ -505,7 +482,7 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
               <button
                 type="button"
                 onClick={() => applyAuditPreset('ALL')}
-                className="px-2.5 py-1 rounded-xl text-[11px] font-bold text-rose-600 hover:bg-rose-50 border border-rose-200/60 transition-colors cursor-pointer"
+                className="px-2 py-0.5 rounded-lg text-[10px] font-bold text-rose-600 hover:bg-rose-50 border border-rose-200/60 transition-colors cursor-pointer"
               >
                 Reset
               </button>
@@ -523,7 +500,7 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
                 key={p.id}
                 type="button"
                 onClick={() => applyAuditPreset(p.id as any)}
-                className={`px-2.5 py-1 rounded-xl text-[11px] font-bold font-mono-code transition-all cursor-pointer ${
+                className={`px-2.5 py-1 rounded-lg text-[10.5px] font-bold font-mono-code transition-all cursor-pointer ${
                   auditDatePreset === p.id && (!auditStartDate || p.id !== 'ALL')
                     ? 'bg-slate-900 text-white shadow-2xs'
                     : 'bg-white hover:bg-slate-100 text-slate-600 border border-slate-200/80'
@@ -536,7 +513,7 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
         </div>
 
         {/* Live Active Filter Bar & Results Count */}
-        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-[11px] text-slate-500">
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-slate-100 text-[11px] text-slate-500">
           <div className="flex items-center gap-2">
             <span className="font-semibold text-slate-700">
               Menampilkan {logs.length} dari {totalRows} rekaman
@@ -554,126 +531,176 @@ export const AuditLogTab: React.FC<AuditLogTabProps> = ({
       </div>
 
       {/* =========================================================================
-          3. LOG ACTIVITIES LIST (INFINITE SCROLL CONTAINER)
+          3. COMPACT AUDIT LOG TABLE (FIT WITHIN 1 SCREENSHOT, NO HORIZONTAL SCROLL)
          ========================================================================= */}
-      <div className="space-y-2.5">
-        {isLoading && logs.length === 0 ? (
-          <div className="p-12 rounded-3xl glass-card text-center space-y-3 border border-slate-200">
-            <RefreshCw className="w-8 h-8 text-[#FF6B00] animate-spin mx-auto" />
-            <p className="text-sm font-bold text-slate-800">Memuat audit log aktivitas...</p>
-            <p className="text-xs text-slate-500">Menghubungkan ke tabel audit_logs basis data SQLite...</p>
-          </div>
-        ) : logs.length === 0 ? (
-          <div className="p-12 rounded-3xl glass-card text-center space-y-3 border border-slate-200">
-            <History className="w-8 h-8 text-slate-300 mx-auto" />
-            <p className="text-sm font-bold text-slate-800">Tidak ada audit log yang sesuai filter</p>
-            <p className="text-xs text-slate-500">Coba ubah kata kunci pencarian atau reset filter di atas.</p>
-            <button
-              onClick={() => {
-                setSearchQuery('');
-                setSelectedModule('ALL');
-                setSelectedRole('ALL');
-                setSelectedStatus('ALL');
-              }}
-              className="px-4 py-2 rounded-xl bg-orange-50 text-[#FF6B00] text-xs font-bold hover:bg-orange-100 transition-all cursor-pointer"
-            >
-              Reset Semua Filter
-            </button>
-          </div>
-        ) : (
-          logs.map((log, index) => (
-            <div
-              key={`${log.id}-${index}`}
-              onClick={() => setSelectedLog(log)}
-              className="group glass-card rounded-2xl p-4 sm:p-4.5 border border-slate-200/80 hover:border-orange-300 hover:shadow-md transition-all duration-150 flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer card-interactive bg-white/90"
-            >
-              {/* Left Column: Timestamp, Avatar, User, Module */}
-              <div className="flex items-start sm:items-center gap-3.5 min-w-0 flex-1">
-                {/* User Avatar or Initial */}
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-slate-100 to-slate-200 border border-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs shrink-0 group-hover:scale-105 transition-transform shadow-2xs">
-                  {log.userName ? log.userName.charAt(0).toUpperCase() : 'U'}
-                </div>
+      <div className="glass-card rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden bg-white/95">
+        <div className="w-full overflow-x-hidden">
+          <table className="w-full text-left text-xs table-fixed border-collapse">
+            <thead>
+              <tr className="bg-slate-50/90 border-b border-slate-200/80 text-slate-500 uppercase tracking-wider text-[10px] font-mono-code select-none">
+                <th className="py-2.5 px-3 w-[130px]">Waktu (WIB)</th>
+                <th className="py-2.5 px-3 w-[185px]">Pengguna</th>
+                <th className="py-2.5 px-3 w-[165px]">Modul & Aksi</th>
+                <th className="py-2.5 px-3">Deskripsi Aktivitas</th>
+                <th className="py-2.5 px-3 w-[120px]">Alamat IP</th>
+                <th className="py-2.5 px-3 w-[95px]">Status</th>
+                <th className="py-2.5 px-2 w-[42px] text-center">Aksi</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {isLoading && logs.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-12 text-center">
+                    <RefreshCw className="w-6 h-6 text-[#FF6B00] animate-spin mx-auto mb-2" />
+                    <p className="text-xs font-bold text-slate-800">Memuat audit log aktivitas...</p>
+                    <p className="text-[11px] text-slate-400 font-mono-code mt-0.5">Menghubungkan ke basis data SQLite WAL...</p>
+                  </td>
+                </tr>
+              ) : logs.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-12 text-center">
+                    <History className="w-7 h-7 text-slate-300 mx-auto mb-2" />
+                    <p className="text-xs font-bold text-slate-800">Tidak ada audit log yang sesuai filter</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">Coba ubah kata kunci pencarian atau reset filter di atas.</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchQuery('');
+                        setSelectedModule('ALL');
+                        setSelectedRole('ALL');
+                        setSelectedStatus('ALL');
+                        applyAuditPreset('ALL');
+                      }}
+                      className="mt-2.5 px-3 py-1.5 rounded-xl bg-orange-50 text-[#FF6B00] text-xs font-bold hover:bg-orange-100 transition-all cursor-pointer"
+                    >
+                      Reset Semua Filter
+                    </button>
+                  </td>
+                </tr>
+              ) : (
+                logs.map((log, index) => {
+                  const timeParts = (log.timestamp || '').split(' ');
+                  const dateStr = timeParts[0] || '';
+                  const timeStr = timeParts[1] || '';
 
-                {/* Details & Info */}
-                <div className="space-y-1 min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-black text-slate-900 group-hover:text-[#FF6B00] transition-colors">
-                      {log.userName}
-                    </span>
-                    {log.userNik && (
-                      <span className="text-[10px] font-mono-code font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
-                        {log.userNik}
-                      </span>
-                    )}
-                    <span className="text-[10px] font-mono-code uppercase text-slate-400 font-semibold">
-                      [{log.userRole}]
-                    </span>
-                    {getModuleBadge(log.module)}
-                    <span className="text-[10px] font-mono-code font-extrabold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">
-                      {log.action}
-                    </span>
-                  </div>
+                  return (
+                    <tr
+                      key={`${log.id}-${index}`}
+                      onClick={() => setSelectedLog(log)}
+                      className="hover:bg-orange-50/40 transition-colors cursor-pointer group h-[38px] sm:h-[40px]"
+                    >
+                      {/* 1. Waktu */}
+                      <td className="py-2 px-3 align-middle font-mono-code">
+                        <div className="text-[11px] font-bold text-slate-800 leading-tight">
+                          {dateStr}
+                        </div>
+                        <div className="text-[10px] text-slate-400 flex items-center gap-1 leading-none mt-0.5">
+                          <Clock className="w-2.5 h-2.5 text-slate-400 shrink-0" />
+                          <span>{timeStr}</span>
+                        </div>
+                      </td>
 
-                  <p className="text-xs text-slate-700 leading-snug line-clamp-2 md:line-clamp-1">
-                    {log.details}
-                  </p>
+                      {/* 2. Pengguna & Role */}
+                      <td className="py-2 px-3 align-middle">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-slate-100 to-slate-200 border border-slate-200 text-slate-700 flex items-center justify-center font-bold text-[10px] shrink-0 group-hover:scale-105 transition-transform shadow-2xs">
+                            {log.userName ? log.userName.charAt(0).toUpperCase() : 'U'}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-[11.5px] font-bold text-slate-900 group-hover:text-[#FF6B00] transition-colors truncate leading-tight">
+                              {log.userName}
+                            </div>
+                            <div className="flex items-center gap-1 text-[9.5px] font-mono-code text-slate-400 leading-none mt-0.5">
+                              {log.userNik && (
+                                <span className="bg-slate-100 text-slate-600 px-1 rounded font-semibold">
+                                  {log.userNik}
+                                </span>
+                              )}
+                              <span className="uppercase text-slate-400">
+                                [{log.userRole}]
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
 
-                  <div className="flex flex-wrap items-center gap-3 text-[10.5px] text-slate-400 font-mono-code">
-                    <span className="flex items-center gap-1 text-slate-500">
-                      <Clock className="w-3 h-3 text-slate-400" />
-                      {log.timestamp}
-                    </span>
-                    {log.ipAddress && (
-                      <span className="flex items-center gap-1 text-slate-500">
-                        <ShieldCheck className="w-3 h-3 text-slate-400" />
-                        {log.ipAddress}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
+                      {/* 3. Modul & Aksi */}
+                      <td className="py-2 px-3 align-middle">
+                        <div className="flex flex-col gap-0.5 items-start">
+                          {getModuleBadge(log.module)}
+                          <span className="text-[9.5px] font-mono-code font-bold text-slate-700 bg-slate-100 px-1 py-0.2 rounded truncate max-w-full">
+                            {log.action}
+                          </span>
+                        </div>
+                      </td>
 
-              {/* Right Column: Status Badge, Quick Actions */}
-              <div className="flex items-center justify-between md:justify-end gap-3 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
-                {getStatusBadge(log.status)}
-                <div className="w-7 h-7 rounded-lg bg-slate-50 group-hover:bg-orange-50 text-slate-400 group-hover:text-[#FF6B00] flex items-center justify-center transition-colors">
-                  <Eye className="w-3.5 h-3.5" />
-                </div>
-              </div>
-            </div>
-          ))
-        )}
+                      {/* 4. Deskripsi Aktivitas (Flexible width, no horizontal overflow) */}
+                      <td className="py-2 px-3 align-middle">
+                        <p className="text-xs text-slate-700 truncate leading-snug" title={log.details}>
+                          {log.details}
+                        </p>
+                      </td>
+
+                      {/* 5. Alamat IP */}
+                      <td className="py-2 px-3 align-middle font-mono-code text-[10.5px] text-slate-600">
+                        <div className="flex items-center gap-1">
+                          <ShieldCheck className="w-3 h-3 text-slate-400 shrink-0" />
+                          <span className="truncate">{log.ipAddress || '-'}</span>
+                        </div>
+                      </td>
+
+                      {/* 6. Status */}
+                      <td className="py-2 px-3 align-middle">
+                        {getStatusBadge(log.status)}
+                      </td>
+
+                      {/* 7. Aksi (Eye detail) */}
+                      <td className="py-2 px-2 align-middle text-center">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedLog(log);
+                          }}
+                          className="w-6 h-6 rounded-md bg-slate-50 group-hover:bg-orange-100 text-slate-400 group-hover:text-[#FF6B00] inline-flex items-center justify-center transition-colors cursor-pointer"
+                          title="Lihat rincian log"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
 
         {/* =========================================================================
-            4. INFINITE SCROLL SENTINEL & LOADING STATE
+            4. AUTOLOAD SENTINEL & BOTTOM STATUS (10 ROWS / SCROLL)
            ========================================================================= */}
-        <div ref={sentinelRef} className="py-4 text-center">
+        <div ref={sentinelRef} className="py-2 px-4 text-center bg-slate-50/70 border-t border-slate-100 select-none">
           {isLoadingMore && (
-            <div className="inline-flex items-center gap-2.5 px-5 py-2.5 rounded-2xl bg-white border border-orange-200 shadow-md text-xs font-bold text-orange-700 animate-pulse">
-              <RefreshCw className="w-4 h-4 animate-spin text-[#FF6B00]" />
-              <span>Memuat 10 log aktivitas berikutnya...</span>
+            <div className="inline-flex items-center gap-2 py-1 px-3 rounded-full bg-white border border-orange-200 text-xs font-bold text-orange-700 shadow-2xs animate-pulse">
+              <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#FF6B00]" />
+              <span>Memuat 10 rekaman aktivitas berikutnya...</span>
             </div>
           )}
 
           {!hasMore && logs.length > 0 && !isLoading && (
-            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 text-center space-y-1">
-              <p className="text-xs font-bold text-slate-700 flex items-center justify-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                Semua data audit log telah dimuat
-              </p>
-              <p className="text-[11px] text-slate-500">
-                Total {totalRows} rekaman aktivitas berhasil disinkronkan secara lengkap.
-              </p>
+            <div className="text-[11px] text-slate-500 font-mono-code flex items-center justify-center gap-1.5 py-0.5">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Seluruh {totalRows} rekaman aktivitas telah dimuat lengkap</span>
             </div>
           )}
 
-          {/* Manual Load More Button as Fallback option */}
           {hasMore && !isLoading && !isLoadingMore && (
             <button
+              type="button"
               onClick={loadMoreLogs}
-              className="mt-2 px-4 py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-xs font-bold text-slate-700 hover:text-[#FF6B00] transition-all cursor-pointer shadow-2xs"
+              className="px-3 py-1 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-[11px] font-bold text-slate-600 hover:text-[#FF6B00] transition-colors cursor-pointer shadow-2xs font-mono-code"
             >
-              ⬇️ Muat 10 Log Berikutnya Secara Manual
+              ⬇️ Muat 10 Rekaman Berikutnya
             </button>
           )}
         </div>
