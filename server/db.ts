@@ -736,7 +736,7 @@ export function saveAttendance(record: AttendanceRecord): {
     id: existingRow ? existingRow.id : record.id,
     checkInLocation: isCheckIn
       ? (record.checkInLocation || record.location || prevData.checkInLocation || prevData.location)
-      : (prevData.checkInLocation || prevData.location || record.checkInLocation),
+      : (prevData.checkInLocation || (prevData.attendanceType === 'CHECK_IN' ? prevData.location : undefined) || record.checkInLocation),
     checkOutLocation: !isCheckIn
       ? (record.checkOutLocation || record.location || prevData.checkOutLocation)
       : (prevData.checkOutLocation || null),

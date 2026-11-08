@@ -1817,28 +1817,48 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
 
               // 1. Lokasi & Geofence Aktual sesuai sesi Masuk vs Pulang
               const activeLocation = isMasuk
-                ? (selectedPhotoItem.checkInLocation || selectedPhotoItem.location)
-                : (selectedPhotoItem.checkOutLocation || (selectedPhotoItem.attendanceType === 'CHECK_OUT' ? selectedPhotoItem.location : selectedPhotoItem.location));
+                ? (selectedPhotoItem.checkInLocation || (
+                    selectedPhotoItem.checkOutLocation && selectedPhotoItem.location &&
+                    selectedPhotoItem.location.lat === selectedPhotoItem.checkOutLocation.lat &&
+                    selectedPhotoItem.location.lng === selectedPhotoItem.checkOutLocation.lng
+                      ? undefined
+                      : selectedPhotoItem.location
+                  ))
+                : (selectedPhotoItem.checkOutLocation || selectedPhotoItem.location);
 
               // 2. Biometrik Aktual sesuai sesi Masuk vs Pulang
               const activeBiometric = isMasuk
-                ? (selectedPhotoItem.checkInBiometric || selectedPhotoItem.biometricVerification)
-                : (selectedPhotoItem.checkOutBiometric || (selectedPhotoItem.attendanceType === 'CHECK_OUT' ? selectedPhotoItem.biometricVerification : selectedPhotoItem.biometricVerification));
+                ? (selectedPhotoItem.checkInBiometric || (
+                    selectedPhotoItem.biometricVerification
+                      ? {
+                          ...selectedPhotoItem.biometricVerification,
+                          details: selectedPhotoItem.biometricVerification.details?.replace(/saat presensi pulang/gi, 'saat presensi masuk') || 'Biometrik terverifikasi valid saat presensi masuk'
+                        }
+                      : undefined
+                  ))
+                : (selectedPhotoItem.checkOutBiometric || (
+                    selectedPhotoItem.biometricVerification
+                      ? {
+                          ...selectedPhotoItem.biometricVerification,
+                          details: selectedPhotoItem.biometricVerification.details?.replace(/saat presensi masuk/gi, 'saat presensi pulang') || 'Biometrik terverifikasi valid saat presensi pulang'
+                        }
+                      : undefined
+                  ));
 
               // 3. Catatan Presensi Aktual sesuai sesi Masuk vs Pulang
               let activeNote = '-';
               if (isMasuk) {
                 activeNote = selectedPhotoItem.checkInNote || (
-                  selectedPhotoItem.checkInTime && !selectedPhotoItem.note?.toLowerCase().includes('hanya absen pulang')
+                  selectedPhotoItem.checkInTime && !selectedPhotoItem.note?.toLowerCase().includes('hanya absen pulang') && !selectedPhotoItem.note?.toLowerCase().includes('pulang lebih awal')
                     ? selectedPhotoItem.note
                     : '-'
                 ) || '-';
               } else {
                 if (selectedPhotoItem.checkOutNote) {
                   activeNote = selectedPhotoItem.checkOutNote;
-                } else if (selectedPhotoItem.isEarlyCheckOut && selectedPhotoItem.earlyCheckOutReason) {
-                  activeNote = `[Pulang Lebih Awal ${selectedPhotoItem.earlyCheckOutMinutes ? selectedPhotoItem.earlyCheckOutMinutes + ' Mnt' : ''}]: ${selectedPhotoItem.earlyCheckOutReason}`;
-                } else if (selectedPhotoItem.attendanceType === 'CHECK_OUT' && selectedPhotoItem.note) {
+                } else if (selectedPhotoItem.isEarlyCheckOut && selectedPhotoItem.earlyCheckOutMinutes && selectedPhotoItem.earlyCheckOutMinutes < 720) {
+                  activeNote = `[Pulang Lebih Awal ${selectedPhotoItem.earlyCheckOutMinutes} Mnt]: ${selectedPhotoItem.earlyCheckOutReason || 'Izin pulang lebih awal'}`;
+                } else if (selectedPhotoItem.attendanceType === 'CHECK_OUT' && selectedPhotoItem.note && !selectedPhotoItem.note.toLowerCase().includes('pulang lebih awal 1020')) {
                   activeNote = selectedPhotoItem.note;
                 } else if (selectedPhotoItem.checkOutLocation && !selectedPhotoItem.checkOutLocation.inGeofence) {
                   const outDist = selectedPhotoItem.checkOutLocation.distanceMeters ? `${Math.round(selectedPhotoItem.checkOutLocation.distanceMeters)}m` : '';

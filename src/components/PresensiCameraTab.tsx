@@ -1449,13 +1449,17 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
     let effectiveIsEarlyOut = false;
     let effectiveEarlyMinutes = 0;
     if (!isCheckIn && finalCheckOutTime) {
-      const [outH, outM] = finalCheckOutTime.split(':').map(Number);
-      const [schedOutH, schedOutM] = (userSchedule.checkOutTime || '17:00').split(':').map(Number);
+      const normalizedOut = finalCheckOutTime.replace(/\./g, ':');
+      const [outH, outM] = normalizedOut.split(':').map(Number);
+      const [schedOutH, schedOutM] = (userSchedule.checkOutTime || '17:00').replace(/\./g, ':').split(':').map(Number);
       const outMins = (outH || 0) * 60 + (outM || 0);
       const schedOutMins = (schedOutH || 0) * 60 + (schedOutM || 0);
-      if (outMins < schedOutMins) {
+      if (!isNaN(outH) && outMins < schedOutMins) {
         effectiveIsEarlyOut = true;
         effectiveEarlyMinutes = schedOutMins - outMins;
+      } else {
+        effectiveIsEarlyOut = false;
+        effectiveEarlyMinutes = 0;
       }
     }
 
@@ -2542,28 +2546,48 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
 
               // 1. Lokasi & Geofence Aktual sesuai sesi Masuk vs Pulang
               const activeLocation = isMasuk
-                ? (selectedHistoryItem.checkInLocation || selectedHistoryItem.location)
-                : (selectedHistoryItem.checkOutLocation || (selectedHistoryItem.attendanceType === 'CHECK_OUT' ? selectedHistoryItem.location : selectedHistoryItem.location));
+                ? (selectedHistoryItem.checkInLocation || (
+                    selectedHistoryItem.checkOutLocation && selectedHistoryItem.location &&
+                    selectedHistoryItem.location.lat === selectedHistoryItem.checkOutLocation.lat &&
+                    selectedHistoryItem.location.lng === selectedHistoryItem.checkOutLocation.lng
+                      ? undefined
+                      : selectedHistoryItem.location
+                  ))
+                : (selectedHistoryItem.checkOutLocation || selectedHistoryItem.location);
 
               // 2. Biometrik Aktual sesuai sesi Masuk vs Pulang
               const activeBiometric = isMasuk
-                ? (selectedHistoryItem.checkInBiometric || selectedHistoryItem.biometricVerification)
-                : (selectedHistoryItem.checkOutBiometric || (selectedHistoryItem.attendanceType === 'CHECK_OUT' ? selectedHistoryItem.biometricVerification : selectedHistoryItem.biometricVerification));
+                ? (selectedHistoryItem.checkInBiometric || (
+                    selectedHistoryItem.biometricVerification
+                      ? {
+                          ...selectedHistoryItem.biometricVerification,
+                          details: selectedHistoryItem.biometricVerification.details?.replace(/saat presensi pulang/gi, 'saat presensi masuk') || 'Biometrik terverifikasi valid saat presensi masuk'
+                        }
+                      : undefined
+                  ))
+                : (selectedHistoryItem.checkOutBiometric || (
+                    selectedHistoryItem.biometricVerification
+                      ? {
+                          ...selectedHistoryItem.biometricVerification,
+                          details: selectedHistoryItem.biometricVerification.details?.replace(/saat presensi masuk/gi, 'saat presensi pulang') || 'Biometrik terverifikasi valid saat presensi pulang'
+                        }
+                      : undefined
+                  ));
 
               // 3. Catatan Presensi Aktual sesuai sesi Masuk vs Pulang
               let activeNote = '-';
               if (isMasuk) {
                 activeNote = selectedHistoryItem.checkInNote || (
-                  selectedHistoryItem.checkInTime && !selectedHistoryItem.note?.toLowerCase().includes('hanya absen pulang')
+                  selectedHistoryItem.checkInTime && !selectedHistoryItem.note?.toLowerCase().includes('hanya absen pulang') && !selectedHistoryItem.note?.toLowerCase().includes('pulang lebih awal')
                     ? selectedHistoryItem.note
                     : '-'
                 ) || '-';
               } else {
                 if (selectedHistoryItem.checkOutNote) {
                   activeNote = selectedHistoryItem.checkOutNote;
-                } else if (selectedHistoryItem.isEarlyCheckOut && selectedHistoryItem.earlyCheckOutReason) {
-                  activeNote = `[Pulang Lebih Awal ${selectedHistoryItem.earlyCheckOutMinutes ? selectedHistoryItem.earlyCheckOutMinutes + ' Mnt' : ''}]: ${selectedHistoryItem.earlyCheckOutReason}`;
-                } else if (selectedHistoryItem.attendanceType === 'CHECK_OUT' && selectedHistoryItem.note) {
+                } else if (selectedHistoryItem.isEarlyCheckOut && selectedHistoryItem.earlyCheckOutMinutes && selectedHistoryItem.earlyCheckOutMinutes < 720) {
+                  activeNote = `[Pulang Lebih Awal ${selectedHistoryItem.earlyCheckOutMinutes} Mnt]: ${selectedHistoryItem.earlyCheckOutReason || 'Izin pulang lebih awal'}`;
+                } else if (selectedHistoryItem.attendanceType === 'CHECK_OUT' && selectedHistoryItem.note && !selectedHistoryItem.note.toLowerCase().includes('pulang lebih awal 1020')) {
                   activeNote = selectedHistoryItem.note;
                 } else if (selectedHistoryItem.checkOutLocation && !selectedHistoryItem.checkOutLocation.inGeofence) {
                   const outDist = selectedHistoryItem.checkOutLocation.distanceMeters ? `${Math.round(selectedHistoryItem.checkOutLocation.distanceMeters)}m` : '';

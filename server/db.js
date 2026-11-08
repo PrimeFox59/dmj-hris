@@ -1161,14 +1161,14 @@ export function saveAttendance(record) {
     finalCheckOut = (record.checkOutTime || record.checkInTime || '').replace(/\./g, ':') || null;
 
     // Evaluasi Pulang Lebih Awal (sebelum jam selesai operasional proyek / kantor)
-    const [outH, outM] = (finalCheckOut || '').split(':').map(Number);
-    const [schedOutH, schedOutM] = (sched.checkOutTime || '17:00').split(':').map(Number);
+    const [outH, outM] = (finalCheckOut || '').replace(/\./g, ':').split(':').map(Number);
+    const [schedOutH, schedOutM] = (sched.checkOutTime || '17:00').replace(/\./g, ':').split(':').map(Number);
     const outMins = (outH || 0) * 60 + (outM || 0);
     const schedOutMins = (schedOutH || 0) * 60 + (schedOutM || 0);
 
-    let isEarlyOut = Boolean(record.isEarlyCheckOut);
-    let earlyOutMins = record.earlyCheckOutMinutes || 0;
-    if (finalCheckOut && outMins < schedOutMins) {
+    let isEarlyOut = false;
+    let earlyOutMins = 0;
+    if (finalCheckOut && !isNaN(outH) && outMins < schedOutMins) {
       isEarlyOut = true;
       earlyOutMins = Math.max(1, schedOutMins - outMins);
     }
@@ -1212,7 +1212,7 @@ export function saveAttendance(record) {
       lateReason: finalLateReason,
       isEarlyCheckOut: isEarlyOut,
       earlyCheckOutMinutes: earlyOutMins,
-      earlyCheckOutReason: record.earlyCheckOutReason || record.note || prevData.earlyCheckOutReason || 'Izin pulang lebih awal sebelum jam selesai kerja',
+      earlyCheckOutReason: isEarlyOut ? (record.earlyCheckOutReason || record.note || prevData.earlyCheckOutReason || 'Izin pulang lebih awal sebelum jam selesai kerja') : null,
       scheduledCheckOutTime: sched.checkOutTime || '17:00',
       approvalStatus: finalApprovalStatus,
       photoUrl: checkInPhoto || null,
