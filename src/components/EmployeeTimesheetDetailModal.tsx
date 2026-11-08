@@ -56,8 +56,13 @@ interface DailyTimesheetItem {
   photoInUrl?: string;
   photoOutUrl?: string;
   locationText: string;
+  locationOutText?: string;
   inGeofence: boolean;
+  inGeofenceOut?: boolean;
   distanceMeters: number;
+  distanceMetersOut?: number;
+  matchScoreIn?: number;
+  matchScoreOut?: number;
   isHrCorrected: boolean;
   hrCorrectionNotes?: string;
   hrCorrectedBy?: string;
@@ -783,7 +788,7 @@ export const EmployeeTimesheetDetailModal: React.FC<EmployeeTimesheetDetailModal
                                     location: item.locationText,
                                     inGeofence: item.inGeofence,
                                     distanceMeters: item.distanceMeters,
-                                    matchScore: 98.4
+                                    matchScore: item.matchScoreIn || 98.4
                                   })}
                                   className="group relative inline-block rounded-xl overflow-hidden border border-slate-200 hover:border-[#FF6B00] shadow-2xs transition-all cursor-pointer"
                                   title="Klik untuk Zoom & Verifikasi Foto Wajah Masuk"
@@ -813,10 +818,10 @@ export const EmployeeTimesheetDetailModal: React.FC<EmployeeTimesheetDetailModal
                                     time: item.checkOutTime,
                                     employeeName: employee.name,
                                     employeeNik: employee.nik,
-                                    location: item.locationText,
-                                    inGeofence: item.inGeofence,
-                                    distanceMeters: item.distanceMeters,
-                                    matchScore: 97.9
+                                    location: item.locationOutText || item.locationText,
+                                    inGeofence: item.inGeofenceOut ?? item.inGeofence,
+                                    distanceMeters: item.distanceMetersOut ?? item.distanceMeters,
+                                    matchScore: item.matchScoreOut || 97.9
                                   })}
                                   className="group relative inline-block rounded-xl overflow-hidden border border-slate-200 hover:border-[#FF6B00] shadow-2xs transition-all cursor-pointer"
                                   title="Klik untuk Zoom & Verifikasi Foto Wajah Pulang"

@@ -983,7 +983,16 @@ export function App() {
   const handleAttendanceSubmit = async (record: AttendanceRecord) => {
     setAttendances(prev => {
       const existing = prev.find(a => a.id === record.id || (a.employeeId === record.employeeId && a.date === record.date));
-      const merged = existing ? { ...existing, ...record } : record;
+      const merged = existing ? {
+        ...existing,
+        ...record,
+        checkInLocation: record.checkInLocation || existing.checkInLocation || existing.location,
+        checkOutLocation: record.checkOutLocation || existing.checkOutLocation,
+        checkInNote: record.checkInNote || existing.checkInNote || (existing.attendanceType === 'CHECK_IN' ? existing.note : undefined),
+        checkOutNote: record.checkOutNote || existing.checkOutNote || (record.attendanceType === 'CHECK_OUT' ? record.note : undefined),
+        checkInBiometric: record.checkInBiometric || existing.checkInBiometric || existing.biometricVerification,
+        checkOutBiometric: record.checkOutBiometric || existing.checkOutBiometric || (record.attendanceType === 'CHECK_OUT' ? record.biometricVerification : undefined)
+      } : record;
       const rest = prev.filter(a => a.id !== merged.id && !(a.employeeId === merged.employeeId && a.date === merged.date));
       return [merged, ...rest];
     });

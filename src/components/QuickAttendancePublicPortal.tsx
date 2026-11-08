@@ -702,6 +702,22 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
           inGeofence: isInsideRadius,
           distanceMeters: currentDistanceMeters
         },
+        checkInLocation: isClockIn ? {
+          lat: gpsLocation.lat,
+          lng: gpsLocation.lng,
+          accuracy: gpsLocation.accuracy,
+          address: gpsLocation.address,
+          inGeofence: isInsideRadius,
+          distanceMeters: currentDistanceMeters
+        } : (existingToday?.checkInLocation || existingToday?.location),
+        checkOutLocation: !isClockIn ? {
+          lat: gpsLocation.lat,
+          lng: gpsLocation.lng,
+          accuracy: gpsLocation.accuracy,
+          address: gpsLocation.address,
+          inGeofence: isInsideRadius,
+          distanceMeters: currentDistanceMeters
+        } : existingToday?.checkOutLocation,
         isLate,
         lateMinutes,
         isEarlyCheckOut,
@@ -714,13 +730,37 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
           : isEarlyCheckOut
           ? `[Pulang Lebih Awal ${earlyCheckOutMinutes} Mnt]: Memerlukan Approval PKM & HR`
           : (customNote.trim() || defaultNote),
+        checkInNote: isClockIn
+          ? (customNote.trim() || defaultNote)
+          : (existingToday?.checkInNote || (existingToday?.attendanceType === 'CHECK_IN' ? existingToday.note : undefined)),
+        checkOutNote: !isClockIn
+          ? ((!existingToday?.checkInTime)
+            ? '[Tidak Absen Masuk] Hanya Absen Pulang - Memerlukan Approval PM & HR'
+            : isEarlyCheckOut
+            ? `[Pulang Lebih Awal ${earlyCheckOutMinutes} Mnt]: ${customNote.trim() || 'Izin pulang lebih awal'}`
+            : (customNote.trim() || defaultNote))
+          : existingToday?.checkOutNote,
         biometricVerification: {
           isVerified: true,
           matchScore,
           matchedPose: 'front' as BiometricPoseKey,
           livenessPassed: true,
           details: `Verifikasi Kilat AI Kiosk (${matchScore}% Cocok • Mode: ${attendanceAction})`
-        }
+        },
+        checkInBiometric: isClockIn ? {
+          isVerified: true,
+          matchScore,
+          matchedPose: 'front' as BiometricPoseKey,
+          livenessPassed: true,
+          details: `Verifikasi Kilat AI Kiosk (${matchScore}% Cocok • Mode: ${attendanceAction})`
+        } : (existingToday?.checkInBiometric || existingToday?.biometricVerification),
+        checkOutBiometric: !isClockIn ? {
+          isVerified: true,
+          matchScore,
+          matchedPose: 'front' as BiometricPoseKey,
+          livenessPassed: true,
+          details: `Verifikasi Kilat AI Kiosk (${matchScore}% Cocok • Mode: ${attendanceAction})`
+        } : existingToday?.checkOutBiometric
       };
 
       const res = await api.submitPublicAttendance(record as AttendanceRecord);

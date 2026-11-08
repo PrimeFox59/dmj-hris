@@ -345,6 +345,26 @@ export interface AttendanceRecord {
   photoOutUrl?: string;
   checkInPhotoUrl?: string;
   checkOutPhotoUrl?: string;
+  checkInLocation?: {
+    lat: number;
+    lng: number;
+    accuracy: number;
+    address: string;
+    inGeofence: boolean;
+    distanceMeters: number;
+  };
+  checkOutLocation?: {
+    lat: number;
+    lng: number;
+    accuracy: number;
+    address: string;
+    inGeofence: boolean;
+    distanceMeters: number;
+  };
+  checkInNote?: string;
+  checkOutNote?: string;
+  checkInBiometric?: BiometricVerificationResult;
+  checkOutBiometric?: BiometricVerificationResult;
   isHrCorrected?: boolean;
   hrCorrectionNotes?: string;
   hrCorrectedBy?: string;

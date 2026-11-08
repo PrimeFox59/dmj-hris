@@ -403,6 +403,18 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
 
   const [selectedHistoryItem, setSelectedHistoryItem] = useState<AttendanceRecord | null>(null);
   const [selectedPhotoType, setSelectedPhotoType] = useState<'CHECK_IN' | 'CHECK_OUT'>('CHECK_IN');
+
+  // Auto-align selectedPhotoType jika rekaman hanya memiliki 1 jenis presensi (masuk saja / pulang saja)
+  useEffect(() => {
+    if (selectedHistoryItem) {
+      if (!selectedHistoryItem.checkInTime && selectedHistoryItem.checkOutTime) {
+        setSelectedPhotoType('CHECK_OUT');
+      } else if (selectedHistoryItem.checkInTime && !selectedHistoryItem.checkOutTime) {
+        setSelectedPhotoType('CHECK_IN');
+      }
+    }
+  }, [selectedHistoryItem]);
+
   const [successToast, setSuccessToast] = useState<string | null>(null);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [submittedRecord, setSubmittedRecord] = useState<AttendanceRecord | null>(null);
@@ -1477,6 +1489,23 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
       finalApprovalStatus = 'NOT_REQUIRED';
     }
 
+    const currentLocationObj = {
+      lat: coords.lat,
+      lng: coords.lng,
+      accuracy: coords.accuracy,
+      address: coords.address,
+      inGeofence: mode === 'WFO' ? isPhysicallyInGeofence : true,
+      distanceMeters: effectiveTargetDistance
+    };
+
+    const currentBioObj = biometricVerification || (currentUser.biometric?.isEnrolled ? {
+      isVerified: true,
+      matchScore: 95,
+      matchedPose: 'front' as const,
+      livenessPassed: true,
+      details: 'Biometrik terverifikasi valid saat presensi'
+    } : undefined);
+
     const newRecord: AttendanceRecord = {
       id: isCheckIn ? `ATT-${Date.now()}` : (existingToday?.id || `ATT-${Date.now()}`),
       employeeId: currentUser.id,
@@ -1498,14 +1527,9 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
       checkInPhotoUrl: isCheckIn ? photoToUse : (isClockOutWithoutCheckIn ? undefined : (existingToday?.checkInPhotoUrl || existingToday?.photoUrl || undefined)),
       photoOutUrl: !isCheckIn ? photoToUse : (existingToday?.photoOutUrl || undefined),
       checkOutPhotoUrl: !isCheckIn ? photoToUse : (existingToday?.checkOutPhotoUrl || undefined),
-      location: {
-        lat: coords.lat,
-        lng: coords.lng,
-        accuracy: coords.accuracy,
-        address: coords.address,
-        inGeofence: mode === 'WFO' ? isPhysicallyInGeofence : true,
-        distanceMeters: effectiveTargetDistance
-      },
+      location: currentLocationObj,
+      checkInLocation: isCheckIn ? currentLocationObj : (existingToday?.checkInLocation || existingToday?.location),
+      checkOutLocation: !isCheckIn ? currentLocationObj : existingToday?.checkOutLocation,
       projectId: activeProject ? activeProject.id : (isInOfficeGeofence ? 'OFFICE' : 'OFFICE'),
       projectCode: activeProject ? activeProject.code : (isInOfficeGeofence ? 'HO' : 'HO'),
       projectName: activeProject ? activeProject.name : (salaryRules?.officeGeofence?.name || 'Kantor Pusat & Operasional'),
@@ -1514,6 +1538,8 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
         connectionType: isInOfficeGeofence || isInProjectGeofence ? 'Geofence Valid' : 'GPS Mobile'
       },
       note: noteToUse,
+      checkInNote: isCheckIn ? noteToUse : (existingToday?.checkInNote || (existingToday?.attendanceType === 'CHECK_IN' ? existingToday.note : undefined)),
+      checkOutNote: !isCheckIn ? noteToUse : existingToday?.checkOutNote,
       isLate: effectiveIsLate,
       lateMinutes: effectiveLateMinutes,
       lateReason: lateReasonToUse,
@@ -1526,13 +1552,9 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
         isSudden: true
       } : undefined,
       approvalStatus: finalApprovalStatus,
-      biometricVerification: biometricVerification || (currentUser.biometric?.isEnrolled ? {
-        isVerified: true,
-        matchScore: 95,
-        matchedPose: 'front',
-        livenessPassed: true,
-        details: 'Biometrik terverifikasi valid saat presensi'
-      } : undefined)
+      biometricVerification: currentBioObj,
+      checkInBiometric: isCheckIn ? currentBioObj : (existingToday?.checkInBiometric || existingToday?.biometricVerification),
+      checkOutBiometric: !isCheckIn ? currentBioObj : existingToday?.checkOutBiometric
     };
 
     onSubmitAttendance(newRecord);
@@ -2276,10 +2298,18 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                           </span>
                         </button>
                       ) : item.checkOutTime ? (
-                        <span className="px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-bold font-mono-code inline-flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedHistoryItem(item);
+                            setSelectedPhotoType('CHECK_OUT');
+                          }}
+                          className="px-2 py-0.5 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-[10px] font-bold font-mono-code inline-flex items-center gap-1 cursor-pointer transition-colors"
+                          title="Klik untuk melihat bukti foto presensi pulang"
+                        >
                           <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
                           Tidak Absen Masuk
-                        </span>
+                        </button>
                       ) : (
                         <span className="text-slate-400 text-[11px] font-mono-code">-</span>
                       )}
@@ -2510,6 +2540,41 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
               const isMasuk = selectedPhotoType === 'CHECK_IN';
               const activePhoto = isMasuk ? photoMasuk : photoPulang;
 
+              // 1. Lokasi & Geofence Aktual sesuai sesi Masuk vs Pulang
+              const activeLocation = isMasuk
+                ? (selectedHistoryItem.checkInLocation || selectedHistoryItem.location)
+                : (selectedHistoryItem.checkOutLocation || (selectedHistoryItem.attendanceType === 'CHECK_OUT' ? selectedHistoryItem.location : selectedHistoryItem.location));
+
+              // 2. Biometrik Aktual sesuai sesi Masuk vs Pulang
+              const activeBiometric = isMasuk
+                ? (selectedHistoryItem.checkInBiometric || selectedHistoryItem.biometricVerification)
+                : (selectedHistoryItem.checkOutBiometric || (selectedHistoryItem.attendanceType === 'CHECK_OUT' ? selectedHistoryItem.biometricVerification : selectedHistoryItem.biometricVerification));
+
+              // 3. Catatan Presensi Aktual sesuai sesi Masuk vs Pulang
+              let activeNote = '-';
+              if (isMasuk) {
+                activeNote = selectedHistoryItem.checkInNote || (
+                  selectedHistoryItem.checkInTime && !selectedHistoryItem.note?.toLowerCase().includes('hanya absen pulang')
+                    ? selectedHistoryItem.note
+                    : '-'
+                ) || '-';
+              } else {
+                if (selectedHistoryItem.checkOutNote) {
+                  activeNote = selectedHistoryItem.checkOutNote;
+                } else if (selectedHistoryItem.isEarlyCheckOut && selectedHistoryItem.earlyCheckOutReason) {
+                  activeNote = `[Pulang Lebih Awal ${selectedHistoryItem.earlyCheckOutMinutes ? selectedHistoryItem.earlyCheckOutMinutes + ' Mnt' : ''}]: ${selectedHistoryItem.earlyCheckOutReason}`;
+                } else if (selectedHistoryItem.attendanceType === 'CHECK_OUT' && selectedHistoryItem.note) {
+                  activeNote = selectedHistoryItem.note;
+                } else if (selectedHistoryItem.checkOutLocation && !selectedHistoryItem.checkOutLocation.inGeofence) {
+                  const outDist = selectedHistoryItem.checkOutLocation.distanceMeters ? `${Math.round(selectedHistoryItem.checkOutLocation.distanceMeters)}m` : '';
+                  activeNote = selectedHistoryItem.outOfRangeReason
+                    ? `[Luar Area ${outDist}]: ${selectedHistoryItem.outOfRangeReason}`
+                    : (selectedHistoryItem.note?.includes('[Luar Area') ? selectedHistoryItem.note : 'Presensi Pulang di Luar Radius Area Kerja');
+                } else if (selectedHistoryItem.checkOutTime) {
+                  activeNote = 'Presensi Pulang (Dalam Area Kerja)';
+                }
+              }
+
               return (
                 <>
                   {/* Toggle Switch between Foto Masuk & Foto Pulang */}
@@ -2567,10 +2632,20 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                         </div>
                       )}
                     </div>
-                    <div className="mt-3 p-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs space-y-1">
-                      <p><span className="font-bold text-slate-700">Waktu & Tipe:</span> <span className="font-mono-code font-bold text-slate-900">{isMasuk ? `Absen Masuk (${selectedHistoryItem.checkInTime || '-'} WIB)` : `Absen Pulang (${selectedHistoryItem.checkOutTime || '-'} WIB)`}</span></p>
+                    <div className="mt-3 p-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs space-y-1.5">
                       <p>
-                        <span className="font-bold text-slate-700">Karyawan:</span> {selectedHistoryItem.employeeName} • <span className="text-indigo-600 font-mono-code font-bold">{getRecordLoginBadgeId(selectedHistoryItem)}</span>
+                        <span className="font-bold text-slate-700">Waktu & Tipe:</span>{' '}
+                        <span className="font-mono-code font-bold text-slate-900">
+                          {isMasuk
+                            ? `Absen Masuk (${selectedHistoryItem.checkInTime || '-'} WIB)`
+                            : `Absen Pulang (${selectedHistoryItem.checkOutTime || '-'} WIB)`}
+                        </span>
+                      </p>
+                      <p>
+                        <span className="font-bold text-slate-700">Karyawan:</span> {selectedHistoryItem.employeeName} •{' '}
+                        <span className="text-indigo-600 font-mono-code font-bold">
+                          {getRecordLoginBadgeId(selectedHistoryItem)}
+                        </span>
                         {(() => {
                           const recNik = (selectedHistoryItem.employeeNik || '').trim();
                           return (recNik && recNik !== '-' && !recNik.startsWith('PRIME-')) ? (
@@ -2578,15 +2653,47 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                           ) : null;
                         })()}
                       </p>
-                      <p><span className="font-bold text-slate-700">Catatan:</span> {selectedHistoryItem.note || '-'}</p>
-                      <p><span className="font-bold text-slate-700">Geofence:</span> <span className="font-mono-code font-semibold">{formatDistanceKm(selectedHistoryItem.location.distanceMeters)}</span> • {selectedHistoryItem.location.inGeofence ? 'Dalam Area Geofence Resmi' : 'Luar Radius'}</p>
-                      <p><span className="font-bold text-slate-700">Lokasi:</span> {selectedHistoryItem.location.address}</p>
-                      <p><span className="font-bold text-slate-700">Skor Biometrik:</span> <span className={`font-mono-code font-bold ${
-                        (selectedHistoryItem.biometricVerification?.matchScore || 0) >= 70 ? 'text-emerald-700' :
-                        (selectedHistoryItem.biometricVerification?.matchScore || 0) >= 60 ? 'text-blue-700' : 'text-rose-600'
-                      }`}>
-                        {selectedHistoryItem.biometricVerification?.matchScore !== undefined ? `${selectedHistoryItem.biometricVerification.matchScore}% Match` : 'Belum Terdaftar'}
-                      </span> {selectedHistoryItem.biometricVerification?.details ? `• ${selectedHistoryItem.biometricVerification.details}` : ''}</p>
+                      <p>
+                        <span className="font-bold text-slate-700">Catatan:</span>{' '}
+                        <span className="text-slate-800 font-medium">{activeNote}</span>
+                      </p>
+                      <p>
+                        <span className="font-bold text-slate-700">Geofence:</span>{' '}
+                        <span className="font-mono-code font-semibold">
+                          {formatDistanceKm(activeLocation?.distanceMeters)}
+                        </span>{' '}
+                        •{' '}
+                        <span className={activeLocation?.inGeofence ? 'text-emerald-700 font-semibold' : 'text-amber-700 font-semibold'}>
+                          {activeLocation?.inGeofence ? 'Dalam Area Geofence Resmi' : 'Luar Radius'}
+                        </span>
+                      </p>
+                      <p>
+                        <span className="font-bold text-slate-700">Lokasi:</span>{' '}
+                        <span className="text-slate-800">{activeLocation?.address || 'Satelit GPS Terverifikasi'}</span>
+                        {activeLocation?.lat && activeLocation?.lng && (
+                          <span className="text-slate-500 font-mono-code ml-1.5 block sm:inline">
+                            (Lat {Number(activeLocation.lat).toFixed(6)}, Lng {Number(activeLocation.lng).toFixed(6)}
+                            {activeLocation.accuracy ? ` • Akurasi ±${activeLocation.accuracy}m` : ''})
+                          </span>
+                        )}
+                      </p>
+                      <p>
+                        <span className="font-bold text-slate-700">Skor Biometrik:</span>{' '}
+                        <span
+                          className={`font-mono-code font-bold ${
+                            (activeBiometric?.matchScore || 0) >= 70
+                              ? 'text-emerald-700'
+                              : (activeBiometric?.matchScore || 0) >= 60
+                              ? 'text-blue-700'
+                              : 'text-rose-600'
+                          }`}
+                        >
+                          {activeBiometric?.matchScore !== undefined
+                            ? `${activeBiometric.matchScore}% Match`
+                            : 'Belum Terdaftar'}
+                        </span>{' '}
+                        {activeBiometric?.details ? `• ${activeBiometric.details}` : ''}
+                      </p>
                     </div>
               {currentRole === 'superuser' && onDeleteAttendance && (
                 <div className="mt-4 pt-3 border-t border-slate-100 flex justify-end">

@@ -131,6 +131,17 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
   const [selectedPhotoItem, setSelectedPhotoItem] = useState<AttendanceRecord | null>(null);
   const [photoType, setPhotoType] = useState<'CHECK_IN' | 'CHECK_OUT'>('CHECK_IN');
 
+  // Auto-align photoType jika rekaman hanya memiliki 1 jenis presensi (masuk saja / pulang saja)
+  useEffect(() => {
+    if (selectedPhotoItem) {
+      if (!selectedPhotoItem.checkInTime && selectedPhotoItem.checkOutTime) {
+        setPhotoType('CHECK_OUT');
+      } else if (selectedPhotoItem.checkInTime && !selectedPhotoItem.checkOutTime) {
+        setPhotoType('CHECK_IN');
+      }
+    }
+  }, [selectedPhotoItem]);
+
   // Pagination / Load More State
   const [visibleRowsCount, setVisibleRowsCount] = useState<number>(15);
 
@@ -1804,6 +1815,41 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
               const isMasuk = photoType === 'CHECK_IN';
               const activePhoto = isMasuk ? photoMasuk : photoPulang;
 
+              // 1. Lokasi & Geofence Aktual sesuai sesi Masuk vs Pulang
+              const activeLocation = isMasuk
+                ? (selectedPhotoItem.checkInLocation || selectedPhotoItem.location)
+                : (selectedPhotoItem.checkOutLocation || (selectedPhotoItem.attendanceType === 'CHECK_OUT' ? selectedPhotoItem.location : selectedPhotoItem.location));
+
+              // 2. Biometrik Aktual sesuai sesi Masuk vs Pulang
+              const activeBiometric = isMasuk
+                ? (selectedPhotoItem.checkInBiometric || selectedPhotoItem.biometricVerification)
+                : (selectedPhotoItem.checkOutBiometric || (selectedPhotoItem.attendanceType === 'CHECK_OUT' ? selectedPhotoItem.biometricVerification : selectedPhotoItem.biometricVerification));
+
+              // 3. Catatan Presensi Aktual sesuai sesi Masuk vs Pulang
+              let activeNote = '-';
+              if (isMasuk) {
+                activeNote = selectedPhotoItem.checkInNote || (
+                  selectedPhotoItem.checkInTime && !selectedPhotoItem.note?.toLowerCase().includes('hanya absen pulang')
+                    ? selectedPhotoItem.note
+                    : '-'
+                ) || '-';
+              } else {
+                if (selectedPhotoItem.checkOutNote) {
+                  activeNote = selectedPhotoItem.checkOutNote;
+                } else if (selectedPhotoItem.isEarlyCheckOut && selectedPhotoItem.earlyCheckOutReason) {
+                  activeNote = `[Pulang Lebih Awal ${selectedPhotoItem.earlyCheckOutMinutes ? selectedPhotoItem.earlyCheckOutMinutes + ' Mnt' : ''}]: ${selectedPhotoItem.earlyCheckOutReason}`;
+                } else if (selectedPhotoItem.attendanceType === 'CHECK_OUT' && selectedPhotoItem.note) {
+                  activeNote = selectedPhotoItem.note;
+                } else if (selectedPhotoItem.checkOutLocation && !selectedPhotoItem.checkOutLocation.inGeofence) {
+                  const outDist = selectedPhotoItem.checkOutLocation.distanceMeters ? `${Math.round(selectedPhotoItem.checkOutLocation.distanceMeters)}m` : '';
+                  activeNote = selectedPhotoItem.outOfRangeReason
+                    ? `[Luar Area ${outDist}]: ${selectedPhotoItem.outOfRangeReason}`
+                    : (selectedPhotoItem.note?.includes('[Luar Area') ? selectedPhotoItem.note : 'Presensi Pulang di Luar Radius Area Kerja');
+                } else if (selectedPhotoItem.checkOutTime) {
+                  activeNote = 'Presensi Pulang (Dalam Area Kerja)';
+                }
+              }
+
               return (
                 <>
                   {/* Toggle Check-in / Check-out if both photos exist */}
@@ -1884,16 +1930,16 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                         <div>
                           <span className="text-slate-400 block text-[10px]">Jarak Geofence:</span>
                           <span className="font-bold text-slate-800">
-                            {formatDistanceKm(selectedPhotoItem.location?.distanceMeters)} {selectedPhotoItem.location?.inGeofence ? '(Dalam Area)' : '(Luar Area)'}
+                            {formatDistanceKm(activeLocation?.distanceMeters)} {activeLocation?.inGeofence ? '(Dalam Area)' : '(Luar Area)'}
                           </span>
                         </div>
                         <div>
                           <span className="text-slate-400 block text-[10px]">Skor Biometrik:</span>
                           <span className={`font-bold ${
-                            (selectedPhotoItem.biometricVerification?.matchScore || 0) >= 70 ? 'text-emerald-700' :
-                            (selectedPhotoItem.biometricVerification?.matchScore || 0) >= 60 ? 'text-blue-700' : 'text-rose-600'
+                            (activeBiometric?.matchScore || 0) >= 70 ? 'text-emerald-700' :
+                            (activeBiometric?.matchScore || 0) >= 60 ? 'text-blue-700' : 'text-rose-600'
                           }`}>
-                            {selectedPhotoItem.biometricVerification?.matchScore !== undefined ? `${selectedPhotoItem.biometricVerification.matchScore}% Match` : 'Non-Biometrik'}
+                            {activeBiometric?.matchScore !== undefined ? `${activeBiometric.matchScore}% Match` : 'Non-Biometrik'}
                           </span>
                         </div>
                       </div>
@@ -1901,8 +1947,14 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                       <div className="pt-1">
                         <span className="text-slate-400 block text-[10px] font-mono-code">Lokasi Presensi:</span>
                         <span className="text-slate-600 text-[11px] leading-relaxed">
-                          {selectedPhotoItem.location?.address || '-'}
+                          {activeLocation?.address || '-'}
                         </span>
+                        {activeLocation?.lat && activeLocation?.lng && (
+                          <span className="text-slate-400 font-mono-code text-[10px] ml-1.5 block">
+                            (Lat {Number(activeLocation.lat).toFixed(6)}, Lng {Number(activeLocation.lng).toFixed(6)}
+                            {activeLocation.accuracy ? ` • Akurasi ±${activeLocation.accuracy}m` : ''})
+                          </span>
+                        )}
                       </div>
 
                       {/* Proyek Presensi */}
@@ -1917,9 +1969,7 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                       <div className="pt-2 border-t border-slate-200/60">
                         <span className="text-slate-400 block text-[10px] font-mono-code mb-0.5">Catatan Saat Absen:</span>
                         <div className="p-2 rounded-xl bg-white border border-slate-200 text-slate-800 text-xs font-semibold leading-relaxed">
-                          {extractUserAttendanceNote(selectedPhotoItem).text !== '-'
-                            ? extractUserAttendanceNote(selectedPhotoItem).text
-                            : (selectedPhotoItem.note || 'Tidak ada catatan tambahan')}
+                          {activeNote !== '-' ? activeNote : (extractUserAttendanceNote(selectedPhotoItem).text !== '-' ? extractUserAttendanceNote(selectedPhotoItem).text : 'Tidak ada catatan tambahan')}
                         </div>
                       </div>
                     </div>

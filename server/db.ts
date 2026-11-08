@@ -715,6 +715,45 @@ export function saveAttendance(record: AttendanceRecord): {
   removedApprovalIds?: string[];
 } {
   const db = getDatabase();
+
+  // Query existing row to preserve check-in vs check-out metadata
+  const existingRow = db.prepare(`
+    SELECT id, data_json, checkInTime, checkOutTime, isLate, lateMinutes, status, approvalStatus 
+    FROM attendances 
+    WHERE employeeId = ? AND date = ? 
+    ORDER BY id ASC;
+  `).get(record.employeeId, record.date) as any;
+
+  let prevData: Partial<AttendanceRecord> = {};
+  if (existingRow && existingRow.data_json) {
+    try { prevData = JSON.parse(existingRow.data_json); } catch (e) {}
+  }
+
+  const isCheckIn = record.attendanceType === 'CHECK_IN' || (!record.checkOutTime && Boolean(record.checkInTime));
+  let mergedRecord: AttendanceRecord = {
+    ...prevData,
+    ...record,
+    id: existingRow ? existingRow.id : record.id,
+    checkInLocation: isCheckIn
+      ? (record.checkInLocation || record.location || prevData.checkInLocation || prevData.location)
+      : (prevData.checkInLocation || prevData.location || record.checkInLocation),
+    checkOutLocation: !isCheckIn
+      ? (record.checkOutLocation || record.location || prevData.checkOutLocation)
+      : (prevData.checkOutLocation || null),
+    checkInNote: isCheckIn
+      ? (record.checkInNote || record.note || prevData.checkInNote || prevData.note || 'Presensi Masuk (Dalam Area Kerja)')
+      : (prevData.checkInNote || (prevData.attendanceType === 'CHECK_IN' ? prevData.note : undefined) || record.checkInNote),
+    checkOutNote: !isCheckIn
+      ? (record.checkOutNote || (record.attendanceType === 'CHECK_OUT' ? record.note : undefined) || (record.earlyCheckOutReason ? `[Pulang Lebih Awal]: ${record.earlyCheckOutReason}` : undefined) || prevData.checkOutNote)
+      : (prevData.checkOutNote || null),
+    checkInBiometric: isCheckIn
+      ? (record.checkInBiometric || record.biometricVerification || prevData.checkInBiometric || prevData.biometricVerification)
+      : (prevData.checkInBiometric || prevData.biometricVerification || record.checkInBiometric),
+    checkOutBiometric: !isCheckIn
+      ? (record.checkOutBiometric || record.biometricVerification || prevData.checkOutBiometric)
+      : (prevData.checkOutBiometric || null)
+  } as AttendanceRecord;
+
   const insert = db.prepare(`
     INSERT OR REPLACE INTO attendances (
       id, employeeId, employeeName, employeeNik, department,
@@ -725,23 +764,24 @@ export function saveAttendance(record: AttendanceRecord): {
   `);
 
   insert.run(
-    record.id,
-    record.employeeId,
-    record.employeeName,
-    record.employeeNik,
-    record.department,
-    record.date,
-    record.checkInTime || null,
-    record.checkOutTime || null,
-    record.mode,
-    record.status,
-    record.photoUrl || record.photoOutUrl || null,
-    record.isLate ? 1 : 0,
-    record.lateMinutes,
-    record.lateReason || null,
-    record.approvalStatus,
-    JSON.stringify(record)
+    mergedRecord.id,
+    mergedRecord.employeeId,
+    mergedRecord.employeeName,
+    mergedRecord.employeeNik,
+    mergedRecord.department,
+    mergedRecord.date,
+    mergedRecord.checkInTime || null,
+    mergedRecord.checkOutTime || null,
+    mergedRecord.mode,
+    mergedRecord.status,
+    mergedRecord.photoUrl || mergedRecord.photoOutUrl || null,
+    mergedRecord.isLate ? 1 : 0,
+    mergedRecord.lateMinutes,
+    mergedRecord.lateReason || null,
+    mergedRecord.approvalStatus,
+    JSON.stringify(mergedRecord)
   );
+  record = mergedRecord;
 
   // If this attendance needs approval (Dinas Luar, Late, or Early Check-Out), create approval item in SQLite
   if (record.approvalStatus === 'PENDING') {

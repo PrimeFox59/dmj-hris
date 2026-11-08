@@ -1142,7 +1142,14 @@ export function saveAttendance(record) {
       photoOutUrl: checkOutPhoto,
       checkOutPhotoUrl: checkOutPhoto,
       location: record.location || prevData.location,
-      biometricVerification: record.biometricVerification || prevData.biometricVerification
+      checkInLocation: record.checkInLocation || record.location || prevData.checkInLocation || prevData.location,
+      checkOutLocation: prevData.checkOutLocation || null,
+      note: record.note || prevData.note || 'Presensi Masuk (Dalam Area Kerja)',
+      checkInNote: record.checkInNote || record.note || prevData.checkInNote || prevData.note || 'Presensi Masuk (Dalam Area Kerja)',
+      checkOutNote: prevData.checkOutNote || null,
+      biometricVerification: record.biometricVerification || prevData.biometricVerification,
+      checkInBiometric: record.checkInBiometric || record.biometricVerification || prevData.checkInBiometric || prevData.biometricVerification,
+      checkOutBiometric: prevData.checkOutBiometric || null
     };
   } else {
     // ==========================================
@@ -1212,8 +1219,12 @@ export function saveAttendance(record) {
       checkInPhotoUrl: checkInPhoto || null,
       photoOutUrl: checkOutPhoto,
       checkOutPhotoUrl: checkOutPhoto,
-      checkOutLocation: record.location,
-      checkOutBiometric: record.biometricVerification
+      checkInLocation: prevData.checkInLocation || prevData.location || record.checkInLocation || null,
+      checkOutLocation: record.checkOutLocation || record.location || prevData.checkOutLocation || null,
+      checkInNote: prevData.checkInNote || (prevData.attendanceType === 'CHECK_IN' ? prevData.note : null) || record.checkInNote || null,
+      checkOutNote: record.checkOutNote || (record.attendanceType === 'CHECK_OUT' ? record.note : null) || (record.earlyCheckOutReason ? `[Pulang Lebih Awal]: ${record.earlyCheckOutReason}` : null) || prevData.checkOutNote || null,
+      checkInBiometric: prevData.checkInBiometric || prevData.biometricVerification || record.checkInBiometric || null,
+      checkOutBiometric: record.checkOutBiometric || record.biometricVerification || prevData.checkOutBiometric || null
     };
   }
 
