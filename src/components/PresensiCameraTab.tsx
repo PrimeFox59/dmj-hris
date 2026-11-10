@@ -125,6 +125,29 @@ interface PresensiCameraTabProps {
   isDbLoading?: boolean;
 }
 
+// Helper format durasi jam kerja (Work Hour)
+function formatWorkDuration(checkInTime?: string, checkOutTime?: string): string | null {
+  if (!checkInTime || !checkOutTime) return null;
+  const inParts = checkInTime.replace(/\./g, ':').split(':').map(Number);
+  const outParts = checkOutTime.replace(/\./g, ':').split(':').map(Number);
+  if (inParts.length < 2 || outParts.length < 2 || isNaN(inParts[0]) || isNaN(outParts[0])) return null;
+
+  const inSeconds = inParts[0] * 3600 + inParts[1] * 60 + (inParts[2] || 0);
+  const outSeconds = outParts[0] * 3600 + outParts[1] * 60 + (outParts[2] || 0);
+  let diffSeconds = outSeconds - inSeconds;
+  if (diffSeconds < 0) {
+    diffSeconds += 24 * 3600; // Toleransi shift malam lintas hari
+  }
+
+  const totalMinutes = Math.floor(diffSeconds / 60);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+
+  if (h === 0 && m === 0) return '< 1m';
+  if (m === 0) return `${h}j`;
+  return `${h}j ${m}m`;
+}
+
 export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
   currentUser,
   employees = [],
@@ -2242,6 +2265,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                 <th className="py-2.5 px-3">Karyawan</th>
                 <th className="py-2.5 px-3">Absen Masuk</th>
                 <th className="py-2.5 px-3">Absen Pulang</th>
+                <th className="py-2.5 px-3">Work Hour</th>
                 <th className="py-2.5 px-3">Status Verifikasi</th>
                 {currentRole === 'superuser' && onDeleteAttendance && (
                   <th className="py-2.5 px-3 text-right">Aksi</th>
@@ -2251,7 +2275,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
             <tbody className="divide-y divide-slate-100">
               {visibleAttendanceHistory.length === 0 ? (
                 <tr>
-                  <td colSpan={currentRole === 'superuser' && onDeleteAttendance ? 6 : 5} className="py-10 text-center text-slate-400 text-xs">
+                  <td colSpan={currentRole === 'superuser' && onDeleteAttendance ? 7 : 6} className="py-10 text-center text-slate-400 text-xs">
                     {isDbLoading ? (
                       <div className="flex flex-col items-center justify-center gap-2 animate-pulse py-4">
                         <div className="w-5 h-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
@@ -2334,6 +2358,28 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                           Belum Pulang
                         </span>
                       )}
+                    </td>
+                    <td className="py-3 px-3 whitespace-nowrap">
+                      {(() => {
+                        const duration = formatWorkDuration(item.checkInTime, item.checkOutTime);
+                        if (duration) {
+                          return (
+                            <div className="inline-flex items-center gap-1.5 font-mono-code">
+                              <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              <span className="font-bold text-slate-800 text-[11px]">{duration}</span>
+                            </div>
+                          );
+                        }
+                        if (item.checkInTime && !item.checkOutTime) {
+                          return (
+                            <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200/80 text-[10px] font-mono-code font-semibold inline-flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                              Sedang Kerja
+                            </span>
+                          );
+                        }
+                        return <span className="text-slate-400 text-[11px] font-mono-code">-</span>;
+                      })()}
                     </td>
                     <td className="py-3 px-3">
                       {(!item.checkInTime && item.checkOutTime) ? (
@@ -2577,6 +2623,14 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                             : `Absen Pulang (${selectedHistoryItem.checkOutTime || '-'} WIB)`}
                         </span>
                       </p>
+                      {formatWorkDuration(selectedHistoryItem.checkInTime, selectedHistoryItem.checkOutTime) && (
+                        <p>
+                          <span className="font-bold text-slate-700">Work Hour:</span>{' '}
+                          <span className="font-mono-code font-bold text-emerald-700">
+                            {formatWorkDuration(selectedHistoryItem.checkInTime, selectedHistoryItem.checkOutTime)}
+                          </span>
+                        </p>
+                      )}
                       <p>
                         <span className="font-bold text-slate-700">Karyawan:</span> {selectedHistoryItem.employeeName} •{' '}
                         <span className="text-indigo-600 font-mono-code font-bold">
