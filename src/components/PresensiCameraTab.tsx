@@ -2367,11 +2367,11 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                               }
                             }
                           }}
-                          className="inline-flex items-center gap-1 px-2 py-1 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 font-semibold text-[10px] cursor-pointer transition-colors"
+                          className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 hover:text-rose-700 border border-rose-200 inline-flex items-center justify-center cursor-pointer transition-colors shadow-2xs"
                           title="Hapus Rekaman Presensi (Khusus Superuser)"
+                          aria-label="Hapus Rekaman Presensi"
                         >
-                          <Trash2 className="w-3 h-3 text-rose-600" />
-                          <span>Hapus</span>
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </td>
                     )}
