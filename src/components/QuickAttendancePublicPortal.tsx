@@ -430,26 +430,7 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
     );
     ctx.restore(); // Restore so all watermark texts and rectangles are NEVER mirrored
 
-    // 2. Top-Right Biometric Security Badge
-    const badgeColor = matchScore >= 70 ? '#00E2B0' : '#f87171';
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
-    ctx.fillRect(405, 16, 220, 34);
-    ctx.strokeStyle = badgeColor;
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(405, 16, 220, 34);
-
-    ctx.fillStyle = badgeColor;
-    ctx.beginPath();
-    ctx.arc(420, 33, 4, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 11px monospace';
-    ctx.textAlign = 'left';
-    const bioText = `BIOMETRIC: ${matchScore}% MATCH`;
-    ctx.fillText(bioText, 432, 37);
-
-    // 3. Bottom Watermark Panel (dark gradient with orange divider line)
+    // Bottom Watermark Panel (dark gradient with orange divider line)
     const grad = ctx.createLinearGradient(0, 340, 0, 480);
     grad.addColorStop(0, 'rgba(15, 23, 42, 0.80)');
     grad.addColorStop(0.3, 'rgba(15, 23, 42, 0.94)');

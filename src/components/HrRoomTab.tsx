@@ -10,7 +10,6 @@ import {
   AlertTriangle,
   Clock,
   MapPin,
-  ShieldCheck,
   ShieldAlert,
   Download,
   ChevronDown,
@@ -43,6 +42,29 @@ interface HrRoomTabProps {
 
 type DatePreset = 'TODAY' | 'LAST_7' | 'THIS_MONTH' | 'LAST_30' | 'ALL' | 'CUSTOM';
 type ComplianceFilter = 'ALL' | 'ON_TIME' | 'LATE' | 'LEAVE' | 'ABSENT' | 'OUT_GEOFENCE' | 'FRAUD_BIOMETRIC';
+
+// Helper format durasi jam kerja (Work Hour)
+function formatWorkDuration(checkInTime?: string, checkOutTime?: string): string | null {
+  if (!checkInTime || !checkOutTime) return null;
+  const inParts = checkInTime.replace(/\./g, ':').split(':').map(Number);
+  const outParts = checkOutTime.replace(/\./g, ':').split(':').map(Number);
+  if (inParts.length < 2 || outParts.length < 2 || isNaN(inParts[0]) || isNaN(outParts[0])) return null;
+
+  const inSeconds = inParts[0] * 3600 + inParts[1] * 60 + (inParts[2] || 0);
+  const outSeconds = outParts[0] * 3600 + outParts[1] * 60 + (outParts[2] || 0);
+  let diffSeconds = outSeconds - inSeconds;
+  if (diffSeconds < 0) {
+    diffSeconds += 24 * 3600; // Shift malam lintas hari
+  }
+
+  const totalMinutes = Math.floor(diffSeconds / 60);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+
+  if (h === 0 && m === 0) return '< 1m';
+  if (m === 0) return `${h}j`;
+  return `${h}j ${m}m`;
+}
 
 export const HrRoomTab: React.FC<HrRoomTabProps> = ({
   currentUser,
@@ -1300,7 +1322,7 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
               <span>Log Riwayat Presensi Detail</span>
             </h3>
             <p className="text-[11px] text-slate-500 mt-0.5">
-              Rekaman presensi masuk, pulang, durasi kerja, status kepatuhan, serta skor biometrik per individu
+              Rekaman presensi masuk, pulang, dan kalkulasi work hour per individu
             </p>
           </div>
           <div className="flex items-center gap-2 self-start sm:self-auto">
@@ -1311,37 +1333,31 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
         </div>
 
         <div className="overflow-x-auto w-full hr-table-container">
-          <table className="w-full table-fixed min-w-[850px] text-left">
+          <table className="w-full table-fixed min-w-[720px] text-left">
             <colgroup>
               <col className="w-[52px]" />
-              <col className="w-[78px]" />
-              <col className="w-[15%]" />
-              <col className="w-[15%]" />
-              <col className="w-[72px]" />
-              <col className="w-[68px]" />
-              <col className="w-[65px]" />
-              <col className="w-[65px]" />
-              <col className="w-[16%]" />
-              <col className="w-[15%]" />
+              <col className="w-[105px]" />
+              <col className="w-[30%]" />
+              <col className="w-[30%]" />
+              <col className="w-[85px]" />
+              <col className="w-[85px]" />
+              <col className="w-[100px]" />
             </colgroup>
             <thead>
               <tr className="border-b border-slate-200/90 bg-slate-50/80 text-slate-500 uppercase font-mono-code font-bold hr-text-auto-header tracking-tight">
-                <th className="py-2 px-1 w-[52px] text-center whitespace-nowrap">ID</th>
-                <th className="py-2 px-1 w-[78px] whitespace-nowrap">Tanggal</th>
-                <th className="py-2 px-1.5">Karyawan</th>
-                <th className="py-2 px-1.5">Proyek</th>
-                <th className="py-2 px-1 w-[72px] whitespace-nowrap">Masuk</th>
-                <th className="py-2 px-1 w-[68px] whitespace-nowrap">Pulang</th>
-                <th className="py-2 px-0.5 w-[65px] text-center whitespace-nowrap">Kepatuhan</th>
-                <th className="py-2 px-0.5 w-[65px] text-center whitespace-nowrap">Biometrik</th>
-                <th className="py-2 px-1.5">Lokasi & Geofence</th>
-                <th className="py-2 px-1.5">Catatan</th>
+                <th className="py-2.5 px-1 w-[52px] text-center whitespace-nowrap">ID</th>
+                <th className="py-2.5 px-1.5 w-[105px] whitespace-nowrap">Tanggal</th>
+                <th className="py-2.5 px-2">Karyawan</th>
+                <th className="py-2.5 px-2">Proyek</th>
+                <th className="py-2.5 px-1 w-[85px] whitespace-nowrap">Masuk</th>
+                <th className="py-2.5 px-1 w-[85px] whitespace-nowrap">Pulang</th>
+                <th className="py-2.5 px-1 w-[100px] text-center whitespace-nowrap">Work Hour</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {displayedAttendances.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-slate-400">
+                  <td colSpan={7} className="py-12 text-center text-slate-400">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <Clock className="w-7 h-7 text-slate-300" />
                       <p className="hr-text-auto-sm font-semibold text-slate-500">
@@ -1476,136 +1492,28 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                         )}
                       </td>
 
-                      {/* 7. Kepatuhan (Icon & Angka Saja, Tanpa Teks) */}
-                      <td className="py-2 px-0.5 text-center whitespace-nowrap">
-                        {isLate ? (
-                          <span
-                            className="px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 hr-text-auto-sm font-bold font-mono-code inline-flex items-center gap-0.5 shadow-2xs"
-                            title={`Terlambat ${item.lateMinutes || 0} menit`}
-                          >
-                            <Clock className="w-2.5 h-2.5 text-amber-600 shrink-0" />
-                            <span>{item.lateMinutes ? `${item.lateMinutes}m` : '0m'}</span>
-                          </span>
-                        ) : (
-                          <span
-                            className="inline-flex items-center justify-center p-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs"
-                            title="Tepat Waktu"
-                          >
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                          </span>
-                        )}
-                      </td>
-
-                      {/* 8. Biometrik (Icon & Angka Saja, Tanpa Teks) */}
-                      <td className="py-2 px-0.5 text-center whitespace-nowrap">
+                      {/* 7. Work Hour */}
+                      <td className="py-2 px-1 whitespace-nowrap text-center">
                         {(() => {
-                          const hasEnrolledBiometric = Boolean(
-                            emp?.biometric?.isEnrolled || 
-                            (emp as any)?.hasBiometric || 
-                            (emp?.biometric?.samples && (emp.biometric.samples.front || emp.biometric.samples.smile))
-                          );
-
-                          if (!hasEnrolledBiometric) {
+                          const duration = formatWorkDuration(item.checkInTime, item.checkOutTime);
+                          if (duration) {
                             return (
-                              <span
-                                className="inline-flex items-center justify-center p-1 rounded-full bg-amber-50 text-amber-600 border border-amber-200/80 shadow-2xs"
-                                title="Wajah Belum Terdaftar (Belum Registrasi Biometrik)"
-                              >
-                                <UserX className="w-2.5 h-2.5 text-amber-600" />
+                              <div className="inline-flex items-center gap-1 font-mono-code hr-text-auto-sm font-bold text-slate-800 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-200/70 shadow-2xs">
+                                <Clock className="w-3 h-3 text-slate-400 shrink-0" />
+                                <span>{duration}</span>
+                              </div>
+                            );
+                          }
+                          if (item.checkInTime && !item.checkOutTime) {
+                            return (
+                              <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200/80 hr-text-auto-xs font-mono-code font-bold inline-flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                                Sedang Kerja
                               </span>
                             );
                           }
-
-                          if (!item.biometricVerification || item.biometricVerification.matchScore === undefined || item.biometricVerification.matchScore === null) {
-                            return (
-                              <span className="text-slate-400 font-mono-code hr-text-auto-sm" title="Non-Biometrik">-</span>
-                            );
-                          }
-
-                          const score = item.biometricVerification.matchScore;
-                          if (score >= 70) {
-                            return (
-                              <span
-                                className="px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 hr-text-auto-sm font-bold font-mono-code inline-flex items-center gap-0.5 shadow-2xs"
-                                title={`Biometrik Cocok: ${score}%`}
-                              >
-                                <ShieldCheck className="w-2.5 h-2.5 text-emerald-600 shrink-0" />
-                                <span>{score}%</span>
-                              </span>
-                            );
-                          }
-
-                          if (score >= 60) {
-                            return (
-                              <span
-                                className="px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 hr-text-auto-sm font-bold font-mono-code inline-flex items-center gap-0.5 shadow-2xs"
-                                title={`Biometrik Memadai: ${score}%`}
-                              >
-                                <ShieldCheck className="w-2.5 h-2.5 text-blue-600 shrink-0" />
-                                <span>{score}%</span>
-                              </span>
-                            );
-                          }
-
-                          const isNoFace = score === 0 || item.biometricVerification.details?.toLowerCase().includes('tidak terdeteksi');
-                          return (
-                            <span
-                              className="px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 hr-text-auto-sm font-bold font-mono-code inline-flex items-center gap-0.5 shadow-2xs"
-                              title={item.biometricVerification.details || `Skor Rendah / Mismatch: ${score}%`}
-                            >
-                              <ShieldAlert className="w-2.5 h-2.5 text-rose-600 shrink-0" />
-                              <span>{isNoFace ? '0%' : `${score}%`}</span>
-                            </span>
-                          );
+                          return <span className="text-slate-400 font-mono-code hr-text-auto-sm">-</span>;
                         })()}
-                      </td>
-
-                      {/* 9. Lokasi & Geofence */}
-                      <td className="py-2 px-1.5 overflow-hidden">
-                        <div className="flex items-center gap-1 font-mono-code hr-text-auto-xs font-bold leading-tight">
-                          <MapPin className={`w-2.5 h-2.5 shrink-0 ${item.location?.inGeofence ? 'text-emerald-500' : 'text-amber-500'}`} />
-                          <span
-                            className={`px-1 py-0.2 rounded truncate leading-none ${
-                              item.location?.inGeofence
-                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
-                                : 'bg-amber-50 text-amber-700 border border-amber-200/60'
-                            }`}
-                          >
-                            {formatDistanceKm(item.location?.distanceMeters)} {item.location?.inGeofence ? '(In)' : '(Luar)'}
-                          </span>
-                        </div>
-                        <div
-                          className="hr-text-auto-xs text-slate-500 truncate block mt-0.5 leading-tight"
-                          title={item.location?.address}
-                        >
-                          {item.location?.address || '-'}
-                        </div>
-                      </td>
-
-                      {/* 10. Catatan */}
-                      <td className="py-2 px-1.5 overflow-hidden">
-                        {noteInfo.text === '-' ? (
-                          <span className="text-slate-400 font-mono-code hr-text-auto-sm">-</span>
-                        ) : (
-                          <div className="flex items-center gap-1 min-w-0" title={noteInfo.fullRaw}>
-                            {noteInfo.badge && (
-                              <span
-                                className={`shrink-0 px-1 py-0.2 rounded hr-text-auto-xs font-bold font-mono-code border leading-none ${
-                                  noteInfo.badge === 'Luar Area'
-                                    ? 'bg-amber-50 text-amber-800 border-amber-200/70'
-                                    : noteInfo.badge === 'Alasan Telat'
-                                    ? 'bg-orange-50 text-orange-800 border-orange-200/70'
-                                    : 'bg-blue-50 text-blue-800 border-blue-200/70'
-                                }`}
-                              >
-                                {noteInfo.badge}
-                              </span>
-                            )}
-                            <span className="text-slate-800 hr-text-auto-sm font-medium truncate block min-w-0 flex-1 leading-tight">
-                              {noteInfo.text}
-                            </span>
-                          </div>
-                        )}
                       </td>
                     </tr>
                   );
@@ -1954,12 +1862,9 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                           </span>
                         </div>
                         <div>
-                          <span className="text-slate-400 block text-[10px]">Skor Biometrik:</span>
-                          <span className={`font-bold ${
-                            (activeBiometric?.matchScore || 0) >= 70 ? 'text-emerald-700' :
-                            (activeBiometric?.matchScore || 0) >= 60 ? 'text-blue-700' : 'text-rose-600'
-                          }`}>
-                            {activeBiometric?.matchScore !== undefined ? `${activeBiometric.matchScore}% Match` : 'Non-Biometrik'}
+                          <span className="text-slate-400 block text-[10px]">Work Hour:</span>
+                          <span className="font-bold text-slate-800">
+                            {formatWorkDuration(selectedPhotoItem.checkInTime, selectedPhotoItem.checkOutTime) || '-'}
                           </span>
                         </div>
                       </div>

@@ -1133,31 +1133,6 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
 
   // Official Audit Watermark Generator
   const applyWatermark = (ctx: CanvasRenderingContext2D) => {
-    // Top-Right Biometric Security Badge
-    const isEnrolled = Boolean(currentUser.biometric?.isEnrolled);
-    const isVerified = biometricVerification ? biometricVerification.isVerified : true;
-    const matchScore = biometricVerification ? biometricVerification.matchScore : (isEnrolled ? 95 : 100);
-    const badgeColor = isVerified ? '#00E2B0' : '#f87171';
-
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
-    ctx.fillRect(405, 16, 220, 34);
-    ctx.strokeStyle = badgeColor;
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(405, 16, 220, 34);
-
-    ctx.fillStyle = badgeColor;
-    ctx.beginPath();
-    ctx.arc(420, 33, 4, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 11px monospace';
-    ctx.textAlign = 'left';
-    const bioText = isEnrolled
-      ? `BIOMETRIC: ${matchScore}% MATCH`
-      : 'BIOMETRIC PENDING ENROLL';
-    ctx.fillText(bioText, 432, 37);
-
     // Bottom Watermark Panel
     const grad = ctx.createLinearGradient(0, 340, 0, 480);
     grad.addColorStop(0, 'rgba(15, 23, 42, 0.80)');
@@ -2666,23 +2641,6 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                             {activeLocation.accuracy ? ` • Akurasi ±${activeLocation.accuracy}m` : ''})
                           </span>
                         )}
-                      </p>
-                      <p>
-                        <span className="font-bold text-slate-700">Skor Biometrik:</span>{' '}
-                        <span
-                          className={`font-mono-code font-bold ${
-                            (activeBiometric?.matchScore || 0) >= 70
-                              ? 'text-emerald-700'
-                              : (activeBiometric?.matchScore || 0) >= 60
-                              ? 'text-blue-700'
-                              : 'text-rose-600'
-                          }`}
-                        >
-                          {activeBiometric?.matchScore !== undefined
-                            ? `${activeBiometric.matchScore}% Match`
-                            : 'Belum Terdaftar'}
-                        </span>{' '}
-                        {activeBiometric?.details ? `• ${activeBiometric.details}` : ''}
                       </p>
                     </div>
               {currentRole === 'superuser' && onDeleteAttendance && (

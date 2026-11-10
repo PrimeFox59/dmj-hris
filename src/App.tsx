@@ -55,7 +55,7 @@ export function App() {
   });
 
   // Auto-invalidation build ID (Membersihkan cache lama saat versi baru dirilis)
-  const APP_BUILD_ID = '20261111_v3_work_hour_column';
+  const APP_BUILD_ID = '20261111_v4_clean_watermark_and_hr_room_table';
   if (typeof window !== 'undefined') {
     try {
       const savedBuild = localStorage.getItem('prime_hris_build_id');
