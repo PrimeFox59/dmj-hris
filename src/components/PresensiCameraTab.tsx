@@ -25,7 +25,6 @@ import {
   Volume2,
   Globe,
   RefreshCw,
-  ShieldCheck,
   Smartphone,
   Network,
   Radio,
@@ -35,7 +34,6 @@ import {
   FlipHorizontal,
   SlidersHorizontal,
   Trash2,
-  UserX,
   CameraOff
 } from 'lucide-react';
 import { Employee, AttendanceRecord, AttendanceMode, AttendanceStatus, SalaryRuleConfig, SystemRole, getEffectiveSystemRole, Project, BiometricProfile, BiometricVerificationResult } from '../types';
@@ -2244,10 +2242,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                 <th className="py-2.5 px-3">Karyawan</th>
                 <th className="py-2.5 px-3">Absen Masuk</th>
                 <th className="py-2.5 px-3">Absen Pulang</th>
-                <th className="py-2.5 px-3">Lokasi & Geofence</th>
-                <th className="py-2.5 px-3">Catatan / Keterangan</th>
                 <th className="py-2.5 px-3">Status Verifikasi</th>
-                <th className="py-2.5 px-3">Skor Biometrik</th>
                 {currentRole === 'superuser' && onDeleteAttendance && (
                   <th className="py-2.5 px-3 text-right">Aksi</th>
                 )}
@@ -2256,7 +2251,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
             <tbody className="divide-y divide-slate-100">
               {visibleAttendanceHistory.length === 0 ? (
                 <tr>
-                  <td colSpan={currentRole === 'superuser' && onDeleteAttendance ? 9 : 8} className="py-10 text-center text-slate-400 text-xs">
+                  <td colSpan={currentRole === 'superuser' && onDeleteAttendance ? 6 : 5} className="py-10 text-center text-slate-400 text-xs">
                     {isDbLoading ? (
                       <div className="flex flex-col items-center justify-center gap-2 animate-pulse py-4">
                         <div className="w-5 h-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
@@ -2341,23 +2336,6 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                       )}
                     </td>
                     <td className="py-3 px-3">
-                      <div className="font-semibold text-slate-800 text-[11px] truncate max-w-[200px] flex items-center gap-1">
-                        <MapPin className="w-3 h-3 text-[#FF6B00] shrink-0" />
-                        <span>{item.location.distanceMeters !== undefined ? `${formatDistanceKm(item.location.distanceMeters)} dari Geofence` : 'Geofence Valid'}</span>
-                      </div>
-                      <div className="text-[10px] text-slate-500 truncate max-w-[200px]">
-                        {item.location.address || 'Satelit GPS Terverifikasi'}
-                      </div>
-                    </td>
-                    <td className="py-3 px-3">
-                      <p className="text-slate-700 max-w-xs line-clamp-1">{item.note}</p>
-                      {item.isLate && (
-                        <span className="text-[10px] text-rose-600 font-semibold block">
-                          Terlambat {item.lateMinutes}m ({item.lateReason})
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-3 px-3">
                       {(!item.checkInTime && item.checkOutTime) ? (
                         <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-bold animate-pulse inline-flex items-center gap-1">
                           Perlu Approval PM & HR
@@ -2375,72 +2353,6 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                           Tervalidasi Otomatis
                         </span>
                       )}
-                    </td>
-                    <td className="py-3 px-3 whitespace-nowrap">
-                      {(() => {
-                        const recordEmp = (item.employeeId ? employeeMap.get(item.employeeId) : undefined)
-                          || (item.employeeNik ? employeeMap.get(item.employeeNik) : undefined)
-                          || (item.employeeName ? employeeMap.get(item.employeeName.toLowerCase().trim()) : undefined);
-
-                        const hasEnrolledBiometric = Boolean(
-                          recordEmp?.biometric?.isEnrolled || 
-                          (recordEmp as any)?.hasBiometric || 
-                          (recordEmp?.biometric?.samples && (recordEmp.biometric.samples.front || recordEmp.biometric.samples.smile))
-                        );
-
-                        if (!hasEnrolledBiometric) {
-                          return (
-                            <span
-                              className="inline-flex items-center justify-center p-1 rounded-full bg-amber-50 text-amber-600 border border-amber-200/80 shadow-2xs"
-                              title="Wajah Belum Terdaftar (Belum Registrasi Biometrik)"
-                            >
-                              <UserX className="w-3.5 h-3.5 text-amber-600" />
-                            </span>
-                          );
-                        }
-
-                        if (!item.biometricVerification || item.biometricVerification.matchScore === undefined || item.biometricVerification.matchScore === null) {
-                          return (
-                            <span className="text-slate-400 font-mono-code text-[11px]" title="Non-Biometrik">-</span>
-                          );
-                        }
-
-                        const score = item.biometricVerification.matchScore;
-                        if (score >= 70) {
-                          return (
-                            <span
-                              className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold font-mono-code inline-flex items-center gap-1 shadow-2xs"
-                              title={item.biometricVerification.details || `Biometrik Cocok (${score}%)`}
-                            >
-                              <ShieldCheck className="w-3 h-3 text-emerald-600 shrink-0" />
-                              <span>{score}%</span>
-                            </span>
-                          );
-                        }
-
-                        if (score >= 60) {
-                          return (
-                            <span
-                              className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold font-mono-code inline-flex items-center gap-1 shadow-2xs"
-                              title={item.biometricVerification.details || `Biometrik Memadai (${score}%)`}
-                            >
-                              <ShieldCheck className="w-3 h-3 text-blue-600 shrink-0" />
-                              <span>{score}%</span>
-                            </span>
-                          );
-                        }
-
-                        const isNoFace = score === 0 || item.biometricVerification.details?.toLowerCase().includes('tidak terdeteksi');
-                        return (
-                          <span
-                            className="px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-bold font-mono-code inline-flex items-center gap-1 shadow-2xs"
-                            title={item.biometricVerification.details || `Kemiripan Rendah / Mismatch (${score}%)`}
-                          >
-                            <ShieldAlert className="w-3 h-3 text-rose-600 shrink-0" />
-                            <span>{isNoFace ? '0%' : `${score}%`}</span>
-                          </span>
-                        );
-                      })()}
                     </td>
                     {currentRole === 'superuser' && onDeleteAttendance && (
                       <td className="py-3 px-3 text-right">
