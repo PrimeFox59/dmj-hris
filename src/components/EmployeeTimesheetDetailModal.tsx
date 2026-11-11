@@ -22,7 +22,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Maximize2,
-  Check
+  Check,
+  AlertCircle
 } from 'lucide-react';
 import { Employee, Project, AttendanceRecord, AttendanceStatus, SalaryRuleConfig } from '../types';
 import { api } from '../services/api';
@@ -1039,8 +1040,9 @@ export const EmployeeTimesheetDetailModal: React.FC<EmployeeTimesheetDetailModal
                         ✓ Biometric Match: {zoomedPhoto.matchScore}%
                       </span>
                     ) : (
-                      <span className="text-[10px] text-slate-300">
-                        Foto Presensi Kamera
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold inline-flex items-center gap-1 shadow-2xs">
+                        <AlertCircle className="w-3 h-3 text-amber-400 shrink-0" />
+                        Belum Register Face (Foto Kamera Reguler)
                       </span>
                     )}
                   </div>

@@ -1465,10 +1465,20 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                             {(() => {
                               const inBio = item.checkInBiometric || (item.checkInTime ? item.biometricVerification : undefined);
                               const score = inBio?.matchScore;
-                              if (score === undefined || score === null) return null;
+                              if (score !== undefined && score !== null) {
+                                return (
+                                  <span className={`text-[10px] font-bold ${score >= 70 ? 'text-emerald-700' : score >= 60 ? 'text-blue-700' : 'text-rose-600'}`}>
+                                    ({score}%)
+                                  </span>
+                                );
+                              }
                               return (
-                                <span className={`text-[10px] font-bold ${score >= 70 ? 'text-emerald-700' : score >= 60 ? 'text-blue-700' : 'text-rose-600'}`}>
-                                  ({score}%)
+                                <span
+                                  className="px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-700 border border-amber-500/30 text-[9px] font-bold font-mono-code inline-flex items-center gap-0.5 shrink-0 shadow-2xs"
+                                  title="Karyawan belum melakukan registrasi biometrik wajah (4 pose master)"
+                                >
+                                  <AlertCircle className="w-2.5 h-2.5 text-amber-600 shrink-0" />
+                                  <span>Belum Register Face</span>
                                 </span>
                               );
                             })()}
@@ -1496,10 +1506,20 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                             {(() => {
                               const outBio = item.checkOutBiometric || (item.checkOutTime && (!item.checkInTime || item.attendanceType === 'CHECK_OUT') ? item.biometricVerification : undefined);
                               const score = outBio?.matchScore;
-                              if (score === undefined || score === null) return null;
+                              if (score !== undefined && score !== null) {
+                                return (
+                                  <span className={`text-[10px] font-bold ${score >= 70 ? 'text-emerald-700' : score >= 60 ? 'text-blue-700' : 'text-rose-600'}`}>
+                                    ({score}%)
+                                  </span>
+                                );
+                              }
                               return (
-                                <span className={`text-[10px] font-bold ${score >= 70 ? 'text-emerald-700' : score >= 60 ? 'text-blue-700' : 'text-rose-600'}`}>
-                                  ({score}%)
+                                <span
+                                  className="px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-700 border border-amber-500/30 text-[9px] font-bold font-mono-code inline-flex items-center gap-0.5 shrink-0 shadow-2xs"
+                                  title="Karyawan belum melakukan registrasi biometrik wajah (4 pose master)"
+                                >
+                                  <AlertCircle className="w-2.5 h-2.5 text-amber-600 shrink-0" />
+                                  <span>Belum Register Face</span>
                                 </span>
                               );
                             })()}
@@ -1911,9 +1931,9 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                         </span>
                       </div>
 
-                      {activeBiometric?.matchScore !== undefined && (
-                        <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-xs font-mono-code">
-                          <span className="text-slate-400 text-[10px]">Skor Biometrik:</span>
+                      <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-xs font-mono-code">
+                        <span className="text-slate-400 text-[10px]">Status Biometrik:</span>
+                        {activeBiometric?.matchScore !== undefined ? (
                           <span
                             className={`font-bold ${
                               (activeBiometric?.matchScore || 0) >= 70
@@ -1925,8 +1945,13 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                           >
                             {activeBiometric.matchScore}% Match {activeBiometric?.details ? `• ${activeBiometric.details}` : ''}
                           </span>
-                        </div>
-                      )}
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 font-bold text-[10px] inline-flex items-center gap-1 shadow-2xs">
+                            <AlertCircle className="w-3 h-3 text-amber-600 shrink-0" />
+                            Belum Register Face (Non-Biometrik)
+                          </span>
+                        )}
+                      </div>
 
                       {/* Catatan Presensi Saat Absen */}
                       <div className="pt-2 border-t border-slate-200/60">
