@@ -32,6 +32,8 @@ import {
   MoreVertical,
   Power,
   AlertCircle,
+  AlertTriangle,
+  ChevronDown,
   Eye,
   EyeOff
 } from 'lucide-react';
@@ -218,6 +220,52 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
   const [employeeStatus, setEmployeeStatus] = useState<'ACTIVE' | 'INACTIVE'>('ACTIVE');
   const [inactiveReason, setInactiveReason] = useState('');
 
+  // Department autocomplete & suggestion state
+  const [showDeptSuggestions, setShowDeptSuggestions] = useState(false);
+  const deptInputRef = useRef<HTMLInputElement>(null);
+
+  // Canonical unique list of departments (case-insensitive deduplication, preferring Title/Mixed Case)
+  const canonicalDepartments = useMemo(() => {
+    const map = new Map<string, string>();
+    employees.forEach(e => {
+      const raw = e.department ? String(e.department).trim() : '';
+      if (!raw) return;
+      const lower = raw.toLowerCase();
+      // If we already have this department, prefer Title/Mixed Case over ALL-CAPS
+      if (!map.has(lower) || (raw !== raw.toUpperCase() && map.get(lower) === map.get(lower)?.toUpperCase())) {
+        map.set(lower, raw);
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => a.localeCompare(b));
+  }, [employees]);
+
+  // Real-time suggestions based on current department input
+  const deptSuggestions = useMemo(() => {
+    const q = department.trim().toLowerCase();
+    if (!q) return canonicalDepartments;
+    return canonicalDepartments.filter(d => {
+      const lower = d.toLowerCase();
+      if (lower.includes(q)) return true;
+      const words = lower.split(/[\s,()&-]+/);
+      return words.some(w => w.startsWith(q));
+    }).sort((a, b) => {
+      const aLower = a.toLowerCase();
+      const bLower = b.toLowerCase();
+      if (aLower === q) return -1;
+      if (bLower === q) return 1;
+      if (aLower.startsWith(q) && !bLower.startsWith(q)) return -1;
+      if (!aLower.startsWith(q) && bLower.startsWith(q)) return 1;
+      return a.localeCompare(b);
+    });
+  }, [department, canonicalDepartments]);
+
+  // Check if current input matches an existing department in lowercase but has different casing/spacing
+  const canonicalMatch = useMemo(() => {
+    const q = department.trim().toLowerCase();
+    if (!q) return null;
+    return canonicalDepartments.find(d => d.toLowerCase() === q) || null;
+  }, [department, canonicalDepartments]);
+
   // Real-time duplicate login ID detection
   const isLoginIdDuplicate = useMemo(() => {
     if (!loginId.trim()) return false;
@@ -327,6 +375,10 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
     const numMatch = cleanLoginId.match(/^d(\d{1,4})$/i);
     const newEmpId = numMatch ? `EMP-${String(numMatch[1]).padStart(3, '0')}` : `EMP-${Date.now()}`;
 
+    // Auto-normalize department casing to canonical registered name if matching case-insensitively
+    const cleanDept = department.trim();
+    const finalDepartment = canonicalMatch || cleanDept;
+
     const empData: Employee = {
       id: editingEmployee ? editingEmployee.id : newEmpId,
       loginId: cleanLoginId,
@@ -337,7 +389,7 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
       avatar: editingEmployee?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
       role,
       systemRole,
-      department,
+      department: finalDepartment,
       position,
       employmentType,
       joinDate: editingEmployee ? editingEmployee.joinDate : '2026-09-01',
@@ -461,7 +513,7 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
     onUpdateEmployee(updated);
   };
 
-  const departments = Array.from(new Set(employees.map(e => e.department).filter(Boolean)));
+  const departments = canonicalDepartments;
 
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
 
@@ -1324,15 +1376,124 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                       required
                     />
                   </div>
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-600 uppercase">Departemen</label>
-                    <input
-                      type="text"
-                      value={department}
-                      onChange={e => setDepartment(e.target.value)}
-                      className="w-full glass-input rounded-xl px-3 py-2 mt-1 bg-white border border-slate-200 text-slate-900"
-                      required
-                    />
+                  <div className="relative">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] font-bold text-slate-600 uppercase">Departemen</label>
+                      {canonicalMatch && department.trim() !== canonicalMatch && (
+                        <span className="text-[9.5px] text-amber-600 font-bold flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3 text-amber-500" />
+                          Nama serupa terdaftar
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="relative mt-1">
+                      <input
+                        ref={deptInputRef}
+                        type="text"
+                        list="canonical-departments-list"
+                        value={department}
+                        onChange={e => {
+                          setDepartment(e.target.value);
+                          setShowDeptSuggestions(true);
+                        }}
+                        onFocus={() => setShowDeptSuggestions(true)}
+                        onBlur={() => {
+                          // Allow click on dropdown suggestion before dismissing
+                          setTimeout(() => setShowDeptSuggestions(false), 250);
+                        }}
+                        className={`w-full glass-input rounded-xl pl-3 pr-8 py-2 bg-white border ${
+                          canonicalMatch && department.trim() !== canonicalMatch
+                            ? 'border-amber-400 focus:border-amber-500 ring-1 ring-amber-400/20'
+                            : 'border-slate-200 focus:border-orange-500'
+                        } text-slate-900 text-xs sm:text-sm font-medium`}
+                        placeholder="Ketik atau pilih departemen..."
+                        autoComplete="off"
+                        required
+                      />
+                      <button
+                        type="button"
+                        tabIndex={-1}
+                        onClick={() => {
+                          setShowDeptSuggestions(prev => !prev);
+                          deptInputRef.current?.focus();
+                        }}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 cursor-pointer transition-colors"
+                        title="Buka daftar departemen terdaftar"
+                      >
+                        <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showDeptSuggestions ? 'rotate-180 text-orange-500' : ''}`} />
+                      </button>
+                    </div>
+
+                    {/* Datalist fallback untuk keyboard mobile */}
+                    <datalist id="canonical-departments-list">
+                      {canonicalDepartments.map(d => (
+                        <option key={d} value={d} />
+                      ))}
+                    </datalist>
+
+                    {/* Tombol Auto-Correction jika ada ejaan serupa / beda kapitalisasi */}
+                    {canonicalMatch && department.trim().toLowerCase() === canonicalMatch.toLowerCase() && department.trim() !== canonicalMatch && (
+                      <div
+                        onClick={() => {
+                          setDepartment(canonicalMatch);
+                          setShowDeptSuggestions(false);
+                        }}
+                        className="mt-1.5 p-2 bg-amber-50/90 border border-amber-200 rounded-xl text-[11px] text-amber-900 flex items-center justify-between gap-2 cursor-pointer hover:bg-amber-100 transition-all shadow-sm"
+                        title="Klik untuk menyamakan dengan format resmi"
+                      >
+                        <div className="flex items-center gap-1.5 truncate">
+                          <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                          <span className="truncate">Gunakan nama resmi: <strong className="text-amber-950 font-bold">{canonicalMatch}</strong></span>
+                        </div>
+                        <span className="text-[10px] bg-amber-600 text-white px-2 py-0.5 rounded-full font-bold shrink-0 hover:bg-amber-700">
+                          Samakan
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Floating Suggestion Popover saat mengetik */}
+                    {showDeptSuggestions && deptSuggestions.length > 0 && (
+                      <div className="absolute z-50 left-0 right-0 mt-1 max-h-52 overflow-y-auto bg-white rounded-2xl shadow-xl border border-slate-200 divide-y divide-slate-100 text-xs animate-in fade-in slide-in-from-top-1 duration-150">
+                        <div className="px-3 py-1.5 bg-slate-50/95 text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between sticky top-0 backdrop-blur-sm z-10">
+                          <span>Saran Departemen Terdaftar ({deptSuggestions.length})</span>
+                          <span className="text-[9px] font-normal lowercase text-slate-400">klik untuk mengisi</span>
+                        </div>
+                        {deptSuggestions.map((s, idx) => {
+                          const isExact = s.toLowerCase() === department.trim().toLowerCase();
+                          return (
+                            <button
+                              key={idx}
+                              type="button"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                setDepartment(s);
+                                setShowDeptSuggestions(false);
+                              }}
+                              className={`w-full text-left px-3 py-2.5 transition-colors flex items-center justify-between gap-2 cursor-pointer ${
+                                isExact 
+                                  ? 'bg-orange-50 font-bold text-orange-700' 
+                                  : 'hover:bg-slate-50 text-slate-700'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 truncate">
+                                <Briefcase className={`w-3.5 h-3.5 shrink-0 ${isExact ? 'text-orange-600' : 'text-slate-400'}`} />
+                                <span className="truncate">{s}</span>
+                              </div>
+                              {isExact ? (
+                                <span className="text-[9.5px] bg-orange-100 text-orange-800 px-2 py-0.5 rounded-full font-bold shrink-0 flex items-center gap-1">
+                                  <Check className="w-3 h-3" /> Terpilih
+                                </span>
+                              ) : (
+                                <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded font-mono-code shrink-0">
+                                  Pilih
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
