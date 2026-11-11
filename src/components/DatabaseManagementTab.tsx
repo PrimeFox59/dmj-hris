@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { api } from '../services/api';
-import { Employee, Project } from '../types';
+import { Employee, Project, getEffectiveSystemRole } from '../types';
 
 interface DatabaseManagementTabProps {
   currentUser?: Employee;
@@ -45,6 +45,9 @@ export const DatabaseManagementTab: React.FC<DatabaseManagementTabProps> = ({
   onRefreshData,
   showToast
 }) => {
+  const effectiveRole = getEffectiveSystemRole(currentUser);
+  const isFinanceOrSuper = effectiveRole === 'finance' || effectiveRole === 'superuser';
+
   // Database Telemetry State
   const [stats, setStats] = useState<any>(null);
   const [loadingStats, setLoadingStats] = useState(false);
@@ -548,6 +551,32 @@ export const DatabaseManagementTab: React.FC<DatabaseManagementTabProps> = ({
                 </button>
               </div>
             </div>
+
+            {/* Financial Privacy Notice for Employee Dataset */}
+            {selectedDataset === 'employees' && (
+              <div className="pt-3 border-t border-slate-100">
+                {!isFinanceOrSuper ? (
+                  <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200/90 text-amber-950 text-xs">
+                    <div className="flex items-start gap-2.5">
+                      <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-bold text-amber-900 leading-tight">Perlindungan Kerahasiaan Finansial (RBAC):</p>
+                        <p className="text-[11px] text-amber-800 mt-1 leading-relaxed">
+                          Sesuai kebijakan tata kelola sistem, kolom <strong>Gaji Pokok, Tunjangan Tetap, Tunjangan Harian & Rekening Bank</strong> secara otomatis <strong>disembunyikan</strong> untuk akun HR. Data gaji hanya berwenang diakses, diunduh, dan dikelola oleh tim <strong>Finance</strong> dan <strong>Superuser</strong>.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-2xl bg-emerald-50/80 border border-emerald-200/80 text-emerald-950 text-xs flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span className="text-[11px] font-semibold text-emerald-900">
+                      Otorisasi Finansial Aktif: Data Gaji Pokok, Tunjangan & Rekening Bank akan disertakan dalam file Excel.
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Date Range Filter (Visible for Attendances) */}
             {selectedDataset === 'attendances' && (

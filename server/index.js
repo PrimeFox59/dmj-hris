@@ -2118,7 +2118,7 @@ const server = http.createServer(async (req, res) => {
         if (table === 'attendances') {
           rows = getAttendancesForExport(body);
         } else if (table === 'employees') {
-          rows = getEmployeesForExport();
+          rows = getEmployeesForExport(user);
         } else if (table === 'projects') {
           rows = getProjectsForExport();
         }
@@ -2147,7 +2147,7 @@ const server = http.createServer(async (req, res) => {
         }
 
         if (table === 'employees' || table === 'all') {
-          const empRows = getEmployeesForExport();
+          const empRows = getEmployeesForExport(user);
           const wsEmp = XLSX.utils.json_to_sheet(empRows);
           XLSX.utils.book_append_sheet(wb, wsEmp, 'Master Karyawan');
         }

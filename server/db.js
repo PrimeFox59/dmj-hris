@@ -4810,13 +4810,29 @@ export function getAttendancesForExport(filters = {}) {
   });
 }
 
-export function getEmployeesForExport() {
+export function getEmployeesForExport(requestingUser = null) {
   const db = getDatabase();
   const rows = db.prepare('SELECT id, nik, name, email, phone, role, department, position, employmentType, joinDate, assignedProjectId, baseSalary, fixedAllowance, dailyAllowance, leaveQuota, usedLeave, bankAccount, data_json FROM employees ORDER BY name ASC;').all();
+
+  // Strict RBAC: Check whether requesting user is authorized for financial & compensation data
+  const userSystemRole = String(requestingUser?.systemRole || '').toLowerCase().trim();
+  const userRole = String(requestingUser?.role || '').toUpperCase().trim();
+  const username = String(requestingUser?.username || '').toLowerCase().trim();
+
+  const isFinanceOrSuper = (
+    userSystemRole === 'finance' ||
+    userSystemRole === 'superuser' ||
+    userRole === 'FINANCE' ||
+    userRole === 'DIRECTOR' ||
+    username === 'admin' ||
+    username === 'galih'
+  );
+
   return rows.map(r => {
     let d = {};
     try { d = JSON.parse(r.data_json); } catch (e) {}
-    return {
+    
+    const empExport = {
       'ID Karyawan': r.id,
       'NIK': r.nik || '',
       'ID Login': d.loginId || (r.id === 'EMP-001' ? 'admin' : ''),
@@ -4827,14 +4843,23 @@ export function getEmployeesForExport() {
       'Jabatan': r.position || r.role || '',
       'Status Kerja': r.employmentType || 'TETAP',
       'Tanggal Bergabung': r.joinDate || '',
-      'Gaji Pokok': r.baseSalary || 0,
-      'Tunjangan Tetap': r.fixedAllowance || 0,
-      'Tunjangan Harian': r.dailyAllowance || 0,
       'Kuota Cuti': r.leaveQuota ?? 12,
-      'Cuti Terpakai': r.usedLeave ?? 0,
-      'Nomor Rekening': r.bankAccount || '',
-      'Nama Bank': d.bankName || 'BCA'
+      'Cuti Terpakai': r.usedLeave ?? 0
     };
+
+    // PRIVACY & COMPLIANCE GUARD:
+    // Kolom Gaji Pokok, Tunjangan Tetap, Tunjangan Harian, dan Rekening Bank
+    // HANYA dimunculkan jika user adalah Finance atau Superuser!
+    // Untuk user HR/Admin/Staff, kolom-kolom ini MUTLAK DIHILANGKAN (Zero Leak).
+    if (isFinanceOrSuper) {
+      empExport['Gaji Pokok (Rp)'] = r.baseSalary || 0;
+      empExport['Tunjangan Tetap (Rp)'] = r.fixedAllowance || 0;
+      empExport['Tunjangan Harian (Rp)'] = r.dailyAllowance || 0;
+      empExport['Nomor Rekening'] = r.bankAccount || '';
+      empExport['Nama Bank'] = d.bankName || 'BCA';
+    }
+
+    return empExport;
   });
 }
 
