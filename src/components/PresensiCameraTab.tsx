@@ -2234,17 +2234,28 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="w-full table-fixed min-w-[1020px] text-left text-xs">
+            <colgroup>
+              <col className="w-[110px]" />
+              <col className="w-[22%]" />
+              <col className="w-[195px]" />
+              <col className="w-[195px]" />
+              <col className="w-[125px]" />
+              <col className="w-[160px]" />
+              {currentRole === 'superuser' && onDeleteAttendance && (
+                <col className="w-[55px]" />
+              )}
+            </colgroup>
             <thead>
               <tr className="border-b border-slate-200/80 text-slate-500 uppercase tracking-wider text-[10px] font-mono-code">
-                <th className="py-2.5 px-3">Date</th>
+                <th className="py-2.5 px-3 w-[110px]">Date</th>
                 <th className="py-2.5 px-3">Karyawan</th>
-                <th className="py-2.5 px-3">Absen Masuk</th>
-                <th className="py-2.5 px-3">Absen Pulang</th>
-                <th className="py-2.5 px-3">Work Hour</th>
-                <th className="py-2.5 px-3">Status Verifikasi</th>
+                <th className="py-2.5 px-3 w-[195px]">Absen Masuk</th>
+                <th className="py-2.5 px-3 w-[195px]">Absen Pulang</th>
+                <th className="py-2.5 px-3 w-[125px]">Work Hour</th>
+                <th className="py-2.5 px-3 w-[160px]">Status Verifikasi</th>
                 {currentRole === 'superuser' && onDeleteAttendance && (
-                  <th className="py-2.5 px-3 text-right">Aksi</th>
+                  <th className="py-2.5 px-3 w-[55px] text-right">Aksi</th>
                 )}
               </tr>
             </thead>
@@ -2274,8 +2285,8 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                         <span className="font-semibold text-slate-800 text-[11px]">{item.date}</span>
                       </div>
                     </td>
-                    <td className="py-3 px-3">
-                      <div className="font-bold text-slate-900">{item.employeeName}</div>
+                    <td className="py-3 px-3 overflow-hidden">
+                      <div className="font-bold text-slate-900 truncate" title={item.employeeName}>{item.employeeName}</div>
                       <div className="text-[10px] text-indigo-600 font-mono-code font-semibold">
                         {getRecordLoginBadgeId(item)}
                       </div>
@@ -2409,7 +2420,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                         return <span className="text-slate-400 text-[11px] font-mono-code">-</span>;
                       })()}
                     </td>
-                    <td className="py-3 px-3">
+                    <td className="py-3 px-3 whitespace-nowrap">
                       {(!item.checkInTime && item.checkOutTime) ? (
                         <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-bold animate-pulse inline-flex items-center gap-1">
                           Perlu Approval PM & HR
@@ -2429,7 +2440,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                       )}
                     </td>
                     {currentRole === 'superuser' && onDeleteAttendance && (
-                      <td className="py-3 px-3 text-right">
+                      <td className="py-3 px-3 text-right whitespace-nowrap">
                         <button
                           onClick={async (e) => {
                             e.stopPropagation();

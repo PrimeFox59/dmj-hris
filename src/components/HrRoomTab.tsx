@@ -1334,25 +1334,25 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
         </div>
 
         <div className="overflow-x-auto w-full hr-table-container">
-          <table className="w-full table-fixed min-w-[720px] text-left">
+          <table className="w-full table-fixed min-w-[1000px] text-left">
             <colgroup>
-              <col className="w-[52px]" />
+              <col className="w-[54px]" />
               <col className="w-[105px]" />
-              <col className="w-[26%]" />
-              <col className="w-[26%]" />
-              <col className="w-[115px]" />
-              <col className="w-[115px]" />
-              <col className="w-[100px]" />
+              <col className="w-[19%]" />
+              <col className="w-[20%]" />
+              <col className="w-[185px]" />
+              <col className="w-[185px]" />
+              <col className="w-[110px]" />
             </colgroup>
             <thead>
               <tr className="border-b border-slate-200/90 bg-slate-50/80 text-slate-500 uppercase font-mono-code font-bold hr-text-auto-header tracking-tight">
-                <th className="py-2.5 px-1 w-[52px] text-center whitespace-nowrap">ID</th>
+                <th className="py-2.5 px-1 w-[54px] text-center whitespace-nowrap">ID</th>
                 <th className="py-2.5 px-1.5 w-[105px] whitespace-nowrap">Tanggal</th>
                 <th className="py-2.5 px-2">Karyawan</th>
                 <th className="py-2.5 px-2">Proyek</th>
-                <th className="py-2.5 px-1 w-[115px] whitespace-nowrap">Masuk</th>
-                <th className="py-2.5 px-1 w-[115px] whitespace-nowrap">Pulang</th>
-                <th className="py-2.5 px-1 w-[100px] text-center whitespace-nowrap">Work Hour</th>
+                <th className="py-2.5 px-2 w-[185px] whitespace-nowrap">Masuk</th>
+                <th className="py-2.5 px-2 w-[185px] whitespace-nowrap">Pulang</th>
+                <th className="py-2.5 px-1 w-[110px] text-center whitespace-nowrap">Work Hour</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -1449,7 +1449,7 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                       </td>
 
                       {/* 5. Masuk */}
-                      <td className="py-2 px-1 whitespace-nowrap">
+                      <td className="py-2 px-2 whitespace-nowrap">
                         {item.checkInTime ? (
                           <button
                             type="button"
@@ -1457,7 +1457,7 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                               setSelectedPhotoItem(item);
                               setPhotoType('CHECK_IN');
                             }}
-                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200/70 font-mono-code hr-text-auto-sm font-bold transition-all group cursor-pointer shadow-2xs"
+                            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200/70 font-mono-code hr-text-auto-sm font-bold transition-all group cursor-pointer shadow-2xs"
                             title="Klik untuk melihat foto selfie masuk"
                           >
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0 group-hover:scale-125 transition-transform" />
@@ -1480,7 +1480,7 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                       </td>
 
                       {/* 6. Pulang */}
-                      <td className="py-2 px-1 whitespace-nowrap">
+                      <td className="py-2 px-2 whitespace-nowrap">
                         {item.checkOutTime ? (
                           <button
                             type="button"
@@ -1488,7 +1488,7 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                               setSelectedPhotoItem(item);
                               setPhotoType('CHECK_OUT');
                             }}
-                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-200/70 font-mono-code hr-text-auto-sm font-bold transition-all group cursor-pointer shadow-2xs"
+                            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-200/70 font-mono-code hr-text-auto-sm font-bold transition-all group cursor-pointer shadow-2xs"
                             title="Klik untuk melihat foto selfie pulang"
                           >
                             <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0 group-hover:scale-125 transition-transform" />
