@@ -284,8 +284,8 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                     </button>
                   )}
 
-                  {/* Tab: HR Room (Superuser only) */}
-                  {currentRole === 'superuser' && (
+                  {/* Tab: HR Room (Superuser, HRD, Admin) */}
+                  {(currentRole === 'superuser' || currentRole === 'hr' || currentRole === 'admin') && (
                     <button
                       onClick={() => handleTabClick('hr_room')}
                       className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${

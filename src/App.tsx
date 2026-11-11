@@ -56,7 +56,7 @@ export function App() {
   });
 
   // Auto-invalidation build ID (Membersihkan cache lama saat versi baru dirilis)
-  const APP_BUILD_ID = '20261111_v10_dept_suggestion_dedup';
+  const APP_BUILD_ID = '20261111_v11_hr_room_for_hrd_access';
   if (typeof window !== 'undefined') {
     try {
       const savedBuild = localStorage.getItem('prime_hris_build_id');
@@ -1678,11 +1678,13 @@ export function App() {
           : (userSystemRole === 'admin' || userSystemRole === 'hr')
           ? [
               { id: 'dashboard', label: 'Dashboard SDM' },
+              { id: 'hr_room', label: 'HR Room' },
               { id: 'payroll', label: 'Payroll' },
               { id: 'attendance', label: 'Presensi' },
               { id: 'approvals', label: 'Approval SDM' },
               { id: 'projects', label: 'Proyek & Site' },
               { id: 'users', label: 'Karyawan' },
+              { id: 'database_mgmt', label: 'Database' },
               { id: 'audit', label: 'Audit Log' }
             ]
           : userSystemRole === 'superuser'
@@ -1740,7 +1742,7 @@ export function App() {
           />
         )}
 
-        {activeTab === 'hr_room' && userSystemRole === 'superuser' && (
+        {activeTab === 'hr_room' && (userSystemRole === 'superuser' || userSystemRole === 'hr' || userSystemRole === 'admin') && (
           <HrRoomTab
             currentUser={currentUser}
             employees={employees}

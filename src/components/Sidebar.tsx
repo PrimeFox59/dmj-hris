@@ -126,6 +126,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
           badge: null
         },
         {
+          id: 'hr_room',
+          title: 'HR ROOM & ANALITIK',
+          desc: 'Pusat analitik HR: pantau performa tiap user, kepatuhan & tren presensi ECharts',
+          icon: Activity,
+          badge: null
+        },
+        {
           id: 'attendance',
           title: 'PRESENSI & JAM KERJA',
           desc: 'Verifikasi selfie kamera, validasi IP kantor & pendaftaran presensi dinas luar',
