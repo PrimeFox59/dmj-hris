@@ -954,7 +954,11 @@ const server = http.createServer(async (req, res) => {
       }
 
       // 1. Health check
-      if (cleanUrl === '/api/health' && method === 'GET') {
+      if (cleanUrl === '/api/health' && (method === 'GET' || method === 'HEAD')) {
+        if (method === 'HEAD') {
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+          return res.end();
+        }
         return sendJson(200, {
           status: 'online',
           rtcLiveConnectedClients: wsClients.size + sseClients.size,
