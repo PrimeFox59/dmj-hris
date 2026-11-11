@@ -499,11 +499,16 @@ export function isHumanFacePresent(
       totalLuma += luma;
       sqLuma += luma * luma;
 
-      // Heuristik krominansi kulit manusia adaptif:
-      // Mendukung lampu neon/LED cool white, pencahayaan alami, serta pantulan layar HP
+      // Heuristik krominansi kulit manusia adaptif (Normalized RGB + rule based)
+      // Memerlukan dominasi warna kulit manusia (merah-kuning dengan r > g > b)
+      const maxC = Math.max(r, g, b);
+      const minC = Math.min(r, g, b);
       const isSkin = 
-        (r > 40 && g > 25 && b > 20 && (r >= g || Math.abs(r - g) <= 12) && (r >= b || Math.abs(r - b) <= 12) && (r + g + b) > 105) ||
-        (r > g && r > b && r > 40);
+        r > 60 && g > 35 && b > 25 &&
+        r > g && r > b &&
+        (r - g) >= 8 && (r - b) >= 14 &&
+        (maxC - minC) >= 15 &&
+        (r + g + b) > 130;
 
       if (isSkin) {
         skinPixels++;
@@ -515,12 +520,12 @@ export function isHumanFacePresent(
     const stdDev = Math.sqrt(Math.max(0, variance));
     const skinRatio = skinPixels / totalPixels;
 
-    // Toleransi pencahayaan diperluas [16..250]
-    const properLighting = meanLuma >= 16 && meanLuma <= 250;
-    // Standar deviasi tekstur diturunkan ke 6.0 agar tidak ditolak oleh fitur Beauty Mode / Skin Smoothing HP
-    const hasTexture = stdDev >= 6.0;
-    // Ambang batas rasio kulit diturunkan ke 0.05 (5%) agar tetap mendeteksi jika berkerudung/topi
-    const hasSkin = skinRatio >= 0.05;
+    // Toleransi pencahayaan diperluas [20..245]
+    const properLighting = meanLuma >= 20 && meanLuma <= 245;
+    // Standar deviasi tekstur: minimal 8.0 untuk menolak layar hitam polos, dinding polos, atau meja kosong
+    const hasTexture = stdDev >= 8.0;
+    // Ambang batas rasio kulit: minimal 12% dari area oval wajah
+    const hasSkin = skinRatio >= 0.12;
 
     if (!properLighting) {
       return {
@@ -752,9 +757,20 @@ export async function compareFaceBiometric(
   if (!profile || !profile.isEnrolled || !profile.samples) {
     return {
       isVerified: true,
-      matchScore: 100,
+      matchScore: 0,
       livenessPassed: true,
       details: 'Biometrik belum terdaftar (Verifikasi dilewati)'
+    };
+  }
+
+  // Gate 1: Cek kehadiran fisik wajah terlebih dahulu (menolak monitor, tembok, benda mati)
+  const presence = isHumanFacePresent(liveCanvas);
+  if (!presence.isPresent) {
+    return {
+      isVerified: false,
+      matchScore: 0,
+      livenessPassed: false,
+      details: presence.feedback || 'Wajah manusia tidak terdeteksi di dalam frame kamera'
     };
   }
 
@@ -808,10 +824,10 @@ export async function compareFaceBiometric(
   } catch (error: any) {
     console.error('[BIOMETRIC ERROR] Evaluasi kemiripan gagal:', error);
     return {
-      isVerified: true,
-      matchScore: 85,
-      livenessPassed: true,
-      details: 'Evaluasi fallback biometrik berhasil'
+      isVerified: false,
+      matchScore: 0,
+      livenessPassed: false,
+      details: 'Gagal mengevaluasi biometrik: ' + (error?.message || 'Error komputasi wajah')
     };
   }
 }

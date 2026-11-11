@@ -41,7 +41,7 @@ import { Employee, AttendanceRecord, AttendanceMode, AttendanceStatus, SalaryRul
 import { rtcService } from '../services/rtcService';
 import { getEmployeeProjectSchedule } from '../utils/scheduleHelper';
 import { BiometricEnrollmentModal } from './BiometricEnrollmentModal';
-import { compareFaceBiometric } from '../utils/biometricHelper';
+import { compareFaceBiometric, loadImageAsync } from '../utils/biometricHelper';
 import { api } from '../services/api';
 
 // Preset Lokasi Populer PRIME Enterprise & Site Proyek
@@ -1350,6 +1350,20 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
         const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
         setCapturedPhoto(dataUrl);
         stopCamera();
+
+        // Trigger automatic biometric verification if enrolled
+        if (currentUser.biometric?.isEnrolled) {
+          setIsVerifyingBiometric(true);
+          compareFaceBiometric(canvas, currentUser.biometric).then(result => {
+            setBiometricVerification(result);
+            setIsVerifyingBiometric(false);
+            applyWatermark(ctx);
+            const updatedUrl = canvas.toDataURL('image/jpeg', 0.95);
+            setCapturedPhoto(updatedUrl);
+          }).catch(() => {
+            setIsVerifyingBiometric(false);
+          });
+        }
       };
       img.src = event.target?.result as string;
     };
@@ -1362,7 +1376,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
     startCamera();
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     // 0. WAJIB GPS AKTIF: Sistem menolak presensi jika GPS mati atau belum terkunci
@@ -1400,6 +1414,38 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
     if (!photoToUse) {
       alert('Harap ambil atau unggah foto wajah Anda untuk verifikasi presensi.');
       return;
+    }
+
+    // Validasi Biometrik Wajah Mandatori:
+    let currentBioObj = biometricVerification;
+    if (currentUser.biometric?.isEnrolled) {
+      if (!currentBioObj) {
+        setIsVerifyingBiometric(true);
+        try {
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = 640;
+          tempCanvas.height = 480;
+          const tCtx = tempCanvas.getContext('2d');
+          if (tCtx) {
+            const img = await loadImageAsync(photoToUse);
+            tCtx.drawImage(img, 0, 0, 640, 480);
+            currentBioObj = await compareFaceBiometric(tempCanvas, currentUser.biometric);
+            setBiometricVerification(currentBioObj);
+          }
+        } catch (bioErr: any) {
+          console.error('[Biometric Verification Error]', bioErr);
+        } finally {
+          setIsVerifyingBiometric(false);
+        }
+      }
+
+      // Hard Blocker: Jika karyawan terdaftar biometrik, wajib lolos verifikasi wajah asli!
+      if (!currentBioObj || !currentBioObj.isVerified || (currentBioObj.matchScore < 60)) {
+        const score = currentBioObj?.matchScore ?? 0;
+        const reason = currentBioObj?.details || 'Wajah tidak cocok dengan profil biometrik Anda';
+        alert(`Presensi Ditolak: Verifikasi biometrik wajah tidak cocok (Skor: ${score}% < 60%).\n\nDetail: ${reason}\n\nHarap pastikan wajah Anda menghadap lurus ke kamera dengan pencahayaan memadai dan hindari memfoto layar/benda mati.`);
+        return;
+      }
     }
 
     let noteToUse = '';
@@ -1499,13 +1545,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
       distanceMeters: effectiveTargetDistance
     };
 
-    const currentBioObj = biometricVerification || (currentUser.biometric?.isEnrolled ? {
-      isVerified: true,
-      matchScore: 95,
-      matchedPose: 'front' as const,
-      livenessPassed: true,
-      details: 'Biometrik terverifikasi valid saat presensi'
-    } : undefined);
+    // currentBioObj telah divalidasi dan dihitung kemiripan wajahnya secara aktual di atas
 
     const newRecord: AttendanceRecord = {
       id: isCheckIn ? `ATT-${Date.now()}` : (existingToday?.id || `ATT-${Date.now()}`),
@@ -1553,9 +1593,9 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
         isSudden: true
       } : undefined,
       approvalStatus: finalApprovalStatus,
-      biometricVerification: currentBioObj,
-      checkInBiometric: isCheckIn ? currentBioObj : (existingToday?.checkInBiometric || existingToday?.biometricVerification),
-      checkOutBiometric: !isCheckIn ? currentBioObj : existingToday?.checkOutBiometric
+      biometricVerification: currentBioObj || undefined,
+      checkInBiometric: isCheckIn ? (currentBioObj || undefined) : (existingToday?.checkInBiometric || existingToday?.biometricVerification),
+      checkOutBiometric: !isCheckIn ? (currentBioObj || undefined) : existingToday?.checkOutBiometric
     };
 
     onSubmitAttendance(newRecord);
@@ -2166,20 +2206,29 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
 
                   <button
                     type="submit"
-                    disabled={!isGpsLocked}
-                    className={`w-full py-3.5 rounded-2xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-md ${!isGpsLocked
+                    disabled={!isGpsLocked || isVerifyingBiometric}
+                    className={`w-full py-3.5 rounded-2xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all shadow-md ${(!isGpsLocked || isVerifyingBiometric)
                         ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
                         : 'bg-gradient-to-r from-[#FF6B00] via-[#FF8533] to-[#FF6B00] text-white hover:shadow-lg hover:shadow-orange-500/25 active:scale-98 cursor-pointer'
                       }`}
                   >
-                    <Send className="w-4 h-4" />
-                    <span>
-                      {!isGpsLocked
-                        ? (isGpsLoading ? 'Mencari Sinyal GPS...' : 'GPS Wajib Aktif untuk Presensi')
-                        : capturedPhoto
-                          ? (attendanceAction === 'CHECK_IN' ? 'Kirim Absen Masuk Sekarang' : 'Kirim Absen Pulang Sekarang')
-                          : (attendanceAction === 'CHECK_IN' ? 'Ambil Foto & Absen Masuk' : 'Ambil Foto & Absen Pulang')}
-                    </span>
+                    {isVerifyingBiometric ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-slate-500 border-t-transparent rounded-full animate-spin" />
+                        <span>Memverifikasi Wajah Biometrik...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-4 h-4" />
+                        <span>
+                          {!isGpsLocked
+                            ? (isGpsLoading ? 'Mencari Sinyal GPS...' : 'GPS Wajib Aktif untuk Presensi')
+                            : capturedPhoto
+                              ? (attendanceAction === 'CHECK_IN' ? 'Kirim Absen Masuk Sekarang' : 'Kirim Absen Pulang Sekarang')
+                              : (attendanceAction === 'CHECK_IN' ? 'Ambil Foto & Absen Masuk' : 'Ambil Foto & Absen Pulang')}
+                        </span>
+                      </>
+                    )}
                   </button>
                 </div>
 

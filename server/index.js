@@ -460,13 +460,14 @@ async function triggerBiometricBackgroundScan(attendanceRecord) {
         };
       } else if (resp.matched && resp.employeeId) {
         const isSame = resp.employeeId === attendanceRecord.employeeId;
+        const actualScore = resp.score !== undefined ? resp.score : 0;
         bioResult = {
-          isVerified: isSame,
-          matchScore: isSame ? (resp.score || 95) : 35,
+          isVerified: isSame && actualScore >= 60,
+          matchScore: isSame ? actualScore : 35,
           matchedPose: 'front',
           livenessPassed: true,
           details: isSame
-            ? `Wajah terverifikasi cocok (${resp.score}%)`
+            ? `Wajah terverifikasi cocok (${actualScore}%)`
             : `Wajah terdeteksi milik karyawan lain (${resp.employeeName || resp.employeeId})`
         };
       } else if (resp.score !== undefined) {
@@ -485,10 +486,15 @@ async function triggerBiometricBackgroundScan(attendanceRecord) {
 
     if (bioResult) {
       const db = getDatabase();
-      const row = db.prepare('SELECT data_json FROM attendances WHERE id = ?;').get(attendanceRecord.id);
+      const row = db.prepare('SELECT data_json, attendanceType FROM attendances WHERE id = ?;').get(attendanceRecord.id);
       if (row && row.data_json) {
         const d = JSON.parse(row.data_json);
         d.biometricVerification = bioResult;
+        if (attendanceRecord.attendanceType === 'CHECK_IN' || row.attendanceType === 'CHECK_IN') {
+          d.checkInBiometric = bioResult;
+        } else {
+          d.checkOutBiometric = bioResult;
+        }
         db.prepare('UPDATE attendances SET data_json = ? WHERE id = ?;').run(JSON.stringify(d), attendanceRecord.id);
 
         const updatedRecord = { ...attendanceRecord, biometricVerification: bioResult };
