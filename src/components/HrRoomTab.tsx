@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   Clock,
   MapPin,
+  ShieldCheck,
   ShieldAlert,
   Download,
   ChevronDown,
@@ -1337,10 +1338,10 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
             <colgroup>
               <col className="w-[52px]" />
               <col className="w-[105px]" />
-              <col className="w-[30%]" />
-              <col className="w-[30%]" />
-              <col className="w-[85px]" />
-              <col className="w-[85px]" />
+              <col className="w-[26%]" />
+              <col className="w-[26%]" />
+              <col className="w-[115px]" />
+              <col className="w-[115px]" />
               <col className="w-[100px]" />
             </colgroup>
             <thead>
@@ -1349,8 +1350,8 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                 <th className="py-2.5 px-1.5 w-[105px] whitespace-nowrap">Tanggal</th>
                 <th className="py-2.5 px-2">Karyawan</th>
                 <th className="py-2.5 px-2">Proyek</th>
-                <th className="py-2.5 px-1 w-[85px] whitespace-nowrap">Masuk</th>
-                <th className="py-2.5 px-1 w-[85px] whitespace-nowrap">Pulang</th>
+                <th className="py-2.5 px-1 w-[115px] whitespace-nowrap">Masuk</th>
+                <th className="py-2.5 px-1 w-[115px] whitespace-nowrap">Pulang</th>
                 <th className="py-2.5 px-1 w-[100px] text-center whitespace-nowrap">Work Hour</th>
               </tr>
             </thead>
@@ -1460,7 +1461,17 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                             title="Klik untuk melihat foto selfie masuk"
                           >
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0 group-hover:scale-125 transition-transform" />
-                            <span>{item.checkInTime.replace(/\s*WIB/i, '')}</span>
+                            <span>{item.checkInTime.replace(/\s*WIB/i, '')} WIB</span>
+                            {(() => {
+                              const inBio = item.checkInBiometric || (item.checkInTime ? item.biometricVerification : undefined);
+                              const score = inBio?.matchScore;
+                              if (score === undefined || score === null) return null;
+                              return (
+                                <span className={`text-[10px] font-bold ${score >= 70 ? 'text-emerald-700' : score >= 60 ? 'text-blue-700' : 'text-rose-600'}`}>
+                                  ({score}%)
+                                </span>
+                              );
+                            })()}
                             <Camera className="w-2.5 h-2.5 text-emerald-600 group-hover:text-emerald-700 shrink-0" />
                           </button>
                         ) : (
@@ -1481,7 +1492,17 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                             title="Klik untuk melihat foto selfie pulang"
                           >
                             <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0 group-hover:scale-125 transition-transform" />
-                            <span>{item.checkOutTime.replace(/\s*WIB/i, '')}</span>
+                            <span>{item.checkOutTime.replace(/\s*WIB/i, '')} WIB</span>
+                            {(() => {
+                              const outBio = item.checkOutBiometric || (item.checkOutTime && (!item.checkInTime || item.attendanceType === 'CHECK_OUT') ? item.biometricVerification : undefined);
+                              const score = outBio?.matchScore;
+                              if (score === undefined || score === null) return null;
+                              return (
+                                <span className={`text-[10px] font-bold ${score >= 70 ? 'text-emerald-700' : score >= 60 ? 'text-blue-700' : 'text-rose-600'}`}>
+                                  ({score}%)
+                                </span>
+                              );
+                            })()}
                             <Camera className="w-2.5 h-2.5 text-blue-600 group-hover:text-blue-700 shrink-0" />
                           </button>
                         ) : (
@@ -1889,6 +1910,23 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                           {getProjectInfo(selectedPhotoItem).name} ({getProjectInfo(selectedPhotoItem).code})
                         </span>
                       </div>
+
+                      {activeBiometric?.matchScore !== undefined && (
+                        <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-xs font-mono-code">
+                          <span className="text-slate-400 text-[10px]">Skor Biometrik:</span>
+                          <span
+                            className={`font-bold ${
+                              (activeBiometric?.matchScore || 0) >= 70
+                                ? 'text-emerald-700'
+                                : (activeBiometric?.matchScore || 0) >= 60
+                                ? 'text-blue-700'
+                                : 'text-rose-600'
+                            }`}
+                          >
+                            {activeBiometric.matchScore}% Match {activeBiometric?.details ? `• ${activeBiometric.details}` : ''}
+                          </span>
+                        </div>
+                      )}
 
                       {/* Catatan Presensi Saat Absen */}
                       <div className="pt-2 border-t border-slate-200/60">

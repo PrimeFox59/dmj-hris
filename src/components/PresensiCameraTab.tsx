@@ -15,6 +15,7 @@ import {
   Briefcase,
   Building,
   FileText,
+  ShieldCheck,
   ShieldAlert,
   Send,
   Sparkles,
@@ -2294,6 +2295,32 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                           <span className="font-bold text-slate-800 text-[11px] group-hover:text-[#FF6B00] group-hover:underline transition-colors">
                             {item.checkInTime} WIB
                           </span>
+                          {(() => {
+                            const inBio = item.checkInBiometric || (item.checkInTime ? item.biometricVerification : undefined);
+                            const score = inBio?.matchScore;
+                            if (score === undefined || score === null) return null;
+                            const isHigh = score >= 70;
+                            const isMid = score >= 60;
+                            return (
+                              <span
+                                className={`px-1.5 py-0.2 rounded-full border text-[10px] font-bold font-mono-code inline-flex items-center gap-0.5 shadow-2xs ${
+                                  isHigh
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                    : isMid
+                                    ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                    : 'bg-rose-50 text-rose-700 border-rose-200'
+                                }`}
+                                title={`Skor Biometrik Wajah Masuk: ${score}% (${inBio?.details || (score >= 60 ? 'Cocok' : 'Kemiripan Rendah')})`}
+                              >
+                                {score >= 60 ? (
+                                  <ShieldCheck className="w-2.5 h-2.5 shrink-0" />
+                                ) : (
+                                  <ShieldAlert className="w-2.5 h-2.5 shrink-0" />
+                                )}
+                                <span>{score}%</span>
+                              </span>
+                            );
+                          })()}
                         </button>
                       ) : item.checkOutTime ? (
                         <button
@@ -2327,6 +2354,32 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                           <span className="font-bold text-emerald-600 text-[11px] group-hover:text-[#FF6B00] group-hover:underline transition-colors">
                             {item.checkOutTime} WIB
                           </span>
+                          {(() => {
+                            const outBio = item.checkOutBiometric || (item.checkOutTime && (!item.checkInTime || item.attendanceType === 'CHECK_OUT') ? item.biometricVerification : undefined);
+                            const score = outBio?.matchScore;
+                            if (score === undefined || score === null) return null;
+                            const isHigh = score >= 70;
+                            const isMid = score >= 60;
+                            return (
+                              <span
+                                className={`px-1.5 py-0.2 rounded-full border text-[10px] font-bold font-mono-code inline-flex items-center gap-0.5 shadow-2xs ${
+                                  isHigh
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                    : isMid
+                                    ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                    : 'bg-rose-50 text-rose-700 border-rose-200'
+                                }`}
+                                title={`Skor Biometrik Wajah Pulang: ${score}% (${outBio?.details || (score >= 60 ? 'Cocok' : 'Kemiripan Rendah')})`}
+                              >
+                                {score >= 60 ? (
+                                  <ShieldCheck className="w-2.5 h-2.5 shrink-0" />
+                                ) : (
+                                  <ShieldAlert className="w-2.5 h-2.5 shrink-0" />
+                                )}
+                                <span>{score}%</span>
+                              </span>
+                            );
+                          })()}
                         </button>
                       ) : (
                         <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-400 text-[10px] italic font-medium font-mono-code">
@@ -2642,6 +2695,23 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                           </span>
                         )}
                       </p>
+                      {activeBiometric?.matchScore !== undefined && (
+                        <p>
+                          <span className="font-bold text-slate-700">Skor Biometrik:</span>{' '}
+                          <span
+                            className={`font-mono-code font-bold ${
+                              (activeBiometric?.matchScore || 0) >= 70
+                                ? 'text-emerald-700'
+                                : (activeBiometric?.matchScore || 0) >= 60
+                                ? 'text-blue-700'
+                                : 'text-rose-600'
+                            }`}
+                          >
+                            {activeBiometric.matchScore}% Match
+                          </span>{' '}
+                          {activeBiometric?.details ? `• ${activeBiometric.details}` : ''}
+                        </p>
+                      )}
                     </div>
               {currentRole === 'superuser' && onDeleteAttendance && (
                 <div className="mt-4 pt-3 border-t border-slate-100 flex justify-end">
