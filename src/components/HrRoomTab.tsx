@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import * as echarts from 'echarts';
-import * as XLSX from 'xlsx';
 import {
   Users,
   Calendar,
@@ -12,7 +11,6 @@ import {
   MapPin,
   ShieldCheck,
   ShieldAlert,
-  Download,
   ChevronDown,
   ChevronRight,
   TrendingUp,
@@ -902,44 +900,6 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
     };
   }, []);
 
-  // =========================================================================
-  // 8. EXCEL EXPORT HANDLER
-  // =========================================================================
-  const handleExportExcel = () => {
-    const dataToExport = scopedAttendances.map(a => {
-      const emp = employees.find(e => e.id === a.employeeId || e.nik === a.employeeNik);
-      const loginId = getLoginBadge(a);
-      const projInfo = getProjectInfo(a);
-      const noteInfo = extractUserAttendanceNote(a);
-      const isLateStr = a.isLate ? `Terlambat (${a.lateMinutes || 0} mnt)` : 'Tepat Waktu';
-      const geofenceStr = a.location?.inGeofence ? 'Dalam Area' : `Luar Geofence (${formatDistanceKm(a.location?.distanceMeters)})`;
-      const bioStr = a.biometricVerification?.matchScore !== undefined ? `${a.biometricVerification.matchScore}% Match` : 'Belum Enroll';
-
-      return {
-        'ID Login': loginId,
-        'Tanggal': a.date,
-        'Nama Karyawan': a.employeeName || emp?.name || '-',
-        'NIK': a.employeeNik || emp?.nik || '-',
-        'Proyek': projInfo.name,
-        'Kode Proyek': projInfo.code,
-        'Departemen': emp?.department || '-',
-        'Jam Masuk': a.checkInTime ? `${a.checkInTime} WIB` : '-',
-        'Jam Pulang': a.checkOutTime ? `${a.checkOutTime} WIB` : '-',
-        'Status Kepatuhan': isLateStr,
-        'Lokasi & Geofence': geofenceStr,
-        'Alamat Presensi': a.location?.address || '-',
-        'Skor Biometrik': bioStr,
-        'Catatan Absen': noteInfo.text !== '-' ? noteInfo.text : (a.note || '-')
-      };
-    });
-
-    const ws = XLSX.utils.json_to_sheet(dataToExport);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Log_Presensi_HR_Room');
-    const filename = `HR_Room_Presensi_${startDate}_sd_${endDate}`;
-    XLSX.writeFile(wb, `${filename}.xlsx`);
-  };
-
   // Displayed Attendance History (Load More / Pagination)
   const displayedAttendances = useMemo(() => {
     return scopedAttendances.slice(0, visibleRowsCount);
@@ -971,14 +931,6 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
           </div>
 
           <div className="flex items-center gap-2.5 self-start md:self-auto shrink-0">
-            <button
-              onClick={handleExportExcel}
-              className="px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs shadow-lg shadow-emerald-900/30 flex items-center gap-2 transition-all cursor-pointer"
-              title="Unduh seluruh rekaman log yang terfilter ke format Excel (.xlsx)"
-            >
-              <Download className="w-4 h-4" />
-              <span>Ekspor Excel (.xlsx)</span>
-            </button>
             <button
               onClick={() => handleSelectPreset(datePreset)}
               className="p-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-slate-200 border border-white/15 transition-all cursor-pointer"
