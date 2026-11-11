@@ -256,6 +256,21 @@ export const DatabaseManagementTab: React.FC<DatabaseManagementTabProps> = ({
     processSelectedFile(file);
   };
 
+  // Helper to extract values by multiple possible column aliases (case and whitespace-insensitive)
+  const getVal = (row: any, aliases: string[]) => {
+    if (!row || typeof row !== 'object') return null;
+    for (const k of Object.keys(row)) {
+      const cleanK = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+      for (const a of aliases) {
+        if (cleanK === a.toLowerCase().replace(/[^a-z0-9]/g, '')) {
+          const v = row[k];
+          if (v !== undefined && v !== null && String(v).trim() !== '') return v;
+        }
+      }
+    }
+    return null;
+  };
+
   const processSelectedFile = (file: File) => {
     setImportFile(file);
     setImportResult(null);
@@ -268,7 +283,9 @@ export const DatabaseManagementTab: React.FC<DatabaseManagementTabProps> = ({
         const wb = XLSX.read(data, { type: 'binary', cellDates: true });
         const sheetName = wb.SheetNames[0];
         const sheet = wb.Sheets[sheetName];
-        const rows: any[] = XLSX.utils.sheet_to_json(sheet, { raw: false });
+        const rawRows: any[] = XLSX.utils.sheet_to_json(sheet, { raw: false });
+        // Filter out completely blank rows
+        const rows = rawRows.filter(r => Object.values(r).some(v => v !== null && v !== undefined && String(v).trim() !== ''));
 
         if (!rows || rows.length === 0) {
           alert('File Excel kosong atau tidak memiliki baris data.');
@@ -285,18 +302,23 @@ export const DatabaseManagementTab: React.FC<DatabaseManagementTabProps> = ({
         const warnings: string[] = [];
 
         // Build fast employee map
-        const empByLogin = new Set(employees.map(e => e.loginId?.toLowerCase()));
-        const empByNik = new Set(employees.map(e => String(e.nik).trim()));
-        const empByName = new Set(employees.map(e => e.name.toLowerCase().trim()));
+        const empByLogin = new Set(employees.map(e => e.loginId?.toLowerCase()).filter(Boolean));
+        const empByNik = new Set(employees.map(e => String(e.nik).trim()).filter(Boolean));
+        const empByNikDigits = new Set(employees.map(e => String(e.nik || '').replace(/\D/g, '').replace(/^0+/, '')).filter(Boolean));
+        const empByName = new Set(employees.map(e => e.name.toLowerCase().trim()).filter(Boolean));
 
         for (let i = 0; i < rows.length; i++) {
           const r = rows[i];
-          const hasId = Boolean(r['ID Absensi'] || r['id'] || r['ID']);
-          const login = String(r['ID Login'] || r['loginId'] || '').toLowerCase().trim();
-          const nik = String(r['NIK'] || r['nik'] || '').trim();
-          const name = String(r['Nama Karyawan'] || r['name'] || '').toLowerCase().trim();
+          const hasId = Boolean(getVal(r, ['id absensi', 'id', 'attendance id']));
+          const login = String(getVal(r, ['id login', 'login id', 'username', 'login']) || '').toLowerCase().trim();
+          const nik = String(getVal(r, ['nik', 'no nik']) || '').trim();
+          const nikDigits = nik.replace(/\D/g, '').replace(/^0+/, '');
+          const name = String(getVal(r, ['nama karyawan', 'nama', 'name', 'nama lengkap']) || '').toLowerCase().trim();
 
-          const isKnown = (login && empByLogin.has(login)) || (nik && empByNik.has(nik)) || (name && empByName.has(name));
+          const isKnown = (login && empByLogin.has(login)) || 
+                          (nik && empByNik.has(nik)) || 
+                          (nikDigits && empByNikDigits.has(nikDigits)) || 
+                          (name && empByName.has(name));
           if (!isKnown && (login || nik || name)) {
             unknownEmployees++;
             if (warnings.length < 5) {
@@ -336,7 +358,7 @@ export const DatabaseManagementTab: React.FC<DatabaseManagementTabProps> = ({
       let toUpdate = 0;
       let toInsert = 0;
       for (const r of parsedRows) {
-        const hasId = Boolean(r['ID Absensi'] || r['id'] || r['ID']);
+        const hasId = Boolean(getVal(r, ['id absensi', 'id', 'attendance id']));
         if (hasId) toUpdate++;
         else toInsert++;
       }
@@ -925,24 +947,33 @@ export const DatabaseManagementTab: React.FC<DatabaseManagementTabProps> = ({
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 text-slate-700 font-mono-code text-[11px]">
-                          {parsedRows.slice(0, 5).map((r, idx) => (
-                            <tr key={idx} className="hover:bg-slate-50/70">
-                              <td className="py-2 px-3 whitespace-nowrap">{r['Tanggal'] || r['date'] || '-'}</td>
-                              <td className="py-2 px-3 whitespace-nowrap font-bold text-orange-600">{r['ID Login'] || r['loginId'] || '-'}</td>
-                              <td className="py-2 px-3 font-sans font-semibold text-slate-900 whitespace-nowrap">{r['Nama Karyawan'] || r['name'] || '-'}</td>
-                              <td className="py-2 px-3 whitespace-nowrap">{r['Jam Masuk'] || r['checkInTime'] || '-'}</td>
-                              <td className="py-2 px-3 whitespace-nowrap">{r['Jam Pulang'] || r['checkOutTime'] || '-'}</td>
-                              <td className="py-2 px-3 whitespace-nowrap">
-                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                  (r['Status Kehadiran'] || r['status']) === 'LATE'
-                                    ? 'bg-amber-100 text-amber-800'
-                                    : 'bg-emerald-100 text-emerald-800'
-                                }`}>
-                                  {r['Status Kehadiran'] || r['status'] || 'ON_TIME'}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
+                          {parsedRows.slice(0, 5).map((r, idx) => {
+                            const dateVal = getVal(r, ['tanggal', 'date', 'tgl']) || '-';
+                            const loginVal = getVal(r, ['id login', 'login id', 'username', 'login']) || '-';
+                            const nameVal = getVal(r, ['nama karyawan', 'nama', 'name', 'nama lengkap']) || '-';
+                            const inVal = getVal(r, ['jam masuk', 'absen masuk', 'masuk', 'check in', 'in']) || '-';
+                            const outVal = getVal(r, ['jam pulang', 'absen pulang', 'pulang', 'check out', 'out']) || '-';
+                            const statusVal = getVal(r, ['status kehadiran', 'status']) || 'ON_TIME';
+
+                            return (
+                              <tr key={idx} className="hover:bg-slate-50/70">
+                                <td className="py-2 px-3 whitespace-nowrap">{dateVal}</td>
+                                <td className="py-2 px-3 whitespace-nowrap font-bold text-orange-600">{loginVal}</td>
+                                <td className="py-2 px-3 font-sans font-semibold text-slate-900 whitespace-nowrap">{nameVal}</td>
+                                <td className="py-2 px-3 whitespace-nowrap">{inVal}</td>
+                                <td className="py-2 px-3 whitespace-nowrap">{outVal}</td>
+                                <td className="py-2 px-3 whitespace-nowrap">
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                    statusVal === 'LATE'
+                                      ? 'bg-amber-100 text-amber-800'
+                                      : 'bg-emerald-100 text-emerald-800'
+                                  }`}>
+                                    {statusVal}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>

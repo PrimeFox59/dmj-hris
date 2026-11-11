@@ -4909,6 +4909,7 @@ export function importAttendancesBatch(rows, mode = 'replace', operatorUser = nu
   const empById = new Map();
   const empByLogin = new Map();
   const empByNik = new Map();
+  const empByNikDigits = new Map();
   const empByName = new Map();
 
   for (const emp of empRows) {
@@ -4925,9 +4926,20 @@ export function importAttendancesBatch(rows, mode = 'replace', operatorUser = nu
     };
 
     empById.set(emp.id, empData);
-    if (emp.nik) empByNik.set(String(emp.nik).trim(), empData);
-    if (empData.loginId) empByLogin.set(String(empData.loginId).toLowerCase().trim(), empData);
-    if (emp.name) empByName.set(String(emp.name).toLowerCase().trim(), empData);
+    if (emp.nik) {
+      const cleanNik = String(emp.nik).trim();
+      empByNik.set(cleanNik, empData);
+      const digitsNoZeroes = cleanNik.replace(/\D/g, '').replace(/^0+/, '');
+      if (digitsNoZeroes) {
+        empByNikDigits.set(digitsNoZeroes, empData);
+      }
+    }
+    if (empData.loginId) {
+      empByLogin.set(String(empData.loginId).toLowerCase().trim(), empData);
+    }
+    if (emp.name) {
+      empByName.set(String(emp.name).toLowerCase().trim(), empData);
+    }
   }
 
   const projRows = db.prepare('SELECT id, code, name, data_json FROM projects;').all();
@@ -4954,41 +4966,63 @@ export function importAttendancesBatch(rows, mode = 'replace', operatorUser = nu
   let skipped = 0;
   const errors = [];
 
+  // Helper to extract values by multiple possible column aliases (case and whitespace-insensitive)
+  const getVal = (row, aliases) => {
+    if (!row || typeof row !== 'object') return null;
+    for (const k of Object.keys(row)) {
+      const cleanK = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+      for (const a of aliases) {
+        if (cleanK === a.toLowerCase().replace(/[^a-z0-9]/g, '')) {
+          const v = row[k];
+          if (v !== undefined && v !== null && String(v).trim() !== '') return v;
+        }
+      }
+    }
+    return null;
+  };
+
   const normalizeDate = (raw) => {
     if (!raw && raw !== 0) return null;
+    if (raw instanceof Date) return raw.toISOString().split('T')[0];
     if (typeof raw === 'number') {
       const date = new Date(Math.round((raw - 25569) * 86400 * 1000));
-      return date.toISOString().split('T')[0];
+      return isNaN(date.getTime()) ? null : date.toISOString().split('T')[0];
     }
     const str = String(raw).trim();
     if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
-    const parts = str.split(/[\/\-]/);
-    if (parts.length === 3) {
-      if (parts[2].length === 4) {
-        return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-      }
+    if (/^\d{4}[\/.]\d{1,2}[\/.]\d{1,2}$/.test(str)) {
+      const p = str.split(/[\/.]/);
+      return `${p[0]}-${p[1].padStart(2, '0')}-${p[2].padStart(2, '0')}`;
     }
-    return str;
+    if (/^\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{4}$/.test(str)) {
+      const p = str.split(/[\/\-.]/);
+      return `${p[2]}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}`;
+    }
+    const parsed = new Date(str);
+    if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
+    return null;
   };
 
   const normalizeTime = (raw) => {
-    if (!raw && raw !== 0) return null;
+    if (raw === null || raw === undefined || raw === '') return null;
     if (typeof raw === 'number') {
       const totalSeconds = Math.round(raw * 86400);
-      const h = Math.floor(totalSeconds / 3600);
+      const h = Math.floor(totalSeconds / 3600) % 24;
       const m = Math.floor((totalSeconds % 3600) / 60);
       const s = totalSeconds % 60;
       return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
     }
-    let str = String(raw).trim().replace(/\./g, ':');
-    if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(str)) {
-      const parts = str.split(':');
-      const h = parts[0].padStart(2, '0');
-      const m = parts[1].padStart(2, '0');
-      const s = parts[2] ? parts[2].padStart(2, '0') : '00';
+    const str = String(raw).trim();
+    const lower = str.toLowerCase();
+    if (lower.includes('belum') || lower === '-' || lower === 'null' || lower === 'undefined') return null;
+    const match = str.match(/(\d{1,2})[:.](\d{2})(?:[:.](\d{2}))?/);
+    if (match) {
+      const h = String(parseInt(match[1], 10)).padStart(2, '0');
+      const m = String(parseInt(match[2], 10)).padStart(2, '0');
+      const s = match[3] ? String(parseInt(match[3], 10)).padStart(2, '0') : '00';
       return `${h}:${m}:${s}`;
     }
-    return str || null;
+    return null;
   };
 
   db.exec('BEGIN TRANSACTION;');
@@ -4998,46 +5032,68 @@ export function importAttendancesBatch(rows, mode = 'replace', operatorUser = nu
       const row = rows[i];
       const rowNum = i + 2;
 
-      const rawId = row['ID Absensi'] || row['id'] || row['ID'] || null;
-      const rawDate = row['Tanggal'] || row['date'] || row['TANGGAL'] || null;
-      const rawLogin = row['ID Login'] || row['loginId'] || row['login_id'] || row['employeeLoginId'] || null;
-      const rawNik = row['NIK'] || row['nik'] || row['employeeNik'] || null;
-      const rawName = row['Nama Karyawan'] || row['name'] || row['employeeName'] || row['nama'] || null;
-      const rawDept = row['Departemen'] || row['department'] || null;
-      const rawProjCode = row['Kode Proyek'] || row['projectCode'] || null;
-      const rawProjName = row['Nama Proyek'] || row['projectName'] || null;
-      const rawIn = row['Jam Masuk'] || row['checkInTime'] || row['in'] || null;
-      const rawOut = row['Jam Pulang'] || row['checkOutTime'] || row['out'] || null;
-      const rawMode = row['Tipe Mode'] || row['mode'] || 'WFO';
-      const rawStatus = row['Status Kehadiran'] || row['status'] || null;
-      const rawAppr = row['Status Approval'] || row['approvalStatus'] || 'APPROVED';
-      const rawLateMins = row['Terlambat (Menit)'] ?? row['lateMinutes'] ?? null;
-      const rawNote = row['Alasan / Catatan'] || row['note'] || row['catatan'] || '';
-      const rawScoreIn = row['Skor Wajah Masuk'] || row['scoreIn'] || null;
-      const rawScoreOut = row['Skor Wajah Pulang'] || row['scoreOut'] || null;
+      // Extract values via flexible multi-language aliases
+      const rawId = getVal(row, ['id absensi', 'id', 'attendance id']);
+      const rawDate = getVal(row, ['tanggal', 'date', 'tgl', 'tanggal absen']);
+      const rawLogin = getVal(row, ['id login', 'login id', 'username', 'login', 'employee login id']);
+      const rawNik = getVal(row, ['nik', 'no nik', 'employee nik']);
+      const rawName = getVal(row, ['nama karyawan', 'nama', 'name', 'nama lengkap', 'employee name']);
+      const rawDept = getVal(row, ['departemen', 'dept', 'department']);
+      const rawProjCode = getVal(row, ['kode proyek', 'project code', 'kode prj']);
+      const rawProjName = getVal(row, ['nama proyek', 'project name', 'proyek', 'project']);
+      const rawIn = getVal(row, ['jam masuk', 'absen masuk', 'masuk', 'check in', 'check in time', 'in']);
+      const rawOut = getVal(row, ['jam pulang', 'absen pulang', 'pulang', 'check out', 'check out time', 'out']);
+      const rawMode = getVal(row, ['tipe mode', 'mode', 'attendance mode']) || 'WFO';
+      const rawStatus = getVal(row, ['status kehadiran', 'status', 'attendance status']);
+      const rawAppr = getVal(row, ['status approval', 'status verifikasi', 'approval status']) || 'APPROVED';
+      const rawLateMins = getVal(row, ['terlambat menit', 'menit terlambat', 'terlambat', 'late minutes', 'late']);
+      const rawNote = getVal(row, ['alasan catatan', 'alasan', 'catatan', 'note', 'notes']) || '';
+      const rawScoreIn = getVal(row, ['skor wajah masuk', 'skor masuk', 'score in']);
+      const rawScoreOut = getVal(row, ['skor wajah pulang', 'skor pulang', 'score out']);
+      const rawLocIn = getVal(row, ['lokasi masuk', 'lokasi', 'alamat']);
+
+      // 1. Skip completely empty rows silently
+      const isRowEmpty = !rawDate && !rawLogin && !rawNik && !rawName && !rawIn && !rawOut && !rawId;
+      if (isRowEmpty) continue;
 
       const normDate = normalizeDate(rawDate);
       if (!normDate) {
-        errors.push(`Baris ${rowNum}: Tanggal tidak valid atau kosong`);
+        errors.push(`Baris ${rowNum}: Format tanggal tidak valid (${rawDate || 'kosong'})`);
         continue;
       }
 
+      // 2. Resolve Employee (LoginId -> NIK -> NIK digits -> ID -> Name)
       let emp = null;
       if (rawLogin) emp = empByLogin.get(String(rawLogin).toLowerCase().trim());
-      if (!emp && rawNik) emp = empByNik.get(String(rawNik).trim());
-      if (!emp && rawId && row['employeeId'] && empById.has(row['employeeId'])) emp = empById.get(row['employeeId']);
-      if (!emp && rawName) emp = empByName.get(String(rawName).toLowerCase().trim());
+      if (!emp && rawNik) {
+        const cleanNik = String(rawNik).trim();
+        emp = empByNik.get(cleanNik);
+        if (!emp) {
+          const digitsOnly = cleanNik.replace(/\D/g, '').replace(/^0+/, '');
+          if (digitsOnly && empByNikDigits.has(digitsOnly)) {
+            emp = empByNikDigits.get(digitsOnly);
+          }
+        }
+      }
+      if (!emp && rawId && row['employeeId'] && empById.has(row['employeeId'])) {
+        emp = empById.get(row['employeeId']);
+      }
+      if (!emp && rawName) {
+        emp = empByName.get(String(rawName).toLowerCase().trim());
+      }
 
       if (!emp) {
-        errors.push(`Baris ${rowNum}: Karyawan tidak terdaftar (Login: ${rawLogin || '-'}, NIK: ${rawNik || '-'}, Nama: ${rawName || '-'})`);
+        errors.push(`Baris ${rowNum}: Karyawan tidak terdaftar di sistem (Login: ${rawLogin || '-'}, NIK: ${rawNik || '-'}, Nama: ${rawName || '-'})`);
         continue;
       }
 
+      // 3. Resolve Project
       let proj = null;
       if (rawProjCode) proj = projByCode.get(String(rawProjCode).toUpperCase().trim());
       if (!proj && rawProjName) proj = projByName.get(String(rawProjName).toLowerCase().trim());
       if (!proj && emp.assignedProjectId) proj = projById.get(emp.assignedProjectId);
 
+      // 4. Check existing attendance in DB
       let existing = null;
       if (rawId) {
         existing = db.prepare('SELECT id, data_json, checkInTime, checkOutTime, photoUrl FROM attendances WHERE id = ?').get(rawId);
@@ -5049,6 +5105,7 @@ export function importAttendancesBatch(rows, mode = 'replace', operatorUser = nu
       const normIn = normalizeTime(rawIn);
       const normOut = normalizeTime(rawOut);
 
+      // Mode ADD: Skip if already exists
       if (mode === 'add' && existing) {
         skipped++;
         continue;
@@ -5087,6 +5144,7 @@ export function importAttendancesBatch(rows, mode = 'replace', operatorUser = nu
         else finalStatus = prevData.status || 'ON_TIME';
       }
 
+      // Preserve existing photos and biometrics (ZERO data loss)
       const photoUrl = existing?.photoUrl || prevData.photoUrl || null;
       const checkInPhotoUrl = prevData.checkInPhotoUrl || photoUrl || null;
       const checkOutPhotoUrl = prevData.checkOutPhotoUrl || prevData.photoOutUrl || null;
@@ -5120,7 +5178,7 @@ export function importAttendancesBatch(rows, mode = 'replace', operatorUser = nu
           lat: -7.2974,
           lng: 112.8041,
           accuracy: 5,
-          address: row['Lokasi Masuk'] || 'Office / Project Site',
+          address: rawLocIn || 'Office / Project Site',
           inGeofence: true,
           distanceMeters: 50
         },
@@ -5149,39 +5207,43 @@ export function importAttendancesBatch(rows, mode = 'replace', operatorUser = nu
         updated_at: new Date().toISOString()
       };
 
-      const stmt = db.prepare(`
-        INSERT OR REPLACE INTO attendances (
-          id, employeeId, employeeName, employeeNik, department,
-          date, checkInTime, checkOutTime, mode, status,
-          photoUrl, isLate, lateMinutes, lateReason,
-          approvalStatus, data_json, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-      `);
+      try {
+        const stmt = db.prepare(`
+          INSERT OR REPLACE INTO attendances (
+            id, employeeId, employeeName, employeeNik, department,
+            date, checkInTime, checkOutTime, mode, status,
+            photoUrl, isLate, lateMinutes, lateReason,
+            approvalStatus, data_json, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        `);
 
-      stmt.run(
-        finalId,
-        emp.id,
-        emp.name,
-        emp.nik,
-        mergedData.department,
-        normDate,
-        mergedData.checkInTime || null,
-        mergedData.checkOutTime || null,
-        mergedData.mode,
-        mergedData.status,
-        photoUrl,
-        isLate,
-        lateMinutes,
-        mergedData.lateReason || null,
-        mergedData.approvalStatus,
-        JSON.stringify(mergedData),
-        new Date().toISOString()
-      );
+        stmt.run(
+          finalId,
+          emp.id,
+          emp.name,
+          emp.nik,
+          mergedData.department || '',
+          normDate,
+          mergedData.checkInTime || null,
+          mergedData.checkOutTime || null,
+          mergedData.mode || 'WFO',
+          mergedData.status || 'ON_TIME',
+          photoUrl,
+          isLate,
+          lateMinutes,
+          mergedData.lateReason || null,
+          mergedData.approvalStatus || 'APPROVED',
+          JSON.stringify(mergedData),
+          new Date().toISOString()
+        );
 
-      if (existing) {
-        updated++;
-      } else {
-        inserted++;
+        if (existing) {
+          updated++;
+        } else {
+          inserted++;
+        }
+      } catch (rowErr) {
+        errors.push(`Baris ${rowNum} (${emp.name}): Gagal menyimpan ke SQLite (${rowErr.message})`);
       }
     }
 
