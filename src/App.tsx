@@ -56,7 +56,7 @@ export function App() {
   });
 
   // Auto-invalidation build ID (Membersihkan cache lama saat versi baru dirilis)
-  const APP_BUILD_ID = '20261111_v12_strict_biometric_face_gate';
+  const APP_BUILD_ID = '20261111_v13_zero_mock_biometric_integrity';
   if (typeof window !== 'undefined') {
     try {
       const savedBuild = localStorage.getItem('prime_hris_build_id');

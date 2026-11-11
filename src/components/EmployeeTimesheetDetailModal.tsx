@@ -97,7 +97,7 @@ export const EmployeeTimesheetDetailModal: React.FC<EmployeeTimesheetDetailModal
     location: string;
     inGeofence: boolean;
     distanceMeters: number;
-    matchScore: number;
+    matchScore?: number;
   } | null>(null);
 
   // Correction Modal State
@@ -166,6 +166,11 @@ export const EmployeeTimesheetDetailModal: React.FC<EmployeeTimesheetDetailModal
         const resolvedPhotoIn = record.checkInPhotoUrl || (!isCheckoutWithoutIn ? record.photoUrl : undefined);
         const resolvedPhotoOut = record.checkOutPhotoUrl || record.photoOutUrl || (isCheckoutWithoutIn ? record.photoUrl : undefined);
 
+        const inBio = record.checkInBiometric || (!isCheckoutWithoutIn ? record.biometricVerification : undefined);
+        const outBio = record.checkOutBiometric || (isCheckoutWithoutIn ? record.biometricVerification : undefined);
+        const matchScoreIn = inBio?.matchScore !== undefined && inBio?.matchScore !== null ? inBio.matchScore : undefined;
+        const matchScoreOut = outBio?.matchScore !== undefined && outBio?.matchScore !== null ? outBio.matchScore : undefined;
+
         items.push({
           date: dateStr,
           dayName,
@@ -178,11 +183,13 @@ export const EmployeeTimesheetDetailModal: React.FC<EmployeeTimesheetDetailModal
           workDuration: durationStr,
           isLate: !!record.isLate,
           lateMinutes: record.lateMinutes || 0,
-          photoInUrl: resolvedPhotoIn || (record.checkInTime && record.checkInTime !== '-' ? defaultFacePhoto : undefined),
-          photoOutUrl: resolvedPhotoOut || (record.checkOutTime && record.checkOutTime !== '-' ? defaultSmilePhoto : undefined),
+          photoInUrl: resolvedPhotoIn,
+          photoOutUrl: resolvedPhotoOut,
           locationText: record.location?.address || (project?.location ? `Site Proyek ${project.name}` : 'Workshop Utama Surabaya'),
           inGeofence: record.location?.inGeofence ?? true,
           distanceMeters: record.location?.distanceMeters ?? 18,
+          matchScoreIn,
+          matchScoreOut,
           isHrCorrected: !!record.isHrCorrected,
           hrCorrectionNotes: record.hrCorrectionNotes,
           hrCorrectedBy: record.hrCorrectedBy,
@@ -788,7 +795,7 @@ export const EmployeeTimesheetDetailModal: React.FC<EmployeeTimesheetDetailModal
                                     location: item.locationText,
                                     inGeofence: item.inGeofence,
                                     distanceMeters: item.distanceMeters,
-                                    matchScore: item.matchScoreIn || 98.4
+                                    matchScore: item.matchScoreIn
                                   })}
                                   className="group relative inline-block rounded-xl overflow-hidden border border-slate-200 hover:border-[#FF6B00] shadow-2xs transition-all cursor-pointer"
                                   title="Klik untuk Zoom & Verifikasi Foto Wajah Masuk"
@@ -821,7 +828,7 @@ export const EmployeeTimesheetDetailModal: React.FC<EmployeeTimesheetDetailModal
                                     location: item.locationOutText || item.locationText,
                                     inGeofence: item.inGeofenceOut ?? item.inGeofence,
                                     distanceMeters: item.distanceMetersOut ?? item.distanceMeters,
-                                    matchScore: item.matchScoreOut || 97.9
+                                    matchScore: item.matchScoreOut
                                   })}
                                   className="group relative inline-block rounded-xl overflow-hidden border border-slate-200 hover:border-[#FF6B00] shadow-2xs transition-all cursor-pointer"
                                   title="Klik untuk Zoom & Verifikasi Foto Wajah Pulang"
@@ -951,7 +958,7 @@ export const EmployeeTimesheetDetailModal: React.FC<EmployeeTimesheetDetailModal
                               location: item.locationText,
                               inGeofence: item.inGeofence,
                               distanceMeters: item.distanceMeters,
-                              matchScore: 98.4
+                              matchScore: item.matchScoreIn
                             })}
                             className="w-5 h-5 rounded-full overflow-hidden border border-slate-300 hover:border-[#FF6B00] cursor-pointer"
                             title="Lihat Foto Biometrik"
@@ -1027,9 +1034,15 @@ export const EmployeeTimesheetDetailModal: React.FC<EmployeeTimesheetDetailModal
                     <span className="font-bold text-orange-400">
                       [CAPTURE PRESENSI {zoomedPhoto.type}]
                     </span>
-                    <span className="text-[10px] text-emerald-400 font-bold">
-                      ✓ Biometric Match: {zoomedPhoto.matchScore}%
-                    </span>
+                    {zoomedPhoto.matchScore !== undefined && zoomedPhoto.matchScore !== null ? (
+                      <span className={`text-[10px] font-bold ${zoomedPhoto.matchScore >= 70 ? 'text-emerald-400' : zoomedPhoto.matchScore >= 60 ? 'text-blue-400' : 'text-rose-400'}`}>
+                        ✓ Biometric Match: {zoomedPhoto.matchScore}%
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-300">
+                        Foto Presensi Kamera
+                      </span>
+                    )}
                   </div>
                   <div className="mt-1 text-[10px] text-slate-200">
                     <p>Waktu: {zoomedPhoto.date} {zoomedPhoto.time} WIB</p>

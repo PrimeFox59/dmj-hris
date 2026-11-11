@@ -118,6 +118,12 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
   const [avatarSuccessMsg, setAvatarSuccessMsg] = useState<string | null>(null);
   const [isBiometricModalOpen, setIsBiometricModalOpen] = useState(false);
 
+  const hasBiometricSamples = Boolean(
+    currentUser.biometric?.isEnrolled &&
+    currentUser.biometric?.samples &&
+    (currentUser.biometric.samples.front || currentUser.biometric.samples.right || currentUser.biometric.samples.left || currentUser.biometric.samples.smile)
+  );
+
   const handleSaveBiometric = async (profile: BiometricProfile, updateAvatarAsWell: boolean) => {
     const res = await api.saveBiometricProfile(currentUser.id, profile, updateAvatarAsWell);
     onUpdateEmployee(res.employee);
@@ -574,8 +580,8 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                   </div>
                   <div className="sm:col-span-2">
                     <span className="text-[10px] text-slate-400 block font-mono-code">Status Biometrik Keamanan:</span>
-                    <span className="font-mono-code text-[11px] font-bold text-emerald-700">
-                      {currentUser.biometric?.isEnrolled ? `Terdaftar 4 Pose (${currentUser.biometric.qualityScore || 95}%)` : 'Belum Terdaftar'}
+                    <span className={`font-mono-code text-[11px] font-bold ${hasBiometricSamples ? 'text-emerald-700' : 'text-amber-600'}`}>
+                      {hasBiometricSamples ? `Terdaftar 4 Pose (${currentUser.biometric?.qualityScore ? `${currentUser.biometric.qualityScore}%` : 'Valid'})` : 'Belum Terdaftar'}
                     </span>
                   </div>
                 </div>
@@ -689,14 +695,14 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                       <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-2">
                         <span>Biometrik Wajah 3D Enterprise</span>
                         <span className={`px-2 py-0.5 rounded-full text-[9px] font-mono-code font-bold ${
-                          currentUser.biometric?.isEnrolled ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                          hasBiometricSamples ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
                         }`}>
-                          {currentUser.biometric?.isEnrolled ? '4 POSE TERKUNCI' : 'BELUM ENROLL'}
+                          {hasBiometricSamples ? '4 POSE TERKUNCI' : 'BELUM ENROLL'}
                         </span>
                       </h4>
                       <p className="text-[11px] text-slate-400">
-                        {currentUser.biometric?.isEnrolled
-                          ? `Terdaftar pada ${new Date(currentUser.biometric.enrolledAt).toLocaleDateString('id-ID', { dateStyle: 'medium' })} • Kualitas: ${currentUser.biometric.qualityScore || 98.5}%`
+                        {hasBiometricSamples
+                          ? `Terdaftar pada ${currentUser.biometric?.enrolledAt ? new Date(currentUser.biometric.enrolledAt).toLocaleDateString('id-ID', { dateStyle: 'medium' }) : 'Sistem'}${currentUser.biometric?.qualityScore ? ` • Kualitas: ${currentUser.biometric.qualityScore}%` : ''}`
                           : 'Rekam 4 sudut wajah (Depan, Kanan, Kiri, Senyum) untuk akurasi presensi & anti-titip absen.'}
                       </p>
                     </div>
@@ -708,11 +714,11 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                     className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#FF6B00] to-amber-500 hover:from-[#e56000] hover:to-amber-600 text-white text-xs font-black shadow-md shadow-orange-500/25 transition-all cursor-pointer flex items-center gap-1.5 shrink-0 active:scale-95"
                   >
                     <Sparkles className="w-3.5 h-3.5" />
-                    <span>{currentUser.biometric?.isEnrolled ? 'Ulangi / Rekam Ulang' : 'Daftar Biometrik (4 Pose)'}</span>
+                    <span>{hasBiometricSamples ? 'Ulangi / Rekam Ulang' : 'Daftar Biometrik (4 Pose)'}</span>
                   </button>
                 </div>
 
-                {currentUser.biometric?.isEnrolled && currentUser.biometric.samples && (
+                {hasBiometricSamples && currentUser.biometric?.samples && (
                   <div className="grid grid-cols-4 gap-2 pt-1">
                     {([
                       { key: 'front', label: '1. DEPAN' },

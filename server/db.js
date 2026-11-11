@@ -5149,8 +5149,24 @@ export function importAttendancesBatch(rows, mode = 'replace', operatorUser = nu
       const checkInPhotoUrl = prevData.checkInPhotoUrl || photoUrl || null;
       const checkOutPhotoUrl = prevData.checkOutPhotoUrl || prevData.photoOutUrl || null;
 
-      const cleanScoreIn = rawScoreIn ? parseInt(String(rawScoreIn).replace(/\D/g, ''), 10) : (prevData.checkInBiometric?.matchScore || prevData.biometricVerification?.matchScore || 95);
-      const cleanScoreOut = rawScoreOut ? parseInt(String(rawScoreOut).replace(/\D/g, ''), 10) : (prevData.checkOutBiometric?.matchScore || (normOut ? 92 : null));
+      const cleanScoreIn = rawScoreIn ? parseInt(String(rawScoreIn).replace(/\D/g, ''), 10) : (prevData.checkInBiometric?.matchScore ?? prevData.biometricVerification?.matchScore ?? null);
+      const cleanScoreOut = rawScoreOut ? parseInt(String(rawScoreOut).replace(/\D/g, ''), 10) : (prevData.checkOutBiometric?.matchScore ?? null);
+
+      const existingBioIn = prevData.checkInBiometric || prevData.biometricVerification;
+      const finalBioIn = (cleanScoreIn !== null && cleanScoreIn !== undefined) ? {
+        isVerified: cleanScoreIn >= 60,
+        matchScore: cleanScoreIn,
+        livenessPassed: true,
+        details: existingBioIn?.details || (cleanScoreIn >= 60 ? 'Biometrik terverifikasi valid' : 'Biometrik di bawah ambang batas')
+      } : (existingBioIn || null);
+
+      const existingBioOut = prevData.checkOutBiometric;
+      const finalBioOut = (cleanScoreOut !== null && cleanScoreOut !== undefined) ? {
+        isVerified: cleanScoreOut >= 60,
+        matchScore: cleanScoreOut,
+        livenessPassed: true,
+        details: existingBioOut?.details || (cleanScoreOut >= 60 ? 'Biometrik pulang valid' : 'Biometrik di bawah ambang batas')
+      } : (existingBioOut || null);
 
       const mergedData = {
         ...prevData,
@@ -5186,24 +5202,9 @@ export function importAttendancesBatch(rows, mode = 'replace', operatorUser = nu
         projectCode: proj?.code || prevData.projectCode || '',
         projectName: proj?.name || prevData.projectName || '',
         note: rawNote || prevData.note || '',
-        biometricVerification: {
-          isVerified: true,
-          matchScore: cleanScoreIn,
-          livenessPassed: true,
-          details: 'Biometrik terverifikasi valid'
-        },
-        checkInBiometric: {
-          isVerified: true,
-          matchScore: cleanScoreIn,
-          livenessPassed: true,
-          details: 'Biometrik terverifikasi valid'
-        },
-        checkOutBiometric: normOut ? {
-          isVerified: true,
-          matchScore: cleanScoreOut || 92,
-          livenessPassed: true,
-          details: 'Biometrik pulang valid'
-        } : (prevData.checkOutBiometric || null),
+        biometricVerification: finalBioIn,
+        checkInBiometric: finalBioIn,
+        checkOutBiometric: finalBioOut,
         updated_at: new Date().toISOString()
       };
 
