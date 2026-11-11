@@ -2384,11 +2384,10 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                             }
                             return (
                               <span
-                                className="px-1.5 py-0.5 rounded-full border border-amber-200/90 bg-amber-50 text-amber-800 text-[9px] font-bold font-mono-code inline-flex items-center gap-0.5 shadow-2xs"
-                                title="Karyawan belum melakukan registrasi biometrik wajah (4 pose master)"
+                                className="p-0.5 rounded-full border border-amber-200/90 bg-amber-50 text-amber-700 inline-flex items-center justify-center shrink-0 shadow-2xs"
+                                title="Belum Register Face (Presensi Kamera Reguler)"
                               >
                                 <AlertCircle className="w-2.5 h-2.5 text-amber-600 shrink-0" />
-                                <span>Belum Register Face</span>
                               </span>
                             );
                           })()}
@@ -2453,11 +2452,10 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                             }
                             return (
                               <span
-                                className="px-1.5 py-0.5 rounded-full border border-amber-200/90 bg-amber-50 text-amber-800 text-[9px] font-bold font-mono-code inline-flex items-center gap-0.5 shadow-2xs"
-                                title="Karyawan belum melakukan registrasi biometrik wajah (4 pose master)"
+                                className="p-0.5 rounded-full border border-amber-200/90 bg-amber-50 text-amber-700 inline-flex items-center justify-center shrink-0 shadow-2xs"
+                                title="Belum Register Face (Presensi Kamera Reguler)"
                               >
                                 <AlertCircle className="w-2.5 h-2.5 text-amber-600 shrink-0" />
-                                <span>Belum Register Face</span>
                               </span>
                             );
                           })()}

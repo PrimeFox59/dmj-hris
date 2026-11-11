@@ -1474,11 +1474,10 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                               }
                               return (
                                 <span
-                                  className="px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-700 border border-amber-500/30 text-[9px] font-bold font-mono-code inline-flex items-center gap-0.5 shrink-0 shadow-2xs"
-                                  title="Karyawan belum melakukan registrasi biometrik wajah (4 pose master)"
+                                  className="p-0.5 rounded bg-amber-500/15 text-amber-600 border border-amber-500/30 inline-flex items-center justify-center shrink-0 shadow-2xs"
+                                  title="Belum Register Face (Non-Biometrik)"
                                 >
-                                  <AlertCircle className="w-2.5 h-2.5 text-amber-600 shrink-0" />
-                                  <span>Belum Register Face</span>
+                                  <AlertCircle className="w-2.5 h-2.5 shrink-0" />
                                 </span>
                               );
                             })()}
@@ -1515,11 +1514,10 @@ export const HrRoomTab: React.FC<HrRoomTabProps> = ({
                               }
                               return (
                                 <span
-                                  className="px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-700 border border-amber-500/30 text-[9px] font-bold font-mono-code inline-flex items-center gap-0.5 shrink-0 shadow-2xs"
-                                  title="Karyawan belum melakukan registrasi biometrik wajah (4 pose master)"
+                                  className="p-0.5 rounded bg-amber-500/15 text-amber-600 border border-amber-500/30 inline-flex items-center justify-center shrink-0 shadow-2xs"
+                                  title="Belum Register Face (Non-Biometrik)"
                                 >
-                                  <AlertCircle className="w-2.5 h-2.5 text-amber-600 shrink-0" />
-                                  <span>Belum Register Face</span>
+                                  <AlertCircle className="w-2.5 h-2.5 shrink-0" />
                                 </span>
                               );
                             })()}

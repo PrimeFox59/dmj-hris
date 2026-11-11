@@ -56,7 +56,7 @@ export function App() {
   });
 
   // Auto-invalidation build ID (Membersihkan cache lama saat versi baru dirilis)
-  const APP_BUILD_ID = '20261111_v14_unregistered_face_badge';
+  const APP_BUILD_ID = '20261111_v15_unregistered_face_icon_only';
   if (typeof window !== 'undefined') {
     try {
       const savedBuild = localStorage.getItem('prime_hris_build_id');
