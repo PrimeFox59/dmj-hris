@@ -23,7 +23,8 @@ import {
   Lock,
   KeyRound,
   HardHat,
-  Activity
+  Activity,
+  Database
 } from 'lucide-react';
 import { Employee, getEffectiveSystemRole, SystemRole, canAccessProjectModule, isProjectManager, Project } from '../types';
 import { ProfileTabId } from './ProfileSettingsModal';
@@ -254,6 +255,30 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                         </p>
                         <p className="text-[10px] text-slate-500 mt-0.5 line-clamp-1">
                           Log rekaman ISO/IATF
+                        </p>
+                      </div>
+                    </button>
+                  )}
+
+                  {/* Tab: Database & Sync (Admin / Superuser) */}
+                  {!isStaff && (
+                    <button
+                      onClick={() => handleTabClick('database_mgmt')}
+                      className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                        activeTab === 'database_mgmt'
+                          ? 'bg-orange-50 border-orange-300 shadow-xs'
+                          : 'bg-slate-50/70 hover:bg-slate-100 border-slate-200/80'
+                      }`}
+                    >
+                      <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center mb-2">
+                        <Database className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-slate-900 leading-tight">
+                          Database & Sync
+                        </p>
+                        <p className="text-[10px] text-slate-500 mt-0.5 line-clamp-1">
+                          Unduh & impor Excel
                         </p>
                       </div>
                     </button>

@@ -4666,3 +4666,533 @@ export function bulkToggleWaOptIns(phones, isActive, manualOverride = null) {
   return { success: true, count: uniquePhones.length, is_active: valActive };
 }
 
+// ==========================================
+// DATABASE MANAGEMENT: STATS, VACUUM, EXPORT & IMPORT
+// ==========================================
+
+export function getDatabaseStats() {
+  const db = getDatabase();
+  const info = getDbInfo();
+
+  let attendancesCount = 0;
+  let employeesCount = 0;
+  let projectsCount = 0;
+  let approvalsCount = 0;
+  let casualCount = 0;
+  let casualAttCount = 0;
+
+  try { attendancesCount = db.prepare('SELECT count(*) as c FROM attendances;').get().c; } catch (e) {}
+  try { employeesCount = db.prepare('SELECT count(*) as c FROM employees;').get().c; } catch (e) {}
+  try { projectsCount = db.prepare('SELECT count(*) as c FROM projects;').get().c; } catch (e) {}
+  try { approvalsCount = db.prepare('SELECT count(*) as c FROM approvals;').get().c; } catch (e) {}
+  try { casualCount = db.prepare('SELECT count(*) as c FROM casual_workers;').get().c; } catch (e) {}
+  try { casualAttCount = db.prepare('SELECT count(*) as c FROM casual_worker_attendances;').get().c; } catch (e) {}
+
+  return {
+    ...info,
+    attendancesCount,
+    employeesCount,
+    projectsCount,
+    approvalsCount,
+    casualCount,
+    casualAttCount
+  };
+}
+
+export function vacuumDatabase() {
+  const db = getDatabase();
+  const before = getDbInfo();
+  try {
+    db.exec('VACUUM;');
+  } catch (err) {
+    console.error('[VACUUM ERROR]', err);
+    throw err;
+  }
+  const after = getDbInfo();
+  return {
+    success: true,
+    beforeSizeBytes: before.sizeBytes,
+    beforeSizeKb: before.sizeKb,
+    afterSizeBytes: after.sizeBytes,
+    afterSizeKb: after.sizeKb,
+    savedBytes: Math.max(0, before.sizeBytes - after.sizeBytes),
+    savedKb: Math.max(0, Math.round((before.sizeBytes - after.sizeBytes) / 1024 * 10) / 10)
+  };
+}
+
+export function getAttendancesForExport(filters = {}) {
+  const db = getDatabase();
+  let query = 'SELECT id, employeeId, employeeName, employeeNik, department, date, checkInTime, checkOutTime, mode, status, approvalStatus, isLate, lateMinutes, lateReason, data_json FROM attendances WHERE 1=1';
+  const params = [];
+
+  if (filters.startDate) {
+    query += ' AND date >= ?';
+    params.push(filters.startDate);
+  }
+  if (filters.endDate) {
+    query += ' AND date <= ?';
+    params.push(filters.endDate);
+  }
+  if (filters.projectId) {
+    query += " AND (json_extract(data_json, '$.projectId') = ? OR json_extract(data_json, '$.projectCode') = ?)";
+    params.push(filters.projectId, filters.projectId);
+  }
+  if (filters.department && filters.department !== 'ALL') {
+    query += ' AND department = ?';
+    params.push(filters.department);
+  }
+
+  query += ' ORDER BY date DESC, COALESCE(checkOutTime, checkInTime) DESC, checkInTime DESC';
+  
+  const rows = db.prepare(query).all(...params);
+  
+  // Resolve canonical loginId map from employees
+  const employees = db.prepare('SELECT id, nik, name, data_json FROM employees').all();
+  const empMap = new Map();
+  for (const emp of employees) {
+    let d = {};
+    try { d = JSON.parse(emp.data_json); } catch (e) {}
+    const loginId = d.loginId || (emp.id === 'EMP-001' ? 'admin' : null);
+    if (loginId) {
+      empMap.set(emp.id, loginId);
+      empMap.set(emp.nik, loginId);
+      empMap.set(emp.name.toLowerCase().trim(), loginId);
+    }
+  }
+
+  return rows.map(r => {
+    let d = {};
+    try { d = JSON.parse(r.data_json); } catch (e) {}
+    const loginId = d.employeeLoginId || empMap.get(r.employeeId) || empMap.get(r.employeeNik) || empMap.get(r.employeeName.toLowerCase().trim()) || '';
+    const scoreIn = d.checkInBiometric?.matchScore ?? d.biometricVerification?.matchScore ?? '';
+    const scoreOut = d.checkOutBiometric?.matchScore ?? '';
+    const addrIn = d.checkInLocation?.address || d.location?.address || '';
+    const addrOut = d.checkOutLocation?.address || '';
+
+    return {
+      'ID Absensi': r.id,
+      'Tanggal': r.date,
+      'ID Login': loginId,
+      'NIK': r.employeeNik || '',
+      'Nama Karyawan': r.employeeName || '',
+      'Departemen': r.department || '',
+      'Kode Proyek': d.projectCode || '',
+      'Nama Proyek': d.projectName || '',
+      'Jam Masuk': r.checkInTime || '',
+      'Jam Pulang': r.checkOutTime || '',
+      'Tipe Mode': r.mode || 'WFO',
+      'Status Kehadiran': r.status || 'ON_TIME',
+      'Status Approval': r.approvalStatus || 'APPROVED',
+      'Terlambat (Menit)': r.lateMinutes || 0,
+      'Skor Wajah Masuk': scoreIn ? `${scoreIn}%` : '',
+      'Skor Wajah Pulang': scoreOut ? `${scoreOut}%` : '',
+      'Alasan / Catatan': d.note || r.lateReason || '',
+      'Lokasi Masuk': addrIn,
+      'Lokasi Pulang': addrOut,
+      // Raw metadata
+      id: r.id,
+      date: r.date,
+      loginId,
+      employeeId: r.employeeId,
+      nik: r.employeeNik || '',
+      name: r.employeeName || '',
+      department: r.department || '',
+      projectCode: d.projectCode || '',
+      projectName: d.projectName || '',
+      checkInTime: r.checkInTime || '',
+      checkOutTime: r.checkOutTime || '',
+      mode: r.mode || 'WFO',
+      status: r.status || 'ON_TIME',
+      approvalStatus: r.approvalStatus || 'APPROVED',
+      lateMinutes: r.lateMinutes || 0,
+      note: d.note || r.lateReason || ''
+    };
+  });
+}
+
+export function getEmployeesForExport() {
+  const db = getDatabase();
+  const rows = db.prepare('SELECT id, nik, name, email, phone, role, department, position, employmentType, joinDate, assignedProjectId, baseSalary, fixedAllowance, dailyAllowance, leaveQuota, usedLeave, bankAccount, data_json FROM employees ORDER BY name ASC;').all();
+  return rows.map(r => {
+    let d = {};
+    try { d = JSON.parse(r.data_json); } catch (e) {}
+    return {
+      'ID Karyawan': r.id,
+      'NIK': r.nik || '',
+      'ID Login': d.loginId || (r.id === 'EMP-001' ? 'admin' : ''),
+      'Nama Lengkap': r.name || '',
+      'Email': r.email || '',
+      'No WhatsApp / Telepon': r.phone || '',
+      'Departemen': r.department || '',
+      'Jabatan': r.position || r.role || '',
+      'Status Kerja': r.employmentType || 'TETAP',
+      'Tanggal Bergabung': r.joinDate || '',
+      'Gaji Pokok': r.baseSalary || 0,
+      'Tunjangan Tetap': r.fixedAllowance || 0,
+      'Tunjangan Harian': r.dailyAllowance || 0,
+      'Kuota Cuti': r.leaveQuota ?? 12,
+      'Cuti Terpakai': r.usedLeave ?? 0,
+      'Nomor Rekening': r.bankAccount || '',
+      'Nama Bank': d.bankName || 'BCA'
+    };
+  });
+}
+
+export function getProjectsForExport() {
+  const db = getDatabase();
+  const rows = db.prepare('SELECT id, code, name, client, location, status, startDate, targetEndDate, allocatedBudget, data_json FROM projects ORDER BY code ASC;').all();
+  return rows.map(r => {
+    let d = {};
+    try { d = JSON.parse(r.data_json); } catch (e) {}
+    return {
+      'ID Proyek': r.id,
+      'Kode Proyek': r.code || '',
+      'Nama Proyek': r.name || '',
+      'Nama Klien': r.client || '',
+      'Lokasi': r.location || '',
+      'Status Proyek': r.status || 'ACTIVE',
+      'Tanggal Mulai': r.startDate || '',
+      'Target Selesai': r.targetEndDate || '',
+      'Anggaran Biaya (Rp)': r.allocatedBudget || 0,
+      'Project Manager': d.projectManagerName || ''
+    };
+  });
+}
+
+export function importAttendancesBatch(rows, mode = 'replace', operatorUser = null) {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return { success: false, error: 'Tidak ada data baris yang diimpor', summary: { total: 0, inserted: 0, updated: 0, skipped: 0, errors: [] } };
+  }
+
+  const db = getDatabase();
+
+  // 1. Create safety backup snapshot before import
+  try {
+    const backupDir = path.join(dataDir, 'backups');
+    if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
+    const ts = new Date().toISOString().replace(/[-:T]/g, '_').slice(0, 15);
+    const snapPath = path.join(backupDir, `hris_auto_backup_pre_import_${ts}.sqlite`);
+    if (fs.existsSync(dbPath)) {
+      fs.copyFileSync(dbPath, snapPath);
+    }
+  } catch (err) {
+    console.warn('[Auto Backup Warn]', err);
+  }
+
+  // 2. Build fast lookup maps for employees and projects
+  const empRows = db.prepare('SELECT id, nik, name, department, assignedProjectId, data_json FROM employees;').all();
+  const empById = new Map();
+  const empByLogin = new Map();
+  const empByNik = new Map();
+  const empByName = new Map();
+
+  for (const emp of empRows) {
+    let d = {};
+    try { d = JSON.parse(emp.data_json); } catch (e) {}
+    const empData = {
+      id: emp.id,
+      nik: emp.nik,
+      name: emp.name,
+      department: emp.department,
+      assignedProjectId: emp.assignedProjectId,
+      loginId: d.loginId || (emp.id === 'EMP-001' ? 'admin' : null),
+      ...d
+    };
+
+    empById.set(emp.id, empData);
+    if (emp.nik) empByNik.set(String(emp.nik).trim(), empData);
+    if (empData.loginId) empByLogin.set(String(empData.loginId).toLowerCase().trim(), empData);
+    if (emp.name) empByName.set(String(emp.name).toLowerCase().trim(), empData);
+  }
+
+  const projRows = db.prepare('SELECT id, code, name, data_json FROM projects;').all();
+  const projByCode = new Map();
+  const projById = new Map();
+  const projByName = new Map();
+
+  for (const p of projRows) {
+    let d = {};
+    try { d = JSON.parse(p.data_json); } catch (e) {}
+    projById.set(p.id, { id: p.id, code: p.code, name: p.name, ...d });
+    if (p.code) projByCode.set(String(p.code).toUpperCase().trim(), { id: p.id, code: p.code, name: p.name, ...d });
+    if (p.name) projByName.set(String(p.name).toLowerCase().trim(), { id: p.id, code: p.code, name: p.name, ...d });
+  }
+
+  let salaryRules = null;
+  try {
+    const rulesRow = db.prepare("SELECT config_json FROM salary_rules WHERE id = 'default'").get();
+    if (rulesRow) salaryRules = JSON.parse(rulesRow.config_json);
+  } catch (e) {}
+
+  let inserted = 0;
+  let updated = 0;
+  let skipped = 0;
+  const errors = [];
+
+  const normalizeDate = (raw) => {
+    if (!raw && raw !== 0) return null;
+    if (typeof raw === 'number') {
+      const date = new Date(Math.round((raw - 25569) * 86400 * 1000));
+      return date.toISOString().split('T')[0];
+    }
+    const str = String(raw).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+    const parts = str.split(/[\/\-]/);
+    if (parts.length === 3) {
+      if (parts[2].length === 4) {
+        return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+      }
+    }
+    return str;
+  };
+
+  const normalizeTime = (raw) => {
+    if (!raw && raw !== 0) return null;
+    if (typeof raw === 'number') {
+      const totalSeconds = Math.round(raw * 86400);
+      const h = Math.floor(totalSeconds / 3600);
+      const m = Math.floor((totalSeconds % 3600) / 60);
+      const s = totalSeconds % 60;
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    }
+    let str = String(raw).trim().replace(/\./g, ':');
+    if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(str)) {
+      const parts = str.split(':');
+      const h = parts[0].padStart(2, '0');
+      const m = parts[1].padStart(2, '0');
+      const s = parts[2] ? parts[2].padStart(2, '0') : '00';
+      return `${h}:${m}:${s}`;
+    }
+    return str || null;
+  };
+
+  db.exec('BEGIN TRANSACTION;');
+
+  try {
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const rowNum = i + 2;
+
+      const rawId = row['ID Absensi'] || row['id'] || row['ID'] || null;
+      const rawDate = row['Tanggal'] || row['date'] || row['TANGGAL'] || null;
+      const rawLogin = row['ID Login'] || row['loginId'] || row['login_id'] || row['employeeLoginId'] || null;
+      const rawNik = row['NIK'] || row['nik'] || row['employeeNik'] || null;
+      const rawName = row['Nama Karyawan'] || row['name'] || row['employeeName'] || row['nama'] || null;
+      const rawDept = row['Departemen'] || row['department'] || null;
+      const rawProjCode = row['Kode Proyek'] || row['projectCode'] || null;
+      const rawProjName = row['Nama Proyek'] || row['projectName'] || null;
+      const rawIn = row['Jam Masuk'] || row['checkInTime'] || row['in'] || null;
+      const rawOut = row['Jam Pulang'] || row['checkOutTime'] || row['out'] || null;
+      const rawMode = row['Tipe Mode'] || row['mode'] || 'WFO';
+      const rawStatus = row['Status Kehadiran'] || row['status'] || null;
+      const rawAppr = row['Status Approval'] || row['approvalStatus'] || 'APPROVED';
+      const rawLateMins = row['Terlambat (Menit)'] ?? row['lateMinutes'] ?? null;
+      const rawNote = row['Alasan / Catatan'] || row['note'] || row['catatan'] || '';
+      const rawScoreIn = row['Skor Wajah Masuk'] || row['scoreIn'] || null;
+      const rawScoreOut = row['Skor Wajah Pulang'] || row['scoreOut'] || null;
+
+      const normDate = normalizeDate(rawDate);
+      if (!normDate) {
+        errors.push(`Baris ${rowNum}: Tanggal tidak valid atau kosong`);
+        continue;
+      }
+
+      let emp = null;
+      if (rawLogin) emp = empByLogin.get(String(rawLogin).toLowerCase().trim());
+      if (!emp && rawNik) emp = empByNik.get(String(rawNik).trim());
+      if (!emp && rawId && row['employeeId'] && empById.has(row['employeeId'])) emp = empById.get(row['employeeId']);
+      if (!emp && rawName) emp = empByName.get(String(rawName).toLowerCase().trim());
+
+      if (!emp) {
+        errors.push(`Baris ${rowNum}: Karyawan tidak terdaftar (Login: ${rawLogin || '-'}, NIK: ${rawNik || '-'}, Nama: ${rawName || '-'})`);
+        continue;
+      }
+
+      let proj = null;
+      if (rawProjCode) proj = projByCode.get(String(rawProjCode).toUpperCase().trim());
+      if (!proj && rawProjName) proj = projByName.get(String(rawProjName).toLowerCase().trim());
+      if (!proj && emp.assignedProjectId) proj = projById.get(emp.assignedProjectId);
+
+      let existing = null;
+      if (rawId) {
+        existing = db.prepare('SELECT id, data_json, checkInTime, checkOutTime, photoUrl FROM attendances WHERE id = ?').get(rawId);
+      }
+      if (!existing) {
+        existing = db.prepare('SELECT id, data_json, checkInTime, checkOutTime, photoUrl FROM attendances WHERE employeeId = ? AND date = ?').get(emp.id, normDate);
+      }
+
+      const normIn = normalizeTime(rawIn);
+      const normOut = normalizeTime(rawOut);
+
+      if (mode === 'add' && existing) {
+        skipped++;
+        continue;
+      }
+
+      let prevData = {};
+      if (existing && existing.data_json) {
+        try { prevData = JSON.parse(existing.data_json); } catch (e) {}
+      }
+
+      const finalId = existing ? existing.id : (rawId && String(rawId).startsWith('ATT-') ? rawId : `ATT-${Date.now()}-${Math.floor(Math.random() * 1000)}`);
+      
+      const projSched = proj?.workingHoursSchedule || salaryRules?.officeWorkingHours || { checkInCutoff: '08:15', checkOutTime: '17:00' };
+      const cutoffTime = projSched.checkInCutoff || '08:15';
+      
+      let isLate = 0;
+      let lateMinutes = 0;
+      if (rawLateMins !== null && rawLateMins !== '' && !isNaN(Number(rawLateMins))) {
+        lateMinutes = Math.max(0, parseInt(rawLateMins, 10));
+        isLate = lateMinutes > 0 ? 1 : 0;
+      } else if (normIn) {
+        const [inH, inM] = normIn.split(':').map(Number);
+        const [cutH, cutM] = cutoffTime.split(':').map(Number);
+        const inMins = (inH || 0) * 60 + (inM || 0);
+        const cutMins = (cutH || 0) * 60 + (cutM || 0);
+        if (inMins > cutMins) {
+          isLate = 1;
+          lateMinutes = inMins - cutMins;
+        }
+      }
+
+      let finalStatus = rawStatus;
+      if (!finalStatus) {
+        if (isLate === 1) finalStatus = 'LATE';
+        else if (normIn) finalStatus = 'ON_TIME';
+        else finalStatus = prevData.status || 'ON_TIME';
+      }
+
+      const photoUrl = existing?.photoUrl || prevData.photoUrl || null;
+      const checkInPhotoUrl = prevData.checkInPhotoUrl || photoUrl || null;
+      const checkOutPhotoUrl = prevData.checkOutPhotoUrl || prevData.photoOutUrl || null;
+
+      const cleanScoreIn = rawScoreIn ? parseInt(String(rawScoreIn).replace(/\D/g, ''), 10) : (prevData.checkInBiometric?.matchScore || prevData.biometricVerification?.matchScore || 95);
+      const cleanScoreOut = rawScoreOut ? parseInt(String(rawScoreOut).replace(/\D/g, ''), 10) : (prevData.checkOutBiometric?.matchScore || (normOut ? 92 : null));
+
+      const mergedData = {
+        ...prevData,
+        id: finalId,
+        employeeId: emp.id,
+        employeeLoginId: emp.loginId || rawLogin || prevData.employeeLoginId,
+        employeeName: emp.name,
+        employeeNik: emp.nik,
+        department: rawDept || emp.department || prevData.department,
+        date: normDate,
+        checkInTime: normIn || prevData.checkInTime || undefined,
+        checkOutTime: normOut || prevData.checkOutTime || undefined,
+        attendanceType: normOut && !normIn ? 'CHECK_OUT' : 'CHECK_IN',
+        mode: rawMode || prevData.mode || 'WFO',
+        status: finalStatus,
+        isLate: Boolean(isLate),
+        lateMinutes,
+        lateReason: isLate ? (rawNote || prevData.lateReason || 'Terlambat') : null,
+        approvalStatus: rawAppr || prevData.approvalStatus || 'APPROVED',
+        photoUrl,
+        checkInPhotoUrl,
+        checkOutPhotoUrl,
+        photoOutUrl: checkOutPhotoUrl,
+        location: prevData.location || {
+          lat: -7.2974,
+          lng: 112.8041,
+          accuracy: 5,
+          address: row['Lokasi Masuk'] || 'Office / Project Site',
+          inGeofence: true,
+          distanceMeters: 50
+        },
+        projectId: proj?.id || emp.assignedProjectId || prevData.projectId || '',
+        projectCode: proj?.code || prevData.projectCode || '',
+        projectName: proj?.name || prevData.projectName || '',
+        note: rawNote || prevData.note || '',
+        biometricVerification: {
+          isVerified: true,
+          matchScore: cleanScoreIn,
+          livenessPassed: true,
+          details: 'Biometrik terverifikasi valid'
+        },
+        checkInBiometric: {
+          isVerified: true,
+          matchScore: cleanScoreIn,
+          livenessPassed: true,
+          details: 'Biometrik terverifikasi valid'
+        },
+        checkOutBiometric: normOut ? {
+          isVerified: true,
+          matchScore: cleanScoreOut || 92,
+          livenessPassed: true,
+          details: 'Biometrik pulang valid'
+        } : (prevData.checkOutBiometric || null),
+        updated_at: new Date().toISOString()
+      };
+
+      const stmt = db.prepare(`
+        INSERT OR REPLACE INTO attendances (
+          id, employeeId, employeeName, employeeNik, department,
+          date, checkInTime, checkOutTime, mode, status,
+          photoUrl, isLate, lateMinutes, lateReason,
+          approvalStatus, data_json, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+      `);
+
+      stmt.run(
+        finalId,
+        emp.id,
+        emp.name,
+        emp.nik,
+        mergedData.department,
+        normDate,
+        mergedData.checkInTime || null,
+        mergedData.checkOutTime || null,
+        mergedData.mode,
+        mergedData.status,
+        photoUrl,
+        isLate,
+        lateMinutes,
+        mergedData.lateReason || null,
+        mergedData.approvalStatus,
+        JSON.stringify(mergedData),
+        new Date().toISOString()
+      );
+
+      if (existing) {
+        updated++;
+      } else {
+        inserted++;
+      }
+    }
+
+    db.exec('COMMIT;');
+  } catch (err) {
+    db.exec('ROLLBACK;');
+    console.error('[IMPORT_EXCEL_BATCH_ERROR]', err);
+    throw err;
+  }
+
+  const operatorLogin = operatorUser?.username || operatorUser?.loginId || 'admin';
+  addAuditLog({
+    action: 'DATABASE_EXCEL_IMPORTED',
+    entity: 'attendances',
+    entityId: `BATCH-${Date.now()}`,
+    userName: operatorUser?.name || operatorLogin,
+    userNik: null,
+    userLoginId: operatorLogin,
+    userRole: operatorUser?.systemRole || operatorUser?.role || 'superuser',
+    module: 'DATABASE',
+    ipAddress: operatorUser?.clientIp || '127.0.0.1',
+    status: 'SUCCESS',
+    details: `Impor Excel (${mode.toUpperCase()}): Total ${rows.length} baris diproses (${updated} diperbarui, ${inserted} ditambahkan, ${skipped} dilewati, ${errors.length} error) oleh ${operatorLogin}.`
+  });
+
+  return {
+    success: true,
+    summary: {
+      total: rows.length,
+      inserted,
+      updated,
+      skipped,
+      errorsCount: errors.length,
+      errors
+    }
+  };
+}
+
+

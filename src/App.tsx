@@ -23,6 +23,7 @@ import { ProfileTabId } from './components/ProfileSettingsModal';
 import { QuickAttendancePublicPortal } from './components/QuickAttendancePublicPortal';
 import { AnnualWorkCalendarTab } from './components/AnnualWorkCalendarTab';
 import { CasualWorkerAttendanceTab } from './components/CasualWorkerAttendanceTab';
+import { DatabaseManagementTab } from './components/DatabaseManagementTab';
 import { PwaInstallPrompt } from './components/PwaInstallPrompt';
 import { PwaUpdateToast } from './components/PwaUpdateToast';
 import { BiometricDailyReminderModal } from './components/BiometricDailyReminderModal';
@@ -55,7 +56,7 @@ export function App() {
   });
 
   // Auto-invalidation build ID (Membersihkan cache lama saat versi baru dirilis)
-  const APP_BUILD_ID = '20261111_v6_recalibrate_table_column_widths';
+  const APP_BUILD_ID = '20261111_v7_database_management_excel_sync';
   if (typeof window !== 'undefined') {
     try {
       const savedBuild = localStorage.getItem('prime_hris_build_id');
@@ -776,6 +777,16 @@ export function App() {
           if (data.approvals && data.approvals.length > 0) setApprovals(data.approvals);
           if (data.salaryRules) setSalaryRules(data.salaryRules);
         }).catch(err => console.warn('[RTC] Background sync error', err));
+      } else if (packet.type === 'DATABASE_SYNCED') {
+        api.getBootstrapData().then(data => {
+          if (data.employees) setEmployees(data.employees);
+          if (data.projects) setProjects(data.projects);
+          if (data.attendances) setAttendances(data.attendances);
+          if (data.approvals) setApprovals(data.approvals);
+          if (data.salaryRules) setSalaryRules(data.salaryRules);
+          if (data.workCalendar) setWorkCalendar(data.workCalendar);
+        }).catch(err => console.warn('[RTC] Sync error', err));
+        showLiveToast(packet.payload?.message || 'Database berhasil disinkronisasi', 'success');
       } else if (packet.type === 'DATABASE_RESET') {
         api.getBootstrapData().then(data => {
           if (data.employees) setEmployees(data.employees);
@@ -817,7 +828,7 @@ export function App() {
 
     const targetRole = getEffectiveSystemRole(targetEmp);
     if (targetRole === 'staff') {
-      if (activeTab === 'system_settings' || activeTab === 'salary_rules' || activeTab === 'audit' || activeTab === 'wa_gateway' || activeTab === 'email_smtp' || activeTab === 'work_calendar') {
+      if (activeTab === 'database_mgmt' || activeTab === 'system_settings' || activeTab === 'salary_rules' || activeTab === 'audit' || activeTab === 'wa_gateway' || activeTab === 'email_smtp' || activeTab === 'work_calendar') {
         setActiveTab('dashboard');
         setDashboardSubView('performance');
       } else if (activeTab === 'dashboard') {
@@ -915,7 +926,7 @@ export function App() {
         setDashboardSubView('performance');
         return;
       }
-      if (tabId === 'system_settings' || tabId === 'salary_rules' || tabId === 'wa_gateway' || tabId === 'email_smtp' || tabId === 'work_calendar') {
+      if (tabId === 'database_mgmt' || tabId === 'system_settings' || tabId === 'salary_rules' || tabId === 'wa_gateway' || tabId === 'email_smtp' || tabId === 'work_calendar') {
         setActiveTab('dashboard');
         setDashboardSubView('performance');
         return;
@@ -1900,6 +1911,29 @@ export function App() {
           <AnnualWorkCalendarTab
             currentUser={currentUser}
             onUpdateCalendar={(cal) => setWorkCalendar(cal)}
+          />
+        )}
+
+        {activeTab === 'database_mgmt' && (
+          <DatabaseManagementTab
+            currentUser={currentUser}
+            projects={projects}
+            employees={employees}
+            onRefreshData={async () => {
+              try {
+                const data = await api.getBootstrapData();
+                if (data.employees) setEmployees(data.employees);
+                if (data.projects) setProjects(data.projects);
+                if (Array.isArray(data.attendances)) setAttendances(data.attendances);
+                if (data.approvals) setApprovals(data.approvals);
+                if (data.salaryRules) setSalaryRules(data.salaryRules);
+                if (data.workCalendar) setWorkCalendar(data.workCalendar);
+                if (data.dbInfo) setDbInfo(data.dbInfo);
+              } catch (e) {
+                console.warn('[Refresh DB]', e);
+              }
+            }}
+            showToast={showLiveToast}
           />
         )}
 

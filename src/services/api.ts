@@ -442,6 +442,86 @@ export const api = {
     return token ? `/api/download-db?token=${encodeURIComponent(token)}` : '/api/download-db';
   },
 
+  // 9b. Database Management & Synchronization
+  async getDatabaseStats(): Promise<{
+    success: boolean;
+    engine: string;
+    journalMode: string;
+    dbPath: string;
+    sizeBytes: number;
+    sizeKb: number;
+    attendancesCount: number;
+    employeesCount: number;
+    projectsCount: number;
+    approvalsCount: number;
+    casualCount: number;
+    casualAttCount: number;
+  }> {
+    const res = await fetch('/api/database/stats', { headers: api.getAuthHeaders() });
+    if (!res.ok) throw new Error(`Gagal memuat statistik database: ${res.statusText}`);
+    return res.json();
+  },
+
+  async vacuumDatabase(): Promise<{
+    success: boolean;
+    beforeSizeBytes: number;
+    beforeSizeKb: number;
+    afterSizeBytes: number;
+    afterSizeKb: number;
+    savedBytes: number;
+    savedKb: number;
+  }> {
+    const res = await fetch('/api/database/vacuum', {
+      method: 'POST',
+      headers: api.getAuthHeaders()
+    });
+    if (!res.ok) throw new Error(`Gagal mengoptimalkan database: ${res.statusText}`);
+    return res.json();
+  },
+
+  async getExportData(filters: {
+    table?: string;
+    startDate?: string;
+    endDate?: string;
+    projectId?: string;
+    department?: string;
+  }): Promise<{ success: boolean; table: string; count: number; rows: any[] }> {
+    const res = await fetch('/api/database/export-data', {
+      method: 'POST',
+      headers: api.getAuthHeaders(),
+      body: JSON.stringify(filters)
+    });
+    if (!res.ok) throw new Error(`Gagal mengambil data untuk export: ${res.statusText}`);
+    return res.json();
+  },
+
+  async importDatabaseBatch(payload: {
+    table: string;
+    mode: 'replace' | 'add';
+    rows: any[];
+  }): Promise<{
+    success: boolean;
+    summary: {
+      total: number;
+      inserted: number;
+      updated: number;
+      skipped: number;
+      errorsCount: number;
+      errors: string[];
+    };
+  }> {
+    const res = await fetch('/api/database/import-excel', {
+      method: 'POST',
+      headers: api.getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.success) {
+      throw new Error(data?.error || `Gagal mengimpor data ke database: ${res.statusText}`);
+    }
+    return data;
+  },
+
   // 10. Audit Logs with 10-Item Infinite Scroll Pagination
   async getAuditLogs(params: {
     page?: number;

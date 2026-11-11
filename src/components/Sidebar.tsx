@@ -18,7 +18,8 @@ import {
   Settings,
   CalendarDays,
   HardHat,
-  Activity
+  Activity,
+  Database
 } from 'lucide-react';
 import { UserRole, SystemRole, Employee, canAccessProjectModule, isProjectManager, isProjectAdmin, Project } from '../types';
 
@@ -167,6 +168,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
           badge: null
         },
         {
+          id: 'database_mgmt',
+          title: 'DATABASE & SYNC',
+          desc: 'Pusat unduh, filter rentang tanggal, impor Excel & sinkronisasi data',
+          icon: Database,
+          badge: null
+        },
+        {
           id: 'system_settings',
           title: 'SETTING SYSTEM',
           desc: 'Konfigurasi integrasi WhatsApp Bot Gateway & kredensial SMTP Gmail',
@@ -232,6 +240,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
           title: 'KALENDER KERJA & CUT-OFF',
           desc: 'Kalender kerja 1 tahun, setting libur mingguan & tanggal cut-off presensi',
           icon: CalendarDays,
+          badge: null
+        },
+        {
+          id: 'database_mgmt',
+          title: 'DATABASE & SYNC',
+          desc: 'Pusat unduh, filter rentang tanggal, impor Excel & sinkronisasi data',
+          icon: Database,
           badge: null
         },
         {
@@ -314,6 +329,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
           title: 'KALENDER KERJA & CUT-OFF',
           desc: 'Kalender kerja 1 tahun, setting libur mingguan & tanggal cut-off presensi',
           icon: CalendarDays,
+          badge: null
+        },
+        {
+          id: 'database_mgmt',
+          title: 'DATABASE & SYNC',
+          desc: 'Pusat unduh, filter rentang tanggal, impor Excel & sinkronisasi data',
+          icon: Database,
           badge: null
         },
         {

@@ -5,6 +5,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer, WebSocket } from 'ws';
+import XLSX from 'xlsx';
 import {
   getAllData,
   saveAttendance,
@@ -16,6 +17,12 @@ import {
   saveSalaryRules,
   resetDatabase,
   getDbInfo,
+  getDatabaseStats,
+  vacuumDatabase,
+  getAttendancesForExport,
+  getEmployeesForExport,
+  getProjectsForExport,
+  importAttendancesBatch,
   authenticateUser,
   generateTemporaryPassword,
   getCurrentUserFromToken,
@@ -2062,6 +2069,143 @@ const server = http.createServer(async (req, res) => {
           'Content-Disposition': 'attachment; filename="prime_hris.sqlite"'
         });
         return fs.createReadStream(dbPath).pipe(res);
+      }
+
+      // 12c. Database Statistics
+      if (cleanUrl === '/api/database/stats' && method === 'GET') {
+        const token = getAuthToken();
+        const user = token ? getCurrentUserFromToken(token) : null;
+        if (!user || (user.systemRole !== 'superuser' && user.systemRole !== 'admin' && user.systemRole !== 'hr' && user.systemRole !== 'finance')) {
+          return sendJson(403, { success: false, error: 'Forbidden: Hak akses tidak mencukupi' });
+        }
+        const stats = getDatabaseStats();
+        return sendJson(200, { success: true, ...stats });
+      }
+
+      // 12d. Vacuum Database (Optimize Storage & Shrink SQLite)
+      if (cleanUrl === '/api/database/vacuum' && method === 'POST') {
+        const token = getAuthToken();
+        const user = token ? getCurrentUserFromToken(token) : null;
+        if (!user || (user.systemRole !== 'superuser' && user.systemRole !== 'admin' && user.systemRole !== 'hr')) {
+          return sendJson(403, { success: false, error: 'Forbidden: Hak akses tidak mencukupi' });
+        }
+        const resVacuum = vacuumDatabase();
+        addAuditLog({
+          action: 'DATABASE_VACUUM',
+          entity: 'system',
+          entityId: 'SQLITE_VACUUM',
+          userName: user.name || user.username,
+          userLoginId: user.username,
+          userRole: user.systemRole || user.role,
+          module: 'DATABASE',
+          ipAddress: req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1',
+          status: 'SUCCESS',
+          details: `Vacuum database berhasil dijalankan oleh ${user.username}. Menghemat ${resVacuum.savedKb} KB.`
+        });
+        return sendJson(200, { success: true, ...resVacuum });
+      }
+
+      // 12e. Export Data to JSON (Client-Side Flexible Processing)
+      if (cleanUrl === '/api/database/export-data' && method === 'POST') {
+        const token = getAuthToken();
+        const user = token ? getCurrentUserFromToken(token) : null;
+        if (!user || (user.systemRole !== 'superuser' && user.systemRole !== 'admin' && user.systemRole !== 'hr' && user.systemRole !== 'finance')) {
+          return sendJson(403, { success: false, error: 'Forbidden: Hak akses tidak mencukupi' });
+        }
+        const body = await readBody();
+        const table = body.table || 'attendances';
+        let rows = [];
+        if (table === 'attendances') {
+          rows = getAttendancesForExport(body);
+        } else if (table === 'employees') {
+          rows = getEmployeesForExport();
+        } else if (table === 'projects') {
+          rows = getProjectsForExport();
+        }
+        return sendJson(200, { success: true, table, count: rows.length, rows });
+      }
+
+      // 12f. Direct Server-Side Excel File Generation (.xlsx stream)
+      if (cleanUrl === '/api/database/export-excel' && method === 'POST') {
+        const token = getAuthToken();
+        const user = token ? getCurrentUserFromToken(token) : null;
+        if (!user || (user.systemRole !== 'superuser' && user.systemRole !== 'admin' && user.systemRole !== 'hr' && user.systemRole !== 'finance')) {
+          return sendJson(403, { success: false, error: 'Forbidden: Hak akses tidak mencukupi' });
+        }
+        const body = await readBody();
+        const table = body.table || 'attendances';
+        const wb = XLSX.utils.book_new();
+
+        if (table === 'attendances' || table === 'all') {
+          const attRows = getAttendancesForExport(body);
+          const cleanAtt = attRows.map(r => {
+            const { id, date, loginId, employeeId, nik, name, department, projectCode, projectName, checkInTime, checkOutTime, mode, status, approvalStatus, lateMinutes, note, ...displayOnly } = r;
+            return displayOnly;
+          });
+          const wsAtt = XLSX.utils.json_to_sheet(cleanAtt.length > 0 ? cleanAtt : [{ 'Keterangan': 'Tidak ada data presensi pada rentang tanggal yang dipilih' }]);
+          XLSX.utils.book_append_sheet(wb, wsAtt, 'Log Presensi');
+        }
+
+        if (table === 'employees' || table === 'all') {
+          const empRows = getEmployeesForExport();
+          const wsEmp = XLSX.utils.json_to_sheet(empRows);
+          XLSX.utils.book_append_sheet(wb, wsEmp, 'Master Karyawan');
+        }
+
+        if (table === 'projects' || table === 'all') {
+          const projRows = getProjectsForExport();
+          const wsProj = XLSX.utils.json_to_sheet(projRows);
+          XLSX.utils.book_append_sheet(wb, wsProj, 'Master Proyek');
+        }
+
+        const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+        const nowStr = new Date().toISOString().slice(0, 10);
+        const filename = `DMJ_HRIS_${table.toUpperCase()}_${nowStr}.xlsx`;
+
+        res.writeHead(200, {
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'Content-Disposition': `attachment; filename="${filename}"`,
+          'Content-Length': buffer.length,
+          'Cache-Control': 'no-cache'
+        });
+        return res.end(buffer);
+      }
+
+      // 12g. Batch Import from Excel (Replace or Add mode)
+      if (cleanUrl === '/api/database/import-excel' && method === 'POST') {
+        const token = getAuthToken();
+        const user = token ? getCurrentUserFromToken(token) : null;
+        if (!user || (user.systemRole !== 'superuser' && user.systemRole !== 'admin' && user.systemRole !== 'hr')) {
+          return sendJson(403, { success: false, error: 'Forbidden: Hak akses tidak mencukupi untuk impor database' });
+        }
+        const body = await readBody();
+        const table = body.table || 'attendances';
+        const mode = body.mode || 'replace';
+        const rows = body.rows || [];
+
+        if (!Array.isArray(rows) || rows.length === 0) {
+          return sendJson(400, { success: false, error: 'Format data kosong atau tidak valid' });
+        }
+
+        let result;
+        if (table === 'attendances') {
+          result = importAttendancesBatch(rows, mode, {
+            ...user,
+            clientIp: req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1'
+          });
+        } else {
+          return sendJson(400, { success: false, error: `Tabel ${table} belum mendukung impor batch saat ini` });
+        }
+
+        broadcastRealtimeEvent('DATABASE_SYNCED', {
+          table,
+          mode,
+          updatedCount: result.summary.updated,
+          insertedCount: result.summary.inserted,
+          message: `Database berhasil disinkronisasi via Excel (${result.summary.updated} diperbarui, ${result.summary.inserted} ditambahkan)`
+        });
+
+        return sendJson(200, result);
       }
       return sendJson(404, { error: 'Not found' });
     } catch (err) {
