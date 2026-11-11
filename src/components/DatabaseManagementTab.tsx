@@ -68,6 +68,37 @@ export const DatabaseManagementTab: React.FC<DatabaseManagementTabProps> = ({
   const [selectedDepartment, setSelectedDepartment] = useState<string>('ALL');
   const [isExporting, setIsExporting] = useState(false);
 
+  // Dynamic list of actual company departments derived from master employee data
+  const departments = React.useMemo(() => {
+    const set = new Set<string>();
+    employees.forEach(e => {
+      if (e.department && typeof e.department === 'string' && e.department.trim()) {
+        set.add(e.department.trim());
+      }
+    });
+    // Canonical fallback list if employees array is temporarily empty
+    if (set.size === 0) {
+      return [
+        'Project & Site Operations (DMJ)',
+        'Architectural & Engineering Design',
+        'Cost Control & Commercial Engineering',
+        'Head Office & Management Support',
+        'Surveying & Geospatial Engineering',
+        'Site Logistics & Equipment Support',
+        'Finance, Accounting & Tax',
+        'BENGKEL',
+        'Engineering & Digital Transformation',
+        'Engineering & Mechanical Services',
+        'General Affairs & Facility Security',
+        'Bengkel',
+        'Procurement & Supply Chain',
+        'Mechanical, Electrical & Plumbing (MEP)',
+        'Human Resources & General Affairs'
+      ];
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [employees]);
+
   // Import State
   const [importMode, setImportMode] = useState<ImportMode>('replace');
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -689,17 +720,19 @@ export const DatabaseManagementTab: React.FC<DatabaseManagementTabProps> = ({
                   </div>
 
                   <div>
-                    <label className="text-[10.5px] font-bold text-slate-600 block mb-1">Filter Dept:</label>
+                    <label className="text-[10.5px] font-bold text-slate-600 block mb-1">Filter Departemen:</label>
                     <select
                       value={selectedDepartment}
                       onChange={(e) => setSelectedDepartment(e.target.value)}
                       className="w-full text-xs px-2.5 py-2 rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-orange-500 truncate"
+                      title="Filter Departemen Asli"
                     >
-                      <option value="ALL">Semua Dept</option>
-                      <option value="Project & Site Operations (DMJ)">Project & Site</option>
-                      <option value="Management & Executives">Management</option>
-                      <option value="Finance & Accounting">Finance</option>
-                      <option value="HR & General Affairs">HR & GA</option>
+                      <option value="ALL">Semua Departemen</option>
+                      {departments.map((dept) => (
+                        <option key={dept} value={dept}>
+                          {dept}
+                        </option>
+                      ))}
                     </select>
                   </div>
                 </div>
