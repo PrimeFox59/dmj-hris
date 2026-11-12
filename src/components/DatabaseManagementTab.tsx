@@ -21,11 +21,13 @@ import {
   FileUp,
   ShieldCheck,
   Trash2,
-  ArrowRight
+  ArrowRight,
+  Lock
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { api } from '../services/api';
 import { Employee, Project, getEffectiveSystemRole } from '../types';
+import { canAccessDatabaseModule, isFinanceEmployee } from '../utils/approvalAuthorityHelper';
 
 interface DatabaseManagementTabProps {
   currentUser?: Employee;
@@ -46,7 +48,8 @@ export const DatabaseManagementTab: React.FC<DatabaseManagementTabProps> = ({
   showToast
 }) => {
   const effectiveRole = getEffectiveSystemRole(currentUser);
-  const isFinanceOrSuper = effectiveRole === 'finance' || effectiveRole === 'superuser';
+  const isFinanceOrSuper = effectiveRole === 'finance' || effectiveRole === 'superuser' || isFinanceEmployee(currentUser);
+  const canAccess = canAccessDatabaseModule(currentUser, effectiveRole);
 
   // Database Telemetry State
   const [stats, setStats] = useState<any>(null);
@@ -442,6 +445,22 @@ export const DatabaseManagementTab: React.FC<DatabaseManagementTabProps> = ({
     setImportResult(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
+
+  if (!canAccess) {
+    return (
+      <div className="max-w-xl mx-auto my-16 p-8 bg-white/90 backdrop-blur-md rounded-3xl border border-rose-200/80 shadow-xl text-center space-y-4 animate-in fade-in duration-300">
+        <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
+          <Lock className="w-8 h-8" />
+        </div>
+        <div>
+          <h3 className="text-xl font-black text-slate-900 tracking-tight">Akses Terbatas</h3>
+          <p className="text-xs sm:text-sm text-slate-600 mt-2 leading-relaxed">
+            Pusat Database & Sinkronisasi Excel hanya dapat diakses oleh <strong>HR Manager</strong>, <strong>Finance</strong>, dan <strong>Superuser</strong>.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 pb-20 animate-in fade-in duration-300">

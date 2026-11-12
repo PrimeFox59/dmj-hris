@@ -27,6 +27,7 @@ import {
   Database
 } from 'lucide-react';
 import { Employee, getEffectiveSystemRole, SystemRole, canAccessProjectModule, isProjectManager, Project } from '../types';
+import { canAccessDatabaseModule } from '../utils/approvalAuthorityHelper';
 import { ProfileTabId } from './ProfileSettingsModal';
 
 interface MobileBottomNavProps {
@@ -60,6 +61,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
   const currentRole: SystemRole = getEffectiveSystemRole(currentUser);
   const isStaff = currentRole === 'staff';
   const isFinanceOrSuper = currentRole === 'finance' || currentRole === 'superuser';
+  const canAccessDatabase = canAccessDatabaseModule(currentUser, currentRole);
   const isUserPm = isProjectManager(currentUser, projects);
   const canViewProjects = canAccessProjectModule(currentUser, projects);
 
@@ -260,8 +262,8 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                     </button>
                   )}
 
-                  {/* Tab: Database & Sync (Admin / Superuser) */}
-                  {!isStaff && (
+                  {/* Tab: Database & Sync (Khusus HR Manager, Finance, dan Superuser) */}
+                  {canAccessDatabase && (
                     <button
                       onClick={() => handleTabClick('database_mgmt')}
                       className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${

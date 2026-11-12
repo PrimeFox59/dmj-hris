@@ -241,3 +241,55 @@ export function getActionablePendingCount(
   // Approver: HANYA pengajuan yang pending dan user saat ini MEMILIKI HAK untuk meng-approve
   return approvals.filter(item => item.status === 'PENDING' && canUserApproveItem(item, context)).length;
 }
+
+/**
+ * Otorisasi Akses Menu Database & Sinkronisasi Excel
+ * HANYA dapat diakses oleh:
+ * 1. Superuser / Master Admin
+ * 2. HR Manager
+ * 3. Finance
+ */
+export function canAccessDatabaseModule(
+  user?: Employee | null,
+  currentRole?: string
+): boolean {
+  if (!user) return false;
+
+  const roleStr = String(currentRole || user.systemRole || user.role || '').toLowerCase();
+
+  // 1. Superuser / Master Admin
+  if (
+    roleStr === 'superuser' ||
+    user.id === 'EMP-001' ||
+    user.role === 'Director' ||
+    user.loginId === 'admin' ||
+    user.loginId === 'galih' ||
+    (user as any).username === 'admin' ||
+    (user as any).username === 'galih'
+  ) {
+    return true;
+  }
+
+  // 2. HR Manager
+  if (
+    isHrManager(user, currentRole) ||
+    user.role === 'HR_Manager' ||
+    user.id === 'EMP-022' ||
+    user.loginId === 'hr' ||
+    (user.position && /HR\s*MANAGER|MANAGER\s*HRD/i.test(user.position))
+  ) {
+    return true;
+  }
+
+  // 3. Finance
+  if (
+    roleStr === 'finance' ||
+    user.role === 'Finance' ||
+    isFinanceEmployee(user)
+  ) {
+    return true;
+  }
+
+  return false;
+}
+

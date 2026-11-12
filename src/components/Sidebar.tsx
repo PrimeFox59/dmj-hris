@@ -22,6 +22,7 @@ import {
   Database
 } from 'lucide-react';
 import { UserRole, SystemRole, Employee, canAccessProjectModule, isProjectManager, isProjectAdmin, Project } from '../types';
+import { canAccessDatabaseModule } from '../utils/approvalAuthorityHelper';
 
 interface SidebarProps {
   activeTab: string;
@@ -48,6 +49,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const isUserAdmin = isProjectAdmin(currentUser, projects);
   const isPmOrAdmin = isUserPm || isUserAdmin;
   const canViewProjects = canAccessProjectModule(currentUser, projects);
+  const canAccessDb = canAccessDatabaseModule(currentUser, systemRole);
 
   // Build tailored menus based on RBAC role
   const getMenuItems = () => {
@@ -174,13 +176,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
           icon: CalendarDays,
           badge: null
         },
-        {
+        ...(canAccessDb ? [{
           id: 'database_mgmt',
           title: 'DATABASE & SYNC',
           desc: 'Pusat unduh, filter rentang tanggal, impor Excel & sinkronisasi data',
           icon: Database,
           badge: null
-        },
+        }] : []),
         {
           id: 'system_settings',
           title: 'SETTING SYSTEM',
@@ -249,13 +251,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
           icon: CalendarDays,
           badge: null
         },
-        {
+        ...(canAccessDb ? [{
           id: 'database_mgmt',
           title: 'DATABASE & SYNC',
           desc: 'Pusat unduh, filter rentang tanggal, impor Excel & sinkronisasi data',
           icon: Database,
           badge: null
-        },
+        }] : []),
         {
           id: 'system_settings',
           title: 'SETTING SYSTEM',
@@ -338,13 +340,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
           icon: CalendarDays,
           badge: null
         },
-        {
+        ...(canAccessDb ? [{
           id: 'database_mgmt',
           title: 'DATABASE & SYNC',
           desc: 'Pusat unduh, filter rentang tanggal, impor Excel & sinkronisasi data',
           icon: Database,
           badge: null
-        },
+        }] : []),
         {
           id: 'system_settings',
           title: 'SETTING SYSTEM',

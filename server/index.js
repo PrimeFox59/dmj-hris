@@ -2096,7 +2096,7 @@ const server = http.createServer(async (req, res) => {
       if (cleanUrl === '/api/database/vacuum' && method === 'POST') {
         const token = getAuthToken();
         const user = token ? getCurrentUserFromToken(token) : null;
-        if (!user || (user.systemRole !== 'superuser' && user.systemRole !== 'admin' && user.systemRole !== 'hr')) {
+        if (!user || (user.systemRole !== 'superuser' && user.systemRole !== 'admin' && user.systemRole !== 'hr' && user.systemRole !== 'finance')) {
           return sendJson(403, { success: false, error: 'Forbidden: Hak akses tidak mencukupi' });
         }
         const resVacuum = vacuumDatabase();
@@ -2185,7 +2185,7 @@ const server = http.createServer(async (req, res) => {
       if (cleanUrl === '/api/database/import-excel' && method === 'POST') {
         const token = getAuthToken();
         const user = token ? getCurrentUserFromToken(token) : null;
-        if (!user || (user.systemRole !== 'superuser' && user.systemRole !== 'admin' && user.systemRole !== 'hr')) {
+        if (!user || (user.systemRole !== 'superuser' && user.systemRole !== 'admin' && user.systemRole !== 'hr' && user.systemRole !== 'finance')) {
           return sendJson(403, { success: false, error: 'Forbidden: Hak akses tidak mencukupi untuk impor database' });
         }
         const body = await readBody();

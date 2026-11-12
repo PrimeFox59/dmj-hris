@@ -41,6 +41,7 @@ import {
   isItemWithinUserAuthority, 
   getActionablePendingCount, 
   isHrManager, 
+  canAccessDatabaseModule,
   UserAuthorityContext 
 } from './utils/approvalAuthorityHelper';
 import { api } from './services/api';
@@ -62,7 +63,7 @@ export function App() {
   });
 
   // Auto-invalidation build ID (Membersihkan cache lama saat versi baru dirilis)
-  const APP_BUILD_ID = '20261112_v5_strict_approval_authority_scoping';
+  const APP_BUILD_ID = '20261112_v6_database_tab_rbac_guard';
   if (typeof window !== 'undefined') {
     try {
       const savedBuild = localStorage.getItem('prime_hris_build_id');
@@ -833,8 +834,13 @@ export function App() {
     } catch (e) {}
 
     const targetRole = getEffectiveSystemRole(targetEmp);
+    const targetCanAccessDb = canAccessDatabaseModule(targetEmp, targetRole);
+    if (!targetCanAccessDb && activeTab === 'database_mgmt') {
+      setActiveTab('dashboard');
+      setDashboardSubView('performance');
+    }
     if (targetRole === 'staff') {
-      if (activeTab === 'database_mgmt' || activeTab === 'system_settings' || activeTab === 'salary_rules' || activeTab === 'audit' || activeTab === 'wa_gateway' || activeTab === 'email_smtp' || activeTab === 'work_calendar') {
+      if (activeTab === 'system_settings' || activeTab === 'salary_rules' || activeTab === 'audit' || activeTab === 'wa_gateway' || activeTab === 'email_smtp' || activeTab === 'work_calendar') {
         setActiveTab('dashboard');
         setDashboardSubView('performance');
       } else if (activeTab === 'dashboard') {
@@ -926,6 +932,15 @@ export function App() {
     );
 
     const role = getEffectiveSystemRole(currentUser);
+    if (tabId === 'database_mgmt') {
+      const allowed = canAccessDatabaseModule(currentUser, role);
+      if (!allowed) {
+        showLiveToast('Akses Terbatas: Menu Database & Sync hanya untuk HR Manager, Finance, dan Superuser', 'warn');
+        setActiveTab('dashboard');
+        setDashboardSubView('performance');
+        return;
+      }
+    }
     if (!isMasterSuperuser && role === 'staff') {
       if (tabId === 'dashboard' || tabId === 'dashboard_hris' || tabId === 'dashboard_finance') {
         setActiveTab('dashboard');
@@ -1522,6 +1537,9 @@ export function App() {
   const isStaffUser = userSystemRole === 'staff';
   const isUserPm = isProjectManager(currentUser, projects);
   const canAccessProjects = canAccessProjectModule(currentUser, projects);
+  const canAccessDatabase = React.useMemo(() => {
+    return canAccessDatabaseModule(currentUser, userSystemRole);
+  }, [currentUser, userSystemRole]);
 
   const userAuthorityContext: UserAuthorityContext = React.useMemo(() => {
     const isHr = isHrManager(currentUser, userSystemRole);
@@ -1707,6 +1725,7 @@ export function App() {
               { id: 'users', label: 'Data Gaji' },
               { id: 'projects', label: 'Biaya Proyek' },
               { id: 'approvals', label: 'Approval SDM' },
+              { id: 'database_mgmt', label: 'Database' },
               { id: 'invoice', label: 'Invoice' },
               { id: 'attendance', label: 'Rekap Presensi' },
               { id: 'audit', label: 'Audit Log' }
@@ -1720,7 +1739,7 @@ export function App() {
               { id: 'approvals', label: 'Approval SDM' },
               { id: 'projects', label: 'Proyek & Site' },
               { id: 'users', label: 'Karyawan' },
-              { id: 'database_mgmt', label: 'Database' },
+              ...(canAccessDatabase ? [{ id: 'database_mgmt', label: 'Database' }] : []),
               { id: 'audit', label: 'Audit Log' }
             ]
           : userSystemRole === 'superuser'
@@ -1732,6 +1751,7 @@ export function App() {
               { id: 'projects', label: 'Proyek & Site' },
               { id: 'users', label: 'Karyawan' },
               { id: 'payroll', label: 'Payroll' },
+              { id: 'database_mgmt', label: 'Database' },
               { id: 'invoice', label: 'Invoice' },
               { id: 'audit', label: 'Audit Log' }
             ]
@@ -1953,26 +1973,49 @@ export function App() {
         )}
 
         {activeTab === 'database_mgmt' && (
-          <DatabaseManagementTab
-            currentUser={currentUser}
-            projects={projects}
-            employees={employees}
-            onRefreshData={async () => {
-              try {
-                const data = await api.getBootstrapData();
-                if (data.employees) setEmployees(data.employees);
-                if (data.projects) setProjects(data.projects);
-                if (Array.isArray(data.attendances)) setAttendances(data.attendances);
-                if (data.approvals) setApprovals(data.approvals);
-                if (data.salaryRules) setSalaryRules(data.salaryRules);
-                if (data.workCalendar) setWorkCalendar(data.workCalendar);
-                if (data.dbInfo) setDbInfo(data.dbInfo);
-              } catch (e) {
-                console.warn('[Refresh DB]', e);
-              }
-            }}
-            showToast={showLiveToast}
-          />
+          canAccessDatabase ? (
+            <DatabaseManagementTab
+              currentUser={currentUser}
+              projects={projects}
+              employees={employees}
+              onRefreshData={async () => {
+                try {
+                  const data = await api.getBootstrapData();
+                  if (data.employees) setEmployees(data.employees);
+                  if (data.projects) setProjects(data.projects);
+                  if (Array.isArray(data.attendances)) setAttendances(data.attendances);
+                  if (data.approvals) setApprovals(data.approvals);
+                  if (data.salaryRules) setSalaryRules(data.salaryRules);
+                  if (data.workCalendar) setWorkCalendar(data.workCalendar);
+                  if (data.dbInfo) setDbInfo(data.dbInfo);
+                } catch (e) {
+                  console.warn('[Refresh DB]', e);
+                }
+              }}
+              showToast={showLiveToast}
+            />
+          ) : (
+            <div className="max-w-xl mx-auto my-16 p-8 bg-white/90 backdrop-blur-md rounded-3xl border border-rose-200/80 shadow-xl text-center space-y-4 animate-in fade-in duration-300">
+              <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
+                <Lock className="w-8 h-8" />
+              </div>
+              <div>
+                <h3 className="text-xl font-black text-slate-900 tracking-tight">Akses Terbatas</h3>
+                <p className="text-xs sm:text-sm text-slate-600 mt-2 leading-relaxed">
+                  Pusat Database & Sinkronisasi Excel hanya dapat diakses oleh <strong>HR Manager</strong>, <strong>Finance</strong>, dan <strong>Superuser</strong>.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setActiveTab('dashboard');
+                  setDashboardSubView('performance');
+                }}
+                className="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-[#FF6B00] to-[#FF8533] text-white font-bold text-sm shadow-md hover:brightness-110 active:scale-95 transition-all cursor-pointer"
+              >
+                Kembali ke Beranda
+              </button>
+            </div>
+          )
         )}
 
         {activeTab === 'audit' && (
