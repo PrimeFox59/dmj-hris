@@ -56,7 +56,7 @@ export function App() {
   });
 
   // Auto-invalidation build ID (Membersihkan cache lama saat versi baru dirilis)
-  const APP_BUILD_ID = '20261112_v2_biometric_telemetry_only';
+  const APP_BUILD_ID = '20261112_v3_staff_salary_privacy_finance_approval';
   if (typeof window !== 'undefined') {
     try {
       const savedBuild = localStorage.getItem('prime_hris_build_id');

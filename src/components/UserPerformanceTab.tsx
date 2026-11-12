@@ -26,7 +26,9 @@ import {
   DollarSign,
   X,
   CreditCard,
-  Briefcase
+  Briefcase,
+  Lock,
+  Unlock
 } from 'lucide-react';
 import {
   Employee,
@@ -128,21 +130,143 @@ export const UserPerformanceTab: React.FC<UserPerformanceTabProps> = ({
     }
   }, [isStaff, selectedProjectId, employees, selectedEmployeeId]);
 
+  // =========================================================================
+  // SLIP ACCESS 10-MINUTE WINDOW STATE (FINANCE APPROVAL SYSTEM FOR STAFF)
+  // Sesuai regulasi: Staf biasa hanya dapat melihat nominal THP, gaji & tunjangan
+  // jika request buka slip sudah di-ACC oleh Finance (akses terbuka 10 menit).
+  // =========================================================================
+  const canViewSalaryFreely = currentRole === 'superuser' || currentRole === 'finance' || currentRole === 'admin' || currentUser.id === 'EMP-001' || currentUser.loginId === 'admin' || currentUser.role === 'Director';
+
+  const [currentTimeMs, setCurrentTimeMs] = useState<number>(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTimeMs(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const formatCountdown = (seconds: number): string => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
+
+  const activeEmployee = useMemo(() => {
+    if (isStaff) return currentUser;
+    return employees.find(e => e.id === selectedEmployeeId) || currentUser;
+  }, [isStaff, employees, selectedEmployeeId, currentUser]);
+
+  const slipAccess = useMemo(() => {
+    if (canViewSalaryFreely) {
+      return { isAllowed: true, remainingSeconds: 600, status: 'UNRESTRICTED' as const, approvalItem: null, approverName: 'Finance' };
+    }
+
+    const matchingApprovals = approvals.filter(a => 
+      a.type === 'SLIP_ACCESS' && 
+      a.employeeId === activeEmployee.id
+    ).sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
+
+    const latest = matchingApprovals[0];
+    if (!latest) {
+      return { isAllowed: false, remainingSeconds: 0, status: 'NONE' as const, approvalItem: null, approverName: '' };
+    }
+
+    if (latest.status === 'PENDING') {
+      return { isAllowed: false, remainingSeconds: 0, status: 'PENDING' as const, approvalItem: latest, approverName: '' };
+    }
+
+    if (latest.status === 'REJECTED') {
+      return { isAllowed: false, remainingSeconds: 0, status: 'REJECTED' as const, approvalItem: latest, approverName: '' };
+    }
+
+    if (latest.status === 'APPROVED' && latest.slipAccessExpiresAt) {
+      const expiresAt = new Date(latest.slipAccessExpiresAt).getTime();
+      const remainingMs = expiresAt - currentTimeMs;
+      const remainingSec = Math.max(0, Math.floor(remainingMs / 1000));
+
+      if (remainingSec > 0) {
+        return {
+          isAllowed: true,
+          remainingSeconds: remainingSec,
+          status: 'ACTIVE' as const,
+          approvalItem: latest,
+          expiresAt: latest.slipAccessExpiresAt,
+          approverName: latest.financeApprovedBy || latest.reviewedBy || 'Finance'
+        };
+      } else {
+        return {
+          isAllowed: false,
+          remainingSeconds: 0,
+          status: 'EXPIRED' as const,
+          approvalItem: latest,
+          approverName: latest.financeApprovedBy || latest.reviewedBy || 'Finance'
+        };
+      }
+    }
+
+    return { isAllowed: false, remainingSeconds: 0, status: 'NONE' as const, approvalItem: null, approverName: '' };
+  }, [canViewSalaryFreely, approvals, activeEmployee.id, currentTimeMs]);
+
+  // Request Slip Access Modal State & Handlers
+  const [isRequestSlipModalOpen, setIsRequestSlipModalOpen] = useState<boolean>(false);
+  const [slipRequestReason, setSlipRequestReason] = useState<string>('Pengecekan rincian upah, tunjangan, dan potongan gaji bulanan');
+  const [slipRequestSuccessMsg, setSlipRequestSuccessMsg] = useState<string | null>(null);
+
+  const handleOpenSlipRequestModal = () => {
+    setSlipRequestReason('Pengecekan rincian upah, tunjangan, dan potongan gaji bulanan');
+    setIsRequestSlipModalOpen(true);
+  };
+
+  const handleSubmitSlipAccessRequest = (e: React.FormEvent) => {
+    e.preventDefault();
+    const nowIso = new Date().toISOString();
+    const period = 'September 2026';
+
+    const newApprovalItem: ApprovalItem = {
+      id: `SLIP-${Date.now()}`,
+      type: 'SLIP_ACCESS',
+      employeeId: activeEmployee.id,
+      employeeLoginId: activeEmployee.loginId || (activeEmployee.id === 'EMP-001' ? 'admin' : undefined),
+      employeeName: activeEmployee.name,
+      employeeNik: activeEmployee.nik || '',
+      department: activeEmployee.department || 'Operasional',
+      title: `Permohonan Izin Buka Slip Gaji (${period})`,
+      description: `Keperluan: ${slipRequestReason.trim()} • Periode: ${period}. Akses otomatis terbuka selama 10 menit setelah disetujui Finance.`,
+      startDate: nowIso.split('T')[0],
+      status: 'PENDING',
+      submittedAt: nowIso,
+      slipPeriod: period,
+      targetApproverRole: 'FINANCE',
+      stage: 'FINANCE'
+    };
+
+    if (onSubmitNewLeaveRequest) {
+      onSubmitNewLeaveRequest(newApprovalItem);
+    }
+
+    setIsRequestSlipModalOpen(false);
+    setSlipRequestSuccessMsg(`Permohonan buka rincian slip gaji periode ${period} berhasil dikirim ke Finance! Harap tunggu persetujuan.`);
+    setTimeout(() => setSlipRequestSuccessMsg(null), 6000);
+  };
+
+  // Auto-close open slip modal if 10-minute access window expires
+  useEffect(() => {
+    if (isSlipModalOpen && !canViewSalaryFreely && !slipAccess.isAllowed) {
+      setIsSlipModalOpen(false);
+      alert('Sesi akses rincian finansial & slip gaji (10 menit) telah berakhir. Data telah dikunci kembali secara otomatis demi privasi dan keamanan data finansial.');
+    }
+  }, [isSlipModalOpen, canViewSalaryFreely, slipAccess.isAllowed]);
+
   // Lock body scroll when modals are open
   useEffect(() => {
-    if (isSlipModalOpen) {
+    if (isSlipModalOpen || isRequestSlipModalOpen) {
       const originalOverflow = document.body.style.overflow;
       document.body.style.overflow = 'hidden';
       return () => {
         document.body.style.overflow = originalOverflow;
       };
     }
-  }, [isSlipModalOpen]);
-
-  const activeEmployee = useMemo(() => {
-    if (isStaff) return currentUser;
-    return employees.find(e => e.id === selectedEmployeeId) || currentUser;
-  }, [isStaff, employees, selectedEmployeeId, currentUser]);
+  }, [isSlipModalOpen, isRequestSlipModalOpen]);
 
   // Filter personal data for activeEmployee
   const personalAttendances = useMemo(() => {
@@ -326,13 +450,29 @@ export const UserPerformanceTab: React.FC<UserPerformanceTabProps> = ({
 
           {/* Quick Actions */}
           <div className="flex flex-wrap items-center gap-2.5">
-            <button
-              onClick={() => setIsSlipModalOpen(true)}
-              className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-bold border border-white/20 backdrop-blur-md transition-all active:scale-95 flex items-center gap-2 cursor-pointer"
-            >
-              <Printer className="w-3.5 h-3.5 text-[#00E2B0]" />
-              Cetak Slip Gaji
-            </button>
+            {slipAccess.isAllowed ? (
+              <button
+                onClick={() => setIsSlipModalOpen(true)}
+                className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-bold border border-white/20 backdrop-blur-md transition-all active:scale-95 flex items-center gap-2 cursor-pointer shadow-xs"
+              >
+                <Printer className="w-3.5 h-3.5 text-[#00E2B0]" />
+                <span>Cetak Slip Gaji</span>
+                {slipAccess.status === 'ACTIVE' && (
+                  <span className="ml-1 text-[10px] font-mono-code px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-400/40">
+                    ⏱️ {formatCountdown(slipAccess.remainingSeconds)}
+                  </span>
+                )}
+              </button>
+            ) : (
+              <button
+                onClick={handleOpenSlipRequestModal}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-orange-500 to-[#FF6B00] hover:from-orange-600 hover:to-[#e56000] text-white text-xs font-bold border border-orange-400/30 backdrop-blur-md transition-all active:scale-95 flex items-center gap-2 cursor-pointer shadow-md shadow-orange-500/25"
+                title="Minta izin ke Divisi Finance untuk membuka rincian slip gaji (Akses 10 Menit)"
+              >
+                <Lock className="w-3.5 h-3.5 text-amber-200" />
+                <span>{slipAccess.status === 'PENDING' ? 'Menunggu ACC Finance' : 'Minta Izin Buka Slip'}</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -365,18 +505,43 @@ export const UserPerformanceTab: React.FC<UserPerformanceTabProps> = ({
           <div>
             <div className="flex items-center gap-1.5">
               <span className="text-[10px] font-mono-code text-slate-400 block uppercase">Take Home Pay Terkini:</span>
+              {slipAccess.isAllowed ? (
+                <button
+                  type="button"
+                  onClick={toggleSalaryNominal}
+                  className="text-slate-400 hover:text-white transition-colors cursor-pointer p-0.5 rounded hover:bg-white/10"
+                  title={showSalaryNominal ? "Sembunyikan Nominal (Privasi)" : "Tampilkan Nominal"}
+                >
+                  {showSalaryNominal ? <EyeOff className="w-3.5 h-3.5 text-slate-300" /> : <Eye className="w-3.5 h-3.5 text-amber-400" />}
+                </button>
+              ) : (
+                <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">
+                  Terkunci
+                </span>
+              )}
+            </div>
+            {slipAccess.isAllowed ? (
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="font-black text-[#FF8533] font-mono-code text-sm">
+                  {formatSalaryDisplay(personalPayroll.netSalary, showSalaryNominal)}
+                </span>
+                {slipAccess.status === 'ACTIVE' && (
+                  <span className="text-[10px] font-mono-code text-emerald-400 font-bold bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-500/30">
+                    ⏱️ {formatCountdown(slipAccess.remainingSeconds)}
+                  </span>
+                )}
+              </div>
+            ) : (
               <button
                 type="button"
-                onClick={toggleSalaryNominal}
-                className="text-slate-400 hover:text-white transition-colors cursor-pointer p-0.5 rounded hover:bg-white/10"
-                title={showSalaryNominal ? "Sembunyikan Nominal (Privasi)" : "Tampilkan Nominal"}
+                onClick={handleOpenSlipRequestModal}
+                className="font-bold text-amber-400 hover:text-amber-300 font-mono-code text-xs mt-1 flex items-center gap-1 cursor-pointer transition-colors"
+                title="Nominal terkunci. Klik untuk minta izin ke Finance."
               >
-                {showSalaryNominal ? <EyeOff className="w-3.5 h-3.5 text-slate-300" /> : <Eye className="w-3.5 h-3.5 text-amber-400" />}
+                <Lock className="w-3 h-3 text-amber-400" />
+                <span>{slipAccess.status === 'PENDING' ? 'Menunggu ACC Finance...' : 'Minta Izin Buka (ACC Finance)'}</span>
               </button>
-            </div>
-            <span className="font-black text-[#FF8533] font-mono-code text-sm mt-0.5">
-              {formatSalaryDisplay(personalPayroll.netSalary, showSalaryNominal)}
-            </span>
+            )}
           </div>
 
           <div>
@@ -393,7 +558,7 @@ export const UserPerformanceTab: React.FC<UserPerformanceTabProps> = ({
         {[
           { id: 'OVERVIEW', label: 'Ringkasan Kinerja', icon: User },
           { id: 'PROJECTS', label: `Proyek Saya (${myAssignedProjects.length})`, icon: Briefcase },
-          { id: 'SALARY', label: 'Cek Gaji & Slip', icon: Banknote },
+          { id: 'SALARY', label: slipAccess.isAllowed ? 'Cek Gaji & Slip' : '🔒 Cek Gaji & Slip', icon: Banknote },
           { id: 'ATTENDANCE', label: 'Presensi & Jam Kerja', icon: Clock },
           { id: 'LEAVE', label: `Sisa Cuti (${remainingLeave} Hari)`, icon: Calendar },
           
@@ -429,24 +594,68 @@ export const UserPerformanceTab: React.FC<UserPerformanceTabProps> = ({
                 <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 font-mono-code block">
                   Take Home Pay Bulan Ini
                 </span>
-                <button
-                  type="button"
-                  onClick={toggleSalaryNominal}
-                  className="p-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors cursor-pointer"
-                  title={showSalaryNominal ? "Sembunyikan Nominal (Sensor Default)" : "Tampilkan Nominal"}
-                >
-                  {showSalaryNominal ? <EyeOff className="w-3.5 h-3.5 text-slate-500" /> : <Eye className="w-3.5 h-3.5 text-[#FF6B00]" />}
-                </button>
+                {slipAccess.isAllowed ? (
+                  <button
+                    type="button"
+                    onClick={toggleSalaryNominal}
+                    className="p-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors cursor-pointer"
+                    title={showSalaryNominal ? "Sembunyikan Nominal (Sensor Default)" : "Tampilkan Nominal"}
+                  >
+                    {showSalaryNominal ? <EyeOff className="w-3.5 h-3.5 text-slate-500" /> : <Eye className="w-3.5 h-3.5 text-[#FF6B00]" />}
+                  </button>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-bold font-mono-code flex items-center gap-1">
+                    <Lock className="w-2.5 h-2.5 text-amber-600" />
+                    <span>Terkunci</span>
+                  </span>
+                )}
               </div>
-              <div className="text-xl sm:text-2xl font-black text-slate-900 font-mono-code mt-1">
-                {formatSalaryDisplay(personalPayroll.netSalary, showSalaryNominal)}
-              </div>
-              <button
-                onClick={() => setActiveSection('SALARY')}
-                className="mt-2 text-xs font-bold text-[#FF6B00] hover:underline flex items-center gap-1 cursor-pointer"
-              >
-                Rincian Slip Gaji <ChevronRight className="w-3 h-3" />
-              </button>
+
+              {slipAccess.isAllowed ? (
+                <>
+                  <div className="text-xl sm:text-2xl font-black text-slate-900 font-mono-code mt-1 flex items-baseline gap-2">
+                    <span>{formatSalaryDisplay(personalPayroll.netSalary, showSalaryNominal)}</span>
+                    {slipAccess.status === 'ACTIVE' && (
+                      <span className="text-[11px] font-mono-code text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                        ⏱️ {formatCountdown(slipAccess.remainingSeconds)}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setActiveSection('SALARY')}
+                    className="mt-2 text-xs font-bold text-[#FF6B00] hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    Rincian Slip Gaji <ChevronRight className="w-3 h-3" />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="text-lg sm:text-xl font-bold text-slate-400 font-mono-code mt-1 tracking-wider">
+                    Rp ••••••••••
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-1 leading-snug">
+                    {slipAccess.status === 'PENDING'
+                      ? 'Permohonan buka rincian gaji sedang ditinjau Finance'
+                      : 'Nominal disembunyikan. Wajib di-ACC oleh Finance.'}
+                  </p>
+                  <button
+                    onClick={handleOpenSlipRequestModal}
+                    className="mt-2 text-xs font-bold text-[#FF6B00] hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <Lock className="w-3 h-3" />
+                    <span>
+                      {slipAccess.status === 'PENDING'
+                        ? 'Cek Status ACC Finance'
+                        : slipAccess.status === 'REJECTED'
+                        ? 'Ditolak (Ajukan Ulang)'
+                        : slipAccess.status === 'EXPIRED'
+                        ? 'Akses Berakhir (Buka Lagi)'
+                        : 'Minta Izin Buka Nominal'}
+                    </span>
+                    <ChevronRight className="w-3 h-3" />
+                  </button>
+                </>
+              )}
             </div>
 
             {/* KPI 2 */}
@@ -556,27 +765,38 @@ export const UserPerformanceTab: React.FC<UserPerformanceTabProps> = ({
                   <TrendingUp className="w-4 h-4 text-emerald-600" />
                   Proyeksi Gaji Periode Ini
                 </h3>
-                <button
-                  onClick={() => setActiveSection('PROJECTION')}
-                  className="text-xs font-bold text-[#FF6B00] hover:underline cursor-pointer"
-                >
-                  Simulasi Lembur
-                </button>
+                {slipAccess.isAllowed ? (
+                  <button
+                    onClick={() => setActiveSection('PROJECTION')}
+                    className="text-xs font-bold text-[#FF6B00] hover:underline cursor-pointer"
+                  >
+                    Simulasi Lembur
+                  </button>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-bold font-mono-code flex items-center gap-1">
+                    <Lock className="w-2.5 h-2.5 text-amber-600" />
+                    <span>Terkunci</span>
+                  </span>
+                )}
               </div>
 
               <div className="p-4 rounded-2xl bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200 space-y-2 text-xs">
                 <div className="flex justify-between items-center">
                   <span className="text-slate-600">Estimasi Bersih (THP):</span>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono-code font-black text-base text-slate-900">{formatSalaryDisplay(personalPayroll.netSalary, showSalaryNominal)}</span>
-                    <button
-                      onClick={() => setShowSalaryNominal(prev => !prev)}
-                      className="p-1 rounded-lg hover:bg-orange-100 text-slate-400 hover:text-[#FF6B00] transition-colors cursor-pointer"
-                      title={showSalaryNominal ? "Sembunyikan Nominal" : "Tampilkan Nominal"}
-                    >
-                      {showSalaryNominal ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                    </button>
-                  </div>
+                  {slipAccess.isAllowed ? (
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono-code font-black text-base text-slate-900">{formatSalaryDisplay(personalPayroll.netSalary, showSalaryNominal)}</span>
+                      <button
+                        onClick={() => setShowSalaryNominal(prev => !prev)}
+                        className="p-1 rounded-lg hover:bg-orange-100 text-slate-400 hover:text-[#FF6B00] transition-colors cursor-pointer"
+                        title={showSalaryNominal ? "Sembunyikan Nominal" : "Tampilkan Nominal"}
+                      >
+                        {showSalaryNominal ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="font-mono-code font-bold text-slate-400">Rp •••••••••• (Terkunci)</span>
+                  )}
                 </div>
                 <div className="flex justify-between text-[11px] text-slate-500">
                   <span>Jadwal Pencairan Kas:</span>
@@ -586,6 +806,17 @@ export const UserPerformanceTab: React.FC<UserPerformanceTabProps> = ({
                   <span>Alokasi Beban Proyek:</span>
                   <span className="font-mono-code text-orange-700 font-bold">{assignedProject?.code || 'PRIME-ENG-01'}</span>
                 </div>
+                {!slipAccess.isAllowed && (
+                  <div className="pt-2 border-t border-orange-200/60 text-right">
+                    <button
+                      onClick={handleOpenSlipRequestModal}
+                      className="text-[11px] font-bold text-[#FF6B00] hover:underline flex items-center gap-1 ml-auto cursor-pointer"
+                    >
+                      <Lock className="w-3 h-3" />
+                      <span>{slipAccess.status === 'PENDING' ? 'Menunggu ACC Finance...' : 'Minta Izin Buka Nominal >'}</span>
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -810,8 +1041,119 @@ export const UserPerformanceTab: React.FC<UserPerformanceTabProps> = ({
       {/* =========================================================================
           TAB CONTENT 2: CEK GAJI & SLIP GAJI
          ========================================================================= */}
-      {activeSection === 'SALARY' && (
+      {activeSection === 'SALARY' && !slipAccess.isAllowed && (
+        <div className="glass-card rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-md space-y-6 motion-fade-in-up text-center max-w-2xl mx-auto">
+          <div className="w-16 h-16 mx-auto rounded-3xl bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center shadow-md">
+            <Lock className="w-8 h-8 text-amber-600" />
+          </div>
+
+          <div className="space-y-2">
+            <h2 className="text-xl font-black text-slate-900">
+              Rincian Penghasilan & Keuangan Terkunci
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-600 max-w-lg mx-auto leading-relaxed">
+              Sesuai kebijakan privasi data finansial PT Dwi Martha Jaya, rincian upah, tunjangan, potongan pajak, BPJS, dan nominal Take Home Pay staf biasa memerlukan persetujuan (ACC) resmi dari <strong>Divisi Finance</strong>.
+            </p>
+          </div>
+
+          {/* Status Box */}
+          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 text-left space-y-2.5 text-xs">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+              <span className="font-semibold text-slate-600">Status Akses:</span>
+              <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold font-mono-code ${
+                slipAccess.status === 'PENDING'
+                  ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                  : slipAccess.status === 'REJECTED'
+                  ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                  : slipAccess.status === 'EXPIRED'
+                  ? 'bg-slate-200 text-slate-700 border border-slate-300'
+                  : 'bg-blue-100 text-blue-800 border border-blue-300'
+              }`}>
+                {slipAccess.status === 'PENDING'
+                  ? '⏳ MENUNGGU ACC FINANCE'
+                  : slipAccess.status === 'REJECTED'
+                  ? '❌ DITOLAK OLEH FINANCE'
+                  : slipAccess.status === 'EXPIRED'
+                  ? '🔒 SESI AKSES KEDALUWARSA'
+                  : 'BELUM MENGAJUKAN IZIN'}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between text-slate-600 pt-1">
+              <span>Durasi Akses Setelah ACC:</span>
+              <span className="font-bold text-slate-800 font-mono-code">10 Menit (Auto-Lock)</span>
+            </div>
+            <div className="flex items-center justify-between text-slate-600">
+              <span>Periode Penggajian:</span>
+              <span className="font-bold text-slate-800">September 2026</span>
+            </div>
+
+            {slipAccess.status === 'PENDING' && slipAccess.approvalItem && (
+              <div className="mt-2 p-3 rounded-xl bg-amber-50/80 border border-amber-200/70 text-amber-900 text-[11px]">
+                <p className="font-semibold">Permohonan Anda telah terkirim pada:</p>
+                <p className="font-mono-code text-[10.5px] mt-0.5">
+                  {new Date(slipAccess.approvalItem.submittedAt).toLocaleString('id-ID')} WIB
+                </p>
+                <p className="mt-1 text-slate-600">
+                  Tim Finance sedang memverifikasi permohonan Anda di Approval Hub. Mohon tunggu beberapa saat atau refresh halaman.
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <button
+              onClick={handleOpenSlipRequestModal}
+              className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-gradient-to-r from-orange-500 to-[#FF6B00] hover:from-orange-600 hover:to-[#e56000] text-white font-bold text-xs shadow-md shadow-orange-500/20 flex items-center justify-center gap-2 cursor-pointer active:scale-95 transition-all"
+            >
+              <Lock className="w-4 h-4" />
+              <span>
+                {slipAccess.status === 'PENDING'
+                  ? 'Kirim Permohonan Ulang / Tambah Catatan'
+                  : slipAccess.status === 'REJECTED'
+                  ? 'Ajukan Kembali ke Finance'
+                  : slipAccess.status === 'EXPIRED'
+                  ? 'Minta Izin Buka Lagi (10 Menit)'
+                  : 'Minta Izin Buka Slip Gaji ke Finance'}
+              </span>
+            </button>
+            <button
+              onClick={() => setActiveSection('OVERVIEW')}
+              className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all cursor-pointer"
+            >
+              Kembali ke Ringkasan
+            </button>
+          </div>
+        </div>
+      )}
+
+      {activeSection === 'SALARY' && slipAccess.isAllowed && (
         <div className="glass-card rounded-3xl p-6 border border-slate-200/80 shadow-md space-y-5 motion-fade-in-up">
+          {/* Security & 10-Minute Finance Access Banner */}
+          {!canViewSalaryFreely && (
+            <div className="p-3 mb-2 rounded-2xl bg-emerald-50 border border-emerald-300 text-emerald-950 flex items-center justify-between shadow-2xs">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold shrink-0">
+                  <Clock className="w-4 h-4 animate-spin" />
+                </div>
+                <div>
+                  <span className="font-bold text-xs text-emerald-950 block leading-tight">
+                    SESI AKSES SLIP RESMI DIAWASI SISTEM
+                  </span>
+                  <span className="text-[10.5px] text-emerald-800">
+                    Diotorisasi oleh Divisi Finance • Dokumen otomatis terkunci kembali saat waktu habis (10 Menit)
+                  </span>
+                </div>
+              </div>
+              <div className="text-right shrink-0">
+                <span className="text-[9.5px] uppercase font-bold text-emerald-700 block">Sisa Waktu Sesi</span>
+                <span className="text-sm font-black font-mono-code text-emerald-900 bg-white px-2.5 py-0.5 rounded-lg border border-emerald-300 shadow-2xs inline-block">
+                  ⏱️ {formatCountdown(slipAccess.remainingSeconds)}
+                </span>
+              </div>
+            </div>
+          )}
+
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
             <div>
               <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
@@ -1269,33 +1611,55 @@ export const UserPerformanceTab: React.FC<UserPerformanceTabProps> = ({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-slate-800 text-xs">
-              <div className="p-3 rounded-2xl bg-slate-850">
-                <span className="text-[10px] text-slate-400 block font-mono-code">Estimasi Tambahan Upah Lembur:</span>
-                <span className="text-base font-black text-[#00E2B0] font-mono-code mt-0.5 block">
-                  +{formatSalaryDisplay(simulatedAdditionalOtPay, showSalaryNominal)}
-                </span>
-                <span className="text-[9px] text-slate-500">Formula Depnaker 1/173 Upah Pokok</span>
+            {!slipAccess.isAllowed ? (
+              <div className="p-6 rounded-2xl bg-slate-850/90 border border-slate-700 text-center space-y-3">
+                <div className="w-10 h-10 mx-auto rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center border border-amber-500/20">
+                  <Lock className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-white">Nominal Simulator Gaji & Lembur Terkunci</h4>
+                  <p className="text-xs text-slate-400 mt-1 max-w-md mx-auto">
+                    Kalkulasi proyeksi THP memerlukan izin resmi Finance. Silakan ajukan permohonan buka rincian slip gaji untuk membuka simulator finansial.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleOpenSlipRequestModal}
+                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-orange-500 to-[#FF6B00] text-white text-xs font-bold shadow-md shadow-orange-500/20 inline-flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>{slipAccess.status === 'PENDING' ? 'Permohonan Menunggu ACC Finance...' : 'Minta Izin Buka Nominal ke Finance'}</span>
+                </button>
               </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-slate-800 text-xs">
+                <div className="p-3 rounded-2xl bg-slate-850">
+                  <span className="text-[10px] text-slate-400 block font-mono-code">Estimasi Tambahan Upah Lembur:</span>
+                  <span className="text-base font-black text-[#00E2B0] font-mono-code mt-0.5 block">
+                    +{formatSalaryDisplay(simulatedAdditionalOtPay, showSalaryNominal)}
+                  </span>
+                  <span className="text-[9px] text-slate-500">Formula Depnaker 1/173 Upah Pokok</span>
+                </div>
 
-              <div className="p-3 rounded-2xl bg-slate-850">
-                <span className="text-[10px] text-slate-400 block font-mono-code">Gaji Bersih Saat Ini:</span>
-                <span className="text-base font-black text-slate-300 font-mono-code mt-0.5 block">
-                  {formatSalaryDisplay(personalPayroll.netSalary, showSalaryNominal)}
-                </span>
-                <span className="text-[9px] text-slate-500">Periode berjalan</span>
-              </div>
+                <div className="p-3 rounded-2xl bg-slate-850">
+                  <span className="text-[10px] text-slate-400 block font-mono-code">Gaji Bersih Saat Ini:</span>
+                  <span className="text-base font-black text-slate-300 font-mono-code mt-0.5 block">
+                    {formatSalaryDisplay(personalPayroll.netSalary, showSalaryNominal)}
+                  </span>
+                  <span className="text-[9px] text-slate-500">Periode berjalan</span>
+                </div>
 
-              <div className="p-3 rounded-2xl bg-orange-950/60 border border-orange-500/40">
-                <span className="text-[10px] text-[#FF8533] block font-mono-code font-bold uppercase">PROYEKSI GAJI BERSIH BARU:</span>
-                <span className="text-lg font-black text-[#FF6B00] font-mono-code mt-0.5 block">
-                  {formatSalaryDisplay(projectedNetSalary, showSalaryNominal)}
-                </span>
-                <span className="text-[9px] text-emerald-400 font-semibold">
-                  Potensi kenaikan +{Math.round((simulatedAdditionalOtPay / personalPayroll.netSalary) * 100)}%
-                </span>
+                <div className="p-3 rounded-2xl bg-orange-950/60 border border-orange-500/40">
+                  <span className="text-[10px] text-[#FF8533] block font-mono-code font-bold uppercase">PROYEKSI GAJI BERSIH BARU:</span>
+                  <span className="text-lg font-black text-[#FF6B00] font-mono-code mt-0.5 block">
+                    {formatSalaryDisplay(projectedNetSalary, showSalaryNominal)}
+                  </span>
+                  <span className="text-[9px] text-emerald-400 font-semibold">
+                    Potensi kenaikan +{Math.round((simulatedAdditionalOtPay / personalPayroll.netSalary) * 100)}%
+                  </span>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       )}
@@ -1320,6 +1684,31 @@ export const UserPerformanceTab: React.FC<UserPerformanceTabProps> = ({
             >
               <X className="w-4 h-4" />
             </button>
+
+            {/* Security & 10-Minute Finance Access Banner */}
+            {!canViewSalaryFreely && (
+              <div className="p-3 mb-4 rounded-2xl bg-emerald-50 border border-emerald-300 text-emerald-950 flex items-center justify-between shadow-2xs no-print">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold shrink-0">
+                    <Clock className="w-4 h-4 animate-spin" />
+                  </div>
+                  <div>
+                    <span className="font-bold text-xs text-emerald-950 block leading-tight">
+                      SESI AKSES SLIP RESMI DIAWASI SISTEM
+                    </span>
+                    <span className="text-[10.5px] text-emerald-800">
+                      Diotorisasi oleh Divisi Finance • Dokumen otomatis terkunci kembali saat waktu habis (10 Menit)
+                    </span>
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <span className="text-[9.5px] uppercase font-bold text-emerald-700 block">Sisa Waktu Sesi</span>
+                  <span className="text-sm font-black font-mono-code text-emerald-900 bg-white px-2.5 py-0.5 rounded-lg border border-emerald-300 shadow-2xs inline-block">
+                    ⏱️ {formatCountdown(slipAccess.remainingSeconds)}
+                  </span>
+                </div>
+              </div>
+            )}
 
             {/* Slip Header */}
             <div className="border-b-2 border-slate-900 pb-4 mb-4">
@@ -1492,6 +1881,117 @@ export const UserPerformanceTab: React.FC<UserPerformanceTabProps> = ({
               </div>
             </div>
           </div>
+        </div>,
+        document.body
+      )}
+
+      {/* =========================================================================
+          MODAL: PERMOHONAN IZIN BUKA SLIP GAJI KE FINANCE (10 MENIT)
+         ========================================================================= */}
+      {isRequestSlipModalOpen && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed inset-0 z-[10000] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in"
+          onClick={() => setIsRequestSlipModalOpen(false)}
+        >
+          <div
+            className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-slate-200 relative my-auto modal-dialog-animate"
+            onClick={e => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setIsRequestSlipModalOpen(false)}
+              className="absolute top-5 right-5 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-all cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
+              <div className="w-10 h-10 rounded-2xl bg-orange-100 text-[#FF6B00] flex items-center justify-center shrink-0">
+                <Lock className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-slate-900">
+                  Permohonan Izin Buka Rincian Gaji
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Approval Divisi Finance • Akses Terbuka 10 Menit
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSubmitSlipAccessRequest} className="mt-5 space-y-4">
+              <div className="p-3 rounded-2xl bg-amber-50/70 border border-amber-200/80 text-xs text-amber-900 leading-relaxed">
+                💡 <strong>Ketentuan Privasi Finansial:</strong> Setelah disetujui Finance, nominal Take Home Pay, upah, tunjangan, dan slip gaji Anda akan terbuka secara penuh selama <strong>10 menit</strong> dan terkunci kembali setelah waktu berakhir.
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">
+                  Karyawan Pemohon
+                </label>
+                <div className="p-2.5 rounded-xl bg-slate-100 text-slate-800 text-xs font-semibold flex justify-between">
+                  <span>{activeEmployee.name} ({activeEmployee.loginId || activeEmployee.nik})</span>
+                  <span className="text-slate-500">{activeEmployee.department}</span>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">
+                  Periode Penggajian
+                </label>
+                <input
+                  type="text"
+                  disabled
+                  value="September 2026"
+                  className="w-full p-2.5 rounded-xl bg-slate-100 text-slate-700 text-xs font-mono-code font-bold border border-slate-200"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">
+                  Alasan / Keperluan Permohonan <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  value={slipRequestReason}
+                  onChange={e => setSlipRequestReason(e.target.value)}
+                  placeholder="Contoh: Pengecekan rincian upah, tunjangan, dan potongan gaji bulanan"
+                  className="w-full p-3 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-[#FF6B00] focus:border-transparent outline-none transition-all"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setIsRequestSlipModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-orange-500 to-[#FF6B00] hover:from-orange-600 hover:to-[#e56000] text-white text-xs font-bold shadow-md shadow-orange-500/25 flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                  Kirim Permohonan ke Finance
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Floating Success Toast */}
+      {slipRequestSuccessMsg && typeof document !== 'undefined' && createPortal(
+        <div className="fixed bottom-6 right-6 z-[10001] max-w-md p-4 rounded-2xl bg-emerald-600 text-white shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-5">
+          <CheckCircle2 className="w-5 h-5 text-emerald-200 shrink-0" />
+          <span className="text-xs font-bold leading-snug">{slipRequestSuccessMsg}</span>
+          <button
+            onClick={() => setSlipRequestSuccessMsg(null)}
+            className="ml-auto text-white/80 hover:text-white cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>,
         document.body
       )}
