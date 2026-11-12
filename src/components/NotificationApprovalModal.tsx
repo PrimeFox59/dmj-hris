@@ -33,6 +33,11 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Employee, ApprovalItem, LeaveType, SystemRole, getEffectiveSystemRole, Project } from '../types';
+import { 
+  isItemWithinUserAuthority, 
+  isFinanceEmployee, 
+  UserAuthorityContext 
+} from '../utils/approvalAuthorityHelper';
 
 interface NotificationApprovalModalProps {
   isOpen: boolean;
@@ -303,26 +308,24 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
     };
   }, [isOpen, onClose]);
 
-  // Filtered approvals based on role (Must be called unconditionally to obey React Rules of Hooks):
-  // - HR / Superuser / Admin: Melihat seluruh pengajuan
-  // - PM / Admin Proyek: Melihat pengajuan miliknya + pengajuan staf dari proyek yang dikelolanya
-  // - Staff: Melihat HANYA pengajuan miliknya sendiri
+  const isFinance = currentRole === 'finance' || currentUser.role === 'Finance' || isFinanceEmployee(currentUser as any);
+  const authorityContext: UserAuthorityContext = React.useMemo(() => {
+    return {
+      currentUser,
+      currentRole,
+      isHrManager,
+      isFinance,
+      isProjectManager,
+      managedProjectIds,
+      adminProjectIds,
+      employees,
+      projects
+    };
+  }, [currentUser, currentRole, isHrManager, isFinance, isProjectManager, managedProjectIds, adminProjectIds, employees, projects]);
+
   const relevantApprovals = React.useMemo(() => {
-    if (currentRole === 'superuser' || currentRole === 'admin' || isHrManager) {
-      return approvals || [];
-    }
-    if (isProjectManager || isProjectAdmin) {
-      return (approvals || []).filter(item => {
-        if (item.employeeId === currentUser.id) return true;
-        if (item.projectId && (managedProjectIds.has(item.projectId) || adminProjectIds.has(item.projectId))) return true;
-        if (item.projectAdminIds && item.projectAdminIds.includes(currentUser.id)) return true;
-        const applicantEmp = (employees || []).find(e => e.id === item.employeeId);
-        if (applicantEmp?.assignedProjectId && (managedProjectIds.has(applicantEmp.assignedProjectId) || adminProjectIds.has(applicantEmp.assignedProjectId))) return true;
-        return false;
-      });
-    }
-    return (approvals || []).filter(item => item.employeeId === currentUser.id);
-  }, [approvals, currentRole, isHrManager, isProjectManager, isProjectAdmin, currentUser.id, managedProjectIds, adminProjectIds, employees]);
+    return (approvals || []).filter(item => isItemWithinUserAuthority(item, authorityContext));
+  }, [approvals, authorityContext]);
 
   const pendingApprovals = relevantApprovals.filter(a => a.status === 'PENDING');
   const historyApprovals = relevantApprovals.filter(a => a.status !== 'PENDING');

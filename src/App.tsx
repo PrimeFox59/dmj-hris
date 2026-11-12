@@ -37,6 +37,12 @@ import {
   INITIAL_SALARY_RULES
 } from './data/mockData';
 import { Employee, AttendanceRecord, AttendanceMode, AttendanceStatus, ApprovalItem, Project, SalaryRuleConfig, getEffectiveSystemRole, isHrEmployee, isFinanceEmployee, AuthUser, canAccessProjectModule, isProjectManager, AnnualWorkCalendarConfig, BiometricProfile } from './types';
+import { 
+  isItemWithinUserAuthority, 
+  getActionablePendingCount, 
+  isHrManager, 
+  UserAuthorityContext 
+} from './utils/approvalAuthorityHelper';
 import { api } from './services/api';
 import { rtcService } from './services/rtcService';
 
@@ -56,7 +62,7 @@ export function App() {
   });
 
   // Auto-invalidation build ID (Membersihkan cache lama saat versi baru dirilis)
-  const APP_BUILD_ID = '20261112_v4_slip_access_finance_route_badge';
+  const APP_BUILD_ID = '20261112_v5_strict_approval_authority_scoping';
   if (typeof window !== 'undefined') {
     try {
       const savedBuild = localStorage.getItem('prime_hris_build_id');
@@ -1512,15 +1518,45 @@ export function App() {
     }
   };
 
-  const pendingApprovalsCount = approvals.filter(a => a.status === 'PENDING').length;
-
   const userSystemRole = getEffectiveSystemRole(currentUser);
   const isStaffUser = userSystemRole === 'staff';
   const isUserPm = isProjectManager(currentUser, projects);
   const canAccessProjects = canAccessProjectModule(currentUser, projects);
-  const effectiveNotificationCount = isStaffUser
-    ? approvals.filter(a => a.employeeId === currentUser.id && (a.status === 'PENDING' || a.status === 'REVISION_REQUESTED' || a.status === 'REJECTED')).length
-    : pendingApprovalsCount;
+
+  const userAuthorityContext: UserAuthorityContext = React.useMemo(() => {
+    const isHr = isHrManager(currentUser, userSystemRole);
+    const isFin = userSystemRole === 'finance' || currentUser.role === 'Finance' || isFinanceEmployee(currentUser);
+    const isPm = isProjectManager(currentUser, projects);
+    const managedProjIds = new Set(
+      projects.filter(p => p.projectManagerId === currentUser.id).map(p => p.id)
+    );
+    const adminProjIds = new Set(
+      projects.filter(p => p.projectAdminIds && p.projectAdminIds.includes(currentUser.id)).map(p => p.id)
+    );
+
+    return {
+      currentUser,
+      currentRole: userSystemRole,
+      isHrManager: isHr,
+      isFinance: isFin,
+      isProjectManager: isPm,
+      managedProjectIds: managedProjIds,
+      adminProjectIds: adminProjIds,
+      employees,
+      projects
+    };
+  }, [currentUser, userSystemRole, projects, employees]);
+
+  const effectiveNotificationCount = React.useMemo(() => {
+    return getActionablePendingCount(approvals, userAuthorityContext);
+  }, [approvals, userAuthorityContext]);
+
+  const pendingApprovalsCount = effectiveNotificationCount;
+
+  // Filtered approvals strictly matching the user's authority scope
+  const userScopedApprovals = React.useMemo(() => {
+    return approvals.filter(item => isItemWithinUserAuthority(item, userAuthorityContext));
+  }, [approvals, userAuthorityContext]);
 
   // Public Kiosk Portal Mode (Tanpa Login)
   if (isKioskPortalActive) {
@@ -1732,7 +1768,7 @@ export function App() {
             employees={isStaffUser ? [currentUser] : employees}
             projects={projects}
             attendances={isStaffUser ? attendances.filter(a => a.employeeId === currentUser.id) : attendances}
-            approvals={isStaffUser ? approvals.filter(a => a.employeeId === currentUser.id) : approvals}
+            approvals={approvals}
             salaryRules={salaryRules}
             onSubmitNewLeaveRequest={handleSubmitNewLeaveRequest}
             onNavigateToTab={handleNavigateToTab}
@@ -1994,7 +2030,7 @@ export function App() {
       <NotificationApprovalModal
         isOpen={isNotificationModalOpen}
         onClose={() => setIsNotificationModalOpen(false)}
-        approvals={approvals}
+        approvals={userScopedApprovals}
         employees={employees}
         projects={projects}
         currentUser={currentUser}

@@ -38,7 +38,15 @@ import {
   LogOut
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { Employee, ApprovalItem, LeaveType, SystemRole, getEffectiveSystemRole, isHrEmployee, isFinanceEmployee, Project } from '../types';
+import { Employee, ApprovalItem, LeaveType, SystemRole, getEffectiveSystemRole, Project } from '../types';
+import { 
+  isHrEmployee, 
+  isFinanceEmployee, 
+  isHrManager as checkIsHrManager, 
+  isItemWithinUserAuthority, 
+  canUserApproveItem as checkUserCanApprove, 
+  UserAuthorityContext 
+} from '../utils/approvalAuthorityHelper';
 import { LeaveGanttChartTab } from './LeaveGanttChartTab';
 
 interface ApprovalHubTabProps {
@@ -71,14 +79,10 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
   initialSubTab = 'list'
 }) => {
   const currentRole: SystemRole = getEffectiveSystemRole(currentUser);
-  const isHrManager = Boolean(
-    currentRole === 'hr' || 
-    currentUser.role === 'HR_Manager' || 
-    (currentUser.position && /HR|HRD|Human Resources/i.test(currentUser.position)) || 
-    (currentUser.department && /HR|HRD|Human Resources/i.test(currentUser.department))
-  );
+  const isHrManager = checkIsHrManager(currentUser, currentRole);
+  const isFinance = currentRole === 'finance' || currentUser.role === 'Finance' || isFinanceEmployee(currentUser as any);
 
-  // Proyek & Project Manager Detection
+  // Proyek & Project Manager / Project Admin Detection
   const managedProjects = React.useMemo(() => {
     return (projects || []).filter(p => p.projectManagerId === currentUser.id);
   }, [projects, currentUser.id]);
@@ -89,8 +93,36 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
     return new Set(managedProjects.map(p => p.id));
   }, [managedProjects]);
 
-  const isStaff = currentRole === 'staff' && !isHrManager && !isProjectManager;
-  const isApprover = (currentRole === 'superuser' || currentRole === 'admin' || currentRole === 'hr' || isHrManager || isProjectManager) && !isStaff;
+  const adminProjects = React.useMemo(() => {
+    return (projects || []).filter(p => p.projectAdminIds && p.projectAdminIds.includes(currentUser.id));
+  }, [projects, currentUser.id]);
+
+  const adminProjectIds = React.useMemo(() => {
+    return new Set(adminProjects.map(p => p.id));
+  }, [adminProjects]);
+
+  const isStaff = !isHrManager && !isFinance && !isProjectManager && adminProjectIds.size === 0 && currentRole !== 'superuser' && currentRole !== 'admin';
+  const isApprover = !isStaff;
+
+  // Authority Context SSOT
+  const authorityContext: UserAuthorityContext = React.useMemo(() => {
+    return {
+      currentUser,
+      currentRole,
+      isHrManager,
+      isFinance,
+      isProjectManager,
+      managedProjectIds,
+      adminProjectIds,
+      employees,
+      projects
+    };
+  }, [currentUser, currentRole, isHrManager, isFinance, isProjectManager, managedProjectIds, adminProjectIds, employees, projects]);
+
+  // Hak Akses Persetujuan Item (Otoritas Validasi Alur 2-Tahap: PM Proyek ➔ HR Manager / Otorisasi Silang HR ⇄ Finance)
+  const canUserApproveItem = React.useCallback((item: ApprovalItem): boolean => {
+    return checkUserCanApprove(item, authorityContext);
+  }, [authorityContext]);
 
   // Helper untuk mencari proyek karyawan
   const getEmployeeProject = React.useCallback((empId: string) => {
@@ -111,75 +143,6 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
     if (!currentUserProject?.projectManagerId) return null;
     return employees.find(e => e.id === currentUserProject.projectManagerId);
   }, [currentUserProject, employees]);
-
-  // Hak Akses Persetujuan Item (Otoritas Validasi Alur 2-Tahap: PM Proyek ➔ HR Manager / Otorisasi Silang HR ⇄ Finance)
-  const canUserApproveItem = React.useCallback((item: ApprovalItem): boolean => {
-    // 1. Tidak bisa menyetujui pengajuan milik sendiri (Pencegahan Self-Approval)
-    if (item.employeeId === currentUser.id) return false;
-
-    // 2. Item yang sudah final tidak perlu diproses lagi
-    if (item.status === 'APPROVED' || item.status === 'REJECTED') return false;
-
-    // 3. Superuser memegang hak override darurat tertinggi
-    if (currentRole === 'superuser') return true;
-
-    // Identifikasi Profil Pengaju & User yang sedang login
-    const applicant = employees.find(e => e.id === item.employeeId);
-    const isApplicantHr = isHrEmployee(applicant) || item.employeeId === 'EMP-022';
-    const isApplicantFinance = isFinanceEmployee(applicant) || item.employeeId === 'EMP-015' || item.employeeId === 'EMP-045';
-
-    const isCurrentUserHr = isHrManager || currentRole === 'hr' || currentRole === 'admin';
-    const isCurrentUserFinance = currentRole === 'finance' || currentUser.role === 'Finance';
-
-    // 3b. Khusus Izin Akses Buka Slip Gaji & Kasbon
-    if (item.type === 'SLIP_ACCESS' || item.type === 'KASBON') {
-      if (isApplicantFinance) {
-        // Jika akun Finance yang mengajukan, otorisasi silang dialihkan ke HR Manager
-        return isCurrentUserHr;
-      }
-      return isCurrentUserFinance;
-    }
-
-    // 4. Cari proyek pengaju, PM proyek terkait, dan Admin Proyek
-    const applicantProj = (projects || []).find(p => 
-      p.id === item.projectId || 
-      p.code === item.projectCode ||
-      p.id === employees.find(e => e.id === item.employeeId)?.assignedProjectId
-    );
-    const pmId = item.projectManagerId || applicantProj?.projectManagerId;
-    const isApplicantThePm = Boolean(pmId && pmId === item.employeeId);
-    const hasProjectPm = Boolean(pmId && !isApplicantThePm);
-
-    const projectAdminIds = item.projectAdminIds || applicantProj?.projectAdminIds || [];
-    const isUserProjectAdmin = projectAdminIds.includes(currentUser.id);
-    const hasProjectAdmins = projectAdminIds.filter(id => id !== item.employeeId).length > 0;
-
-    // Tentukan tahap saat ini:
-    // Menunggu PM / Admin Proyek: jika memiliki PM proyek atau Admin Proyek dan belum disetujui PM (dan targetApproverRole === 'PM' || stage === 'PM' || !item.stage)
-    const isWaitingForPmOrAdmin = (hasProjectPm || hasProjectAdmins) && !item.pmApprovedBy && (item.targetApproverRole === 'PM' || item.stage === 'PM' || !item.stage);
-
-    if (isWaitingForPmOrAdmin) {
-      // TAHAP 1: WAJIB ke PM terkait atau Admin Proyek terlebih dahulu!
-      if (pmId === currentUser.id || applicantProj?.projectManagerId === currentUser.id || isUserProjectAdmin) {
-        return true;
-      }
-      return false;
-    }
-
-    // TAHAP 2: Otorisasi Akhir Berjenjang / Otorisasi Silang (Cross-Approval)
-    // ATURAN 1: Jika pengaju adalah HR Manager / Tim HR, yang berhak approve adalah FINANCE MANAGER!
-    if (isApplicantHr) {
-      return isCurrentUserFinance;
-    }
-
-    // ATURAN 2: Jika pengaju adalah Finance Manager / Tim Finance, yang berhak approve adalah HR MANAGER!
-    if (isApplicantFinance) {
-      return isCurrentUserHr;
-    }
-
-    // ATURAN 3: Karyawan / Staf umum lainnya disetujui oleh HR Manager
-    return isCurrentUserHr;
-  }, [currentUser.id, currentUser.role, currentRole, isHrManager, projects, employees]);
 
   const [filterType, setFilterType] = useState<string>('ALL');
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
@@ -484,28 +447,15 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
     setShowNewRequestModal(false);
   };
 
-  // Filter base approvals berdasarkan role:
-  // - HR / Superuser / Admin: Melihat seluruh pengajuan
-  // - PM: Melihat pengajuan miliknya + pengajuan staf dari proyek yang dipimpinnya
-  // - Staff: Melihat HANYA pengajuan miliknya sendiri
+  // Filter base approvals HANYA yang sesuai dengan authority wewenang user untuk approve:
+  // - Superuser / Admin: Melihat seluruh pengajuan enterprise
+  // - Finance: Melihat HANYA pengajuan finansial (Slip Access, Kasbon), cross-approval dari HR, dan pengajuan miliknya
+  // - PM / Admin Proyek: Melihat HANYA pengajuan staf di bawah proyeknya dan pengajuan miliknya
+  // - HR Manager: Melihat pengajuan operasional SDM, cross-approval dari Finance, dan pengajuan miliknya
+  // - Staff Biasa: Melihat HANYA pengajuan miliknya sendiri
   const baseApprovals = React.useMemo(() => {
-    const isFinance = currentRole === 'finance' || currentUser.role === 'Finance' || isFinanceEmployee(currentUser as any);
-    if (currentRole === 'superuser' || currentRole === 'admin' || isHrManager || isFinance) {
-      return approvals;
-    }
-
-    if (isProjectManager) {
-      return approvals.filter(item => {
-        if (item.employeeId === currentUser.id) return true;
-        if (item.projectId && managedProjectIds.has(item.projectId)) return true;
-        const applicantEmp = employees.find(e => e.id === item.employeeId);
-        if (applicantEmp?.assignedProjectId && managedProjectIds.has(applicantEmp.assignedProjectId)) return true;
-        return false;
-      });
-    }
-
-    return approvals.filter(item => item.employeeId === currentUser.id);
-  }, [approvals, currentRole, isHrManager, isProjectManager, currentUser.id, managedProjectIds, employees]);
+    return (approvals || []).filter(item => isItemWithinUserAuthority(item, authorityContext));
+  }, [approvals, authorityContext]);
 
   const [approvalStartDate, setApprovalStartDate] = useState<string>('');
   const [approvalEndDate, setApprovalEndDate] = useState<string>('');
@@ -672,18 +622,46 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="prime-cut-corner bg-[#FF6B00] text-white text-[10px] font-black px-2.5 py-0.5 tracking-wider uppercase font-mono-code">
-              {isStaff ? 'PORTAL PENGAJUAN SAYA' : isHrManager ? 'PUSAT APPROVAL HR MANAGER' : 'MULTI-TIER APPROVAL SYSTEM'}
+              {isStaff
+                ? 'PORTAL PENGAJUAN SAYA'
+                : isHrManager
+                ? 'PUSAT APPROVAL HR MANAGER'
+                : isFinance
+                ? 'PUSAT APPROVAL DIVISI FINANCE'
+                : isProjectManager || adminProjectIds.size > 0
+                ? 'PUSAT APPROVAL PROYEK'
+                : 'MULTI-TIER APPROVAL SYSTEM'}
             </span>
             <span className="text-xs font-semibold text-slate-500">
-              {isStaff ? 'Status Pengajuan Izin / Cuti Pribadi' : isHrManager ? 'Mode Reviewer (HR Lead & Otorisasi Cuti)' : isApprover ? 'Mode Reviewer (Direksi & HR)' : 'Mode Akses Terbatas'}
+              {isStaff
+                ? 'Status Pengajuan Izin / Cuti Pribadi'
+                : isHrManager
+                ? 'Mode Reviewer (HR Lead & Otorisasi Cuti)'
+                : isFinance
+                ? 'Mode Reviewer Finansial (Izin Buka Slip & Kasbon)'
+                : isProjectManager || adminProjectIds.size > 0
+                ? 'Mode Reviewer Proyek (PM & Site)'
+                : isApprover
+                ? 'Mode Reviewer (Direksi & Superuser)'
+                : 'Mode Akses Terbatas'}
             </span>
           </div>
           <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-            {isStaff ? 'Pengajuan & Status Persetujuan Saya' : 'Pusat Persetujuan Izin, Cuti, Telat & Dinas Luar'}
+            {isStaff
+              ? 'Pengajuan & Status Persetujuan Saya'
+              : isFinance
+              ? 'Pusat Persetujuan Finansial & Buka Slip Gaji'
+              : isProjectManager || adminProjectIds.size > 0
+              ? 'Pusat Persetujuan Kehadiran & Izin Proyek'
+              : 'Pusat Persetujuan Izin, Cuti, Telat & Dinas Luar'}
           </h1>
           <p className="text-xs sm:text-sm text-slate-600 mt-0.5">
             {isStaff
               ? 'Pantau status permohonan dispensasi kehadiran, sisa saldo cuti tahunan, dan justifikasi keterlambatan kerja Anda.'
+              : isFinance
+              ? 'Otorisasi berjenjang pengajuan kasbon dan izin akses buka rincian slip gaji (10 menit) khusus kewenangan Divisi Finance.'
+              : isProjectManager || adminProjectIds.size > 0
+              ? 'Otorisasi rekomendasi awal kehadiran personil lapangan, dispensasi roster, dan penugasan proyek.'
               : 'Otorisasi berjenjang dengan audit trail digital, pemotongan kuota cuti otomatis, dan mitigasi penalti gaji.'}
           </p>
         </div>
