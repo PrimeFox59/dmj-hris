@@ -26,11 +26,16 @@ import {
   Layers,
   Save,
   Clock,
-  LogOut
+  LogOut,
+  Receipt,
+  BadgePercent,
+  FileText,
+  Users
 } from 'lucide-react';
 import { Employee, getEffectiveSystemRole, AuthUser, BiometricProfile } from '../types';
 import { api } from '../services/api';
 import { BiometricEnrollmentModal } from './BiometricEnrollmentModal';
+import { normalizeMaritalStatus, resolvePtkpStatus, getPtkpDetails, PTKP_OPTIONS } from '../utils/taxHelper';
 
 export type ProfileTabId = 'profile' | 'photo' | 'password' | 'security';
 
@@ -108,9 +113,35 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
   const [bankName, setBankName] = useState(currentUser.bankAccount?.bankName || 'BCA');
   const [accountNumber, setAccountNumber] = useState(currentUser.bankAccount?.accountNumber || '');
   const [accountHolder, setAccountHolder] = useState(currentUser.bankAccount?.accountHolder || currentUser.name);
+
+  // Status Perkawinan & Pajak PPh 21 State
+  const [maritalStatus, setMaritalStatus] = useState<string>(normalizeMaritalStatus(currentUser.maritalStatus));
+  const [dependents, setDependents] = useState<number>(currentUser.dependents ?? 0);
+  const [ptkpStatus, setPtkpStatus] = useState<string>(currentUser.ptkpStatus || resolvePtkpStatus(currentUser.maritalStatus, currentUser.dependents));
+  const [npwpNumber, setNpwpNumber] = useState<string>(currentUser.npwpNumber || '');
+
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [profileSuccessMsg, setProfileSuccessMsg] = useState<string | null>(null);
   const [profileErrorMsg, setProfileErrorMsg] = useState<string | null>(null);
+
+  const handleMaritalStatusChange = (newMs: string) => {
+    setMaritalStatus(newMs);
+    const newPtkp = resolvePtkpStatus(newMs, dependents);
+    setPtkpStatus(newPtkp);
+  };
+
+  const handleDependentsChange = (newDep: number) => {
+    setDependents(newDep);
+    const newPtkp = resolvePtkpStatus(maritalStatus, newDep);
+    setPtkpStatus(newPtkp);
+  };
+
+  const handlePtkpChange = (newPtkp: string) => {
+    setPtkpStatus(newPtkp);
+    const details = getPtkpDetails(newPtkp);
+    setMaritalStatus(details.maritalStatus);
+    setDependents(details.dependents);
+  };
 
   // Avatar State
   const [selectedAvatar, setSelectedAvatar] = useState(currentUser.avatar);
@@ -154,6 +185,12 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
       setBankName(currentUser.bankAccount?.bankName || 'BCA');
       setAccountNumber(currentUser.bankAccount?.accountNumber || '');
       setAccountHolder(currentUser.bankAccount?.accountHolder || currentUser.name);
+      const initMs = normalizeMaritalStatus(currentUser.maritalStatus);
+      const initDep = currentUser.dependents ?? 0;
+      setMaritalStatus(initMs);
+      setDependents(initDep);
+      setPtkpStatus(currentUser.ptkpStatus || resolvePtkpStatus(initMs, initDep));
+      setNpwpNumber(currentUser.npwpNumber || '');
       setSelectedAvatar(currentUser.avatar);
       setOldPassword('');
       setNewPassword('');
@@ -181,6 +218,10 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
       name: name.trim(),
       phone: phone.trim(),
       email: email.trim(),
+      maritalStatus,
+      dependents: Number(dependents),
+      ptkpStatus,
+      npwpNumber: npwpNumber.trim(),
       bankAccount: {
         bankName,
         accountNumber: accountNumber.trim(),
@@ -539,6 +580,110 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                     </div>
                   </div>
                 </div>
+
+                {/* Status Perkawinan & Pajak PPh 21 (PTKP) */}
+                <div className="pt-3 border-t border-slate-100 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                      <Receipt className="w-4 h-4 text-[#FF6B00]" />
+                      <span>Status Perkawinan & Pajak Penghasilan (PPh 21 / PTKP)</span>
+                    </label>
+                    <span className="text-[10px] font-mono-code font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
+                      UU HPP & PMK 168/2023
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                        Status Perkawinan
+                      </label>
+                      <select
+                        value={maritalStatus}
+                        onChange={(e) => handleMaritalStatusChange(e.target.value)}
+                        className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/40 bg-white"
+                      >
+                        <option value="TK">Tidak Kawin / Belum Menikah (TK)</option>
+                        <option value="K">Kawin / Menikah (K)</option>
+                        <option value="K/I">Kawin - Penghasilan Istri Digabung (K/I)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                        Jumlah Tanggungan (Anak/Keluarga)
+                      </label>
+                      <select
+                        value={dependents}
+                        onChange={(e) => handleDependentsChange(Number(e.target.value))}
+                        className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/40 bg-white"
+                      >
+                        <option value={0}>0 Orang (Tanpa Tanggungan)</option>
+                        <option value={1}>1 Orang Tanggungan</option>
+                        <option value={2}>2 Orang Tanggungan</option>
+                        <option value={3}>3 Orang Tanggungan (Maksimal)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                        Kategori PTKP PPh 21
+                      </label>
+                      <select
+                        value={ptkpStatus}
+                        onChange={(e) => handlePtkpChange(e.target.value)}
+                        className="w-full px-3 py-2.5 rounded-xl border border-orange-200 text-xs font-bold text-orange-950 bg-orange-50/50 focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/40"
+                      >
+                        {PTKP_OPTIONS.map((opt) => (
+                          <option key={opt.code} value={opt.code}>
+                            {opt.code} ({opt.terCategory} - Rp {(opt.annualAmount / 1_000_000).toLocaleString('id-ID')} Jt/thn)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* NPWP Input & Live Tax Breakdown Card */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                    <div className="sm:col-span-1">
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">
+                        Nomor NPWP <span className="text-slate-400 font-normal lowercase">(opsional / NIK 16 digit)</span>
+                      </label>
+                      <div className="relative">
+                        <FileText className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          value={npwpNumber}
+                          onChange={(e) => setNpwpNumber(e.target.value)}
+                          placeholder="Nomor NPWP / NIK"
+                          className="w-full pl-8.5 pr-3 py-2.5 rounded-xl border border-slate-200 text-xs font-mono-code font-medium focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/40 bg-white"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="sm:col-span-2 bg-gradient-to-br from-amber-50/70 to-orange-50/40 p-3 rounded-2xl border border-amber-200/80 flex items-start gap-3">
+                      <div className="p-2 rounded-xl bg-orange-500 text-white shadow-sm shrink-0 mt-0.5">
+                        <BadgePercent className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0 text-xs space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-slate-900 font-mono-code text-sm">
+                            {getPtkpDetails(ptkpStatus).code}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-900 font-mono-code font-black text-[10px]">
+                            {getPtkpDetails(ptkpStatus).terCategory}
+                          </span>
+                          <span className="text-slate-500 font-mono-code text-[11px]">
+                            Batas Bebas Pajak: <strong>Rp {getPtkpDetails(ptkpStatus).annualAmount.toLocaleString('id-ID')} / thn</strong>
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-600 leading-relaxed">
+                          {getPtkpDetails(ptkpStatus).description}. Tarif Efektif Rata-rata (TER) dan pemotongan PPh 21 bulanan dihitung secara otomatis berdasarkan status identitas ini.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Locked Enterprise Metadata Section */}
@@ -582,6 +727,18 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                     <span className="text-[10px] text-slate-400 block font-mono-code">Status Biometrik Keamanan:</span>
                     <span className={`font-mono-code text-[11px] font-bold ${hasBiometricSamples ? 'text-emerald-700' : 'text-amber-600'}`}>
                       {hasBiometricSamples ? `Terdaftar 4 Pose (${currentUser.biometric?.qualityScore ? `${currentUser.biometric.qualityScore}%` : 'Valid'})` : 'Belum Terdaftar'}
+                    </span>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <span className="text-[10px] text-slate-400 block font-mono-code">Status PTKP PPh 21:</span>
+                    <span className="font-mono-code text-[11px] font-bold text-indigo-700">
+                      {currentUser.ptkpStatus || resolvePtkpStatus(currentUser.maritalStatus, currentUser.dependents)} ({getPtkpDetails(currentUser.ptkpStatus || resolvePtkpStatus(currentUser.maritalStatus, currentUser.dependents)).terCategory} • Rp {getPtkpDetails(currentUser.ptkpStatus || resolvePtkpStatus(currentUser.maritalStatus, currentUser.dependents)).annualAmount.toLocaleString('id-ID')}/thn)
+                    </span>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <span className="text-[10px] text-slate-400 block font-mono-code">Nomor NPWP Terdaftar:</span>
+                    <span className="font-mono-code text-[11px] font-semibold text-slate-700">
+                      {currentUser.npwpNumber || '-'}
                     </span>
                   </div>
                 </div>

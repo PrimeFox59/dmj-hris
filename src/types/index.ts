@@ -258,6 +258,10 @@ export interface Employee {
   };
   loginId?: string;
   ktpNumber?: string;
+  maritalStatus?: string; // 'TK' | 'K' | 'K/I' (Tidak Kawin / Kawin / Kawin Istri Gabung)
+  dependents?: number; // 0, 1, 2, 3 (Tanggungan anak/keluarga fiskal)
+  ptkpStatus?: string; // e.g. 'TK/0', 'K/1', 'K/2', etc. (Sesuai PPh 21)
+  npwpNumber?: string; // Nomor Pokok Wajib Pajak (15/16 digit)
   biometric?: BiometricProfile;
   workLocationType?: WorkLocationType;
   nonLokalLeaveConfig?: NonLokalLeaveConfig;
@@ -612,6 +616,9 @@ export interface PayrollRecord {
   bpjsKetenagakerjaan: number;
   bpjsKesehatan: number;
   pph21: number;
+  ptkpStatus?: string;
+  ptkpAnnual?: number;
+  terCategory?: string;
   kasbonDeduction?: number;
   kasbonDeductionNote?: string;
   kasbonRemainingBalance?: number;

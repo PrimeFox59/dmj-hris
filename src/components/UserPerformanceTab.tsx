@@ -952,7 +952,7 @@ export const UserPerformanceTab: React.FC<UserPerformanceTabProps> = ({
                     <span className="font-mono-code font-bold text-slate-900">{formatSalaryDisplay(personalPayroll.bpjsKesehatan, showSalaryNominal)}</span>
                   </div>
                   <div className="flex justify-between py-1 border-b border-slate-100">
-                    <span className="text-slate-600">Estimasi PPh 21 Pasal 21:</span>
+                    <span className="text-slate-600">Estimasi PPh 21 (PTKP: {personalPayroll.ptkpStatus || 'TK/0'}):</span>
                     <span className="font-mono-code font-bold text-slate-900">{formatSalaryDisplay(personalPayroll.pph21, showSalaryNominal)}</span>
                   </div>
                   <div className="flex justify-between py-1 border-b border-slate-100 text-rose-700">
@@ -1432,7 +1432,7 @@ export const UserPerformanceTab: React.FC<UserPerformanceTabProps> = ({
                   <span className="font-mono-code font-semibold">{formatSalaryDisplay(personalPayroll.bpjsKesehatan, showSalaryNominal)}</span>
                 </div>
                 <div className="flex justify-between py-0.5">
-                  <span className="text-slate-600">Pajak Penghasilan (PPh 21):</span>
+                  <span className="text-slate-600">Pajak Penghasilan (PPh 21 • PTKP: {personalPayroll.ptkpStatus || 'TK/0'}):</span>
                   <span className="font-mono-code font-semibold">{formatSalaryDisplay(personalPayroll.pph21, showSalaryNominal)}</span>
                 </div>
                 {personalPayroll.unapprovedLateDeduction > 0 && (

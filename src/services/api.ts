@@ -333,6 +333,10 @@ export const api = {
     email?: string;
     bankAccount?: { bankName: string; accountNumber: string; accountHolder: string };
     avatar?: string;
+    maritalStatus?: string;
+    dependents?: number;
+    ptkpStatus?: string;
+    npwpNumber?: string;
   }): Promise<{ success: boolean; message?: string; employee: Employee }> {
     const token = api.getAuthToken();
     const payload = token ? { ...profileData, _authToken: token } : profileData;

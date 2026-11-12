@@ -507,6 +507,51 @@ try {
     console.warn('[SQLite] Failed migration of systemRole in employees', e);
   }
 
+  // Ensure maritalStatus and ptkpStatus (PPh 21) are populated and normalized in existing employees data_json
+  try {
+    const rows = db.prepare('SELECT id, data_json FROM employees;').all();
+    const updateEmpStmt = db.prepare('UPDATE employees SET data_json = ? WHERE id = ?;');
+    for (const r of rows) {
+      let parsed = JSON.parse(r.data_json);
+      let changed = false;
+
+      // Normalize maritalStatus
+      let rawMs = String(parsed.maritalStatus || '').trim().toUpperCase();
+      let normMs = 'TK';
+      if (rawMs === 'K/I' || rawMs.includes('ISTRI') || rawMs.includes('GABUNG')) {
+        normMs = 'K/I';
+      } else if (rawMs === 'K' || rawMs === 'KAWIN' || rawMs === 'MENIKAH' || rawMs === 'MARRIED') {
+        normMs = 'K';
+      } else {
+        normMs = 'TK';
+      }
+
+      if (parsed.maritalStatus !== normMs) {
+        parsed.maritalStatus = normMs;
+        changed = true;
+      }
+
+      if (parsed.dependents === undefined || parsed.dependents === null || isNaN(Number(parsed.dependents))) {
+        parsed.dependents = 0;
+        changed = true;
+      } else {
+        parsed.dependents = Math.min(3, Math.max(0, parseInt(parsed.dependents, 10) || 0));
+      }
+
+      const expectedPtkp = `${normMs}/${parsed.dependents}`;
+      if (!parsed.ptkpStatus || parsed.ptkpStatus !== expectedPtkp) {
+        parsed.ptkpStatus = expectedPtkp;
+        changed = true;
+      }
+
+      if (changed) {
+        updateEmpStmt.run(JSON.stringify(parsed), r.id);
+      }
+    }
+  } catch (errPtkpSync) {
+    console.warn('[SQLite] Failed migration of maritalStatus / ptkpStatus in employees:', errPtkpSync.message);
+  }
+
   const empCount = db.prepare('SELECT count(*) as count FROM employees;').get()?.count || 0;
   if (empCount === 0) {
     seedInitialData(db);
@@ -2153,7 +2198,21 @@ export function saveEmployee(emp, operatorUser = null) {
       emp.usedLeave = ex.usedLeave !== undefined ? ex.usedLeave : existing.usedLeave;
       emp.assignedProjectId = ex.assignedProjectId || existing.assignedProjectId;
       emp.status = ex.status || 'ACTIVE';
+      if (emp.maritalStatus === undefined && ex.maritalStatus !== undefined) emp.maritalStatus = ex.maritalStatus;
+      if (emp.dependents === undefined && ex.dependents !== undefined) emp.dependents = ex.dependents;
+      if (emp.ptkpStatus === undefined && ex.ptkpStatus !== undefined) emp.ptkpStatus = ex.ptkpStatus;
+      if (emp.npwpNumber === undefined && ex.npwpNumber !== undefined) emp.npwpNumber = ex.npwpNumber;
     }
+  }
+
+  // Normalize maritalStatus and ptkpStatus (PPh 21)
+  let rawMs = String(emp.maritalStatus || 'TK').trim().toUpperCase();
+  if (rawMs === 'K/I' || rawMs.includes('ISTRI') || rawMs.includes('GABUNG')) emp.maritalStatus = 'K/I';
+  else if (rawMs === 'K' || rawMs === 'KAWIN' || rawMs === 'MENIKAH' || rawMs === 'MARRIED') emp.maritalStatus = 'K';
+  else emp.maritalStatus = 'TK';
+  emp.dependents = Math.min(3, Math.max(0, parseInt(emp.dependents, 10) || 0));
+  if (!emp.ptkpStatus) {
+    emp.ptkpStatus = `${emp.maritalStatus}/${emp.dependents}`;
   }
 
   // Synchronize active/inactive status and system_role/role to user_accounts
@@ -2356,6 +2415,23 @@ export function updateUserProfile(profileData, operatorUser = null) {
   }
   if (profileData.avatar) {
     emp.avatar = profileData.avatar;
+  }
+  if (profileData.maritalStatus !== undefined) {
+    let raw = String(profileData.maritalStatus).trim().toUpperCase();
+    if (raw === 'K/I' || raw.includes('ISTRI') || raw.includes('GABUNG')) emp.maritalStatus = 'K/I';
+    else if (raw === 'K' || raw === 'KAWIN' || raw === 'MENIKAH' || raw === 'MARRIED') emp.maritalStatus = 'K';
+    else emp.maritalStatus = 'TK';
+  }
+  if (profileData.dependents !== undefined) {
+    emp.dependents = Math.min(3, Math.max(0, parseInt(profileData.dependents, 10) || 0));
+  }
+  if (profileData.ptkpStatus !== undefined) {
+    emp.ptkpStatus = String(profileData.ptkpStatus).trim().toUpperCase();
+  } else if (profileData.maritalStatus !== undefined || profileData.dependents !== undefined) {
+    emp.ptkpStatus = `${emp.maritalStatus || 'TK'}/${emp.dependents || 0}`;
+  }
+  if (profileData.npwpNumber !== undefined) {
+    emp.npwpNumber = String(profileData.npwpNumber).trim();
   }
 
   // Preserve ID and NIK

@@ -1,4 +1,5 @@
 import { Employee, Project, PayrollRecord, SalaryRuleConfig, AttendanceRecord, ProjectPayrollAllocation, getEmployeeAssignedProjects, KasbonRecord } from '../types';
+import { getPtkpDetails, resolvePtkpStatus } from './taxHelper';
 
 export function formatIDR(amount: number, isMasked: boolean = false): string {
   if (isMasked) {
@@ -233,9 +234,10 @@ export function calculateEmployeePayroll(
   const bpjsKetenagakerjaan = Math.round(employee.baseSalary * rules.bpjsKetenagakerjaanRate);
   const bpjsKesehatan = Math.round(employee.baseSalary * rules.bpjsKesehatanRate);
   
-  // Tax PPh 21 estimation (progressive basic tier 5% on taxable income after PTKP)
+  // Tax PPh 21 estimation (progressive basic tier 5% on taxable income after PTKP sesuai status perkawinan & tanggungan)
+  const ptkpInfo = getPtkpDetails(employee.ptkpStatus || (employee.maritalStatus ? resolvePtkpStatus(employee.maritalStatus, employee.dependents) : 'TK/0'));
   const annualGross = grossSalary * 12;
-  const ptkp = 54000000; // PTKP Single
+  const ptkp = ptkpInfo.annualAmount;
   const taxableAnnual = Math.max(0, annualGross - ptkp - (bpjsKetenagakerjaan * 12));
   const pph21 = Math.round((taxableAnnual * 0.05) / 12);
 
@@ -377,6 +379,9 @@ export function calculateEmployeePayroll(
     bpjsKetenagakerjaan,
     bpjsKesehatan,
     pph21,
+    ptkpStatus: ptkpInfo.code,
+    ptkpAnnual: ptkpInfo.annualAmount,
+    terCategory: ptkpInfo.terCategory,
     kasbonDeduction,
     kasbonDeductionNote,
     kasbonRemainingBalance,

@@ -39,6 +39,7 @@ import { Employee, PayrollRecord, Project, SalaryRuleConfig, AttendanceRecord, S
 import { api } from '../services/api';
 import { rtcService } from '../services/rtcService';
 import { formatSalaryDisplay, calculateEmployeePayroll, EmployeeAuditOverride, isEmployeeInOffice } from '../utils/payrollCalculator';
+import { getPtkpDetails, resolvePtkpStatus } from '../utils/taxHelper';
 import { EmployeeTimesheetDetailModal } from './EmployeeTimesheetDetailModal';
 
 interface PayrollTabProps {
@@ -2436,6 +2437,8 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                 : 'Payroll Resmi Bank DMJ';
               const empType = emp?.employmentType || 'TETAP';
               const locType = emp?.workLocationType === 'NON_LOKAL' ? 'Non-Lokal (Roster)' : 'Lokal';
+              const empPtkp = selectedSlip.ptkpStatus || emp?.ptkpStatus || resolvePtkpStatus(emp?.maritalStatus, emp?.dependents);
+              const empPtkpDetails = getPtkpDetails(empPtkp);
 
               return (
                 <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 mb-4 text-xs space-y-2.5">
@@ -2467,9 +2470,15 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                       <span className="text-[10px] text-slate-400 font-mono-code uppercase block">Status Kerja</span>
                       <span className="font-semibold text-slate-700">{empType} • {locType}</span>
                     </div>
-                    <div className="col-span-2">
+                    <div>
+                      <span className="text-[10px] text-slate-400 font-mono-code uppercase block">PTKP / PPh 21</span>
+                      <span className="font-bold text-indigo-700 font-mono-code">
+                        {empPtkpDetails.code} ({empPtkpDetails.terCategory})
+                      </span>
+                    </div>
+                    <div>
                       <span className="text-[10px] text-slate-400 font-mono-code uppercase block">Rekening Payroll</span>
-                      <span className="font-semibold text-slate-700 font-mono-code text-[11px]">{bankInfo}</span>
+                      <span className="font-semibold text-slate-700 font-mono-code text-[11px] truncate block">{bankInfo}</span>
                     </div>
                   </div>
 
@@ -2585,7 +2594,13 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                   <span className="font-mono-code text-rose-600">-{formatSalaryDisplay(selectedSlip.bpjsKesehatan, showPayrollNominal)}</span>
                 </div>
                 <div className="flex justify-between py-0.5">
-                  <span className="text-slate-600">Estimasi Pajak PPh 21:</span>
+                  <span className="text-slate-600" title="Pajak Penghasilan Pasal 21 dihitung proporsional dari penghasilan kena pajak setelah batas PTKP">
+                    {(() => {
+                      const emp = employees.find(e => e.id === selectedSlip.employeeId);
+                      const ptkpCode = selectedSlip.ptkpStatus || emp?.ptkpStatus || resolvePtkpStatus(emp?.maritalStatus, emp?.dependents);
+                      return `Estimasi Pajak PPh 21 (${ptkpCode}):`;
+                    })()}
+                  </span>
                   <span className="font-mono-code text-rose-600">-{formatSalaryDisplay(selectedSlip.pph21, showPayrollNominal)}</span>
                 </div>
 

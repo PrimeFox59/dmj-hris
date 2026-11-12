@@ -1,5 +1,5 @@
 // DMJ HRIS — High Performance Progressive Web App (PWA) Service Worker
-const SW_VERSION = '2026.11.11-v16';
+const SW_VERSION = '2026.11.12-v1';
 const CACHE_NAME = `prime-hris-core-${SW_VERSION}`;
 
 // Core assets to pre-cache on install for instant native boot

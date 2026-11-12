@@ -35,10 +35,14 @@ import {
   AlertTriangle,
   ChevronDown,
   Eye,
-  EyeOff
+  EyeOff,
+  Receipt,
+  BadgePercent,
+  FileText
 } from 'lucide-react';
 import { Employee, Project, SystemRole, UserRole, getEffectiveSystemRole, BiometricProfile, WorkLocationType, NonLokalLeaveConfig } from '../types';
 import { formatSalaryDisplay } from '../utils/payrollCalculator';
+import { normalizeMaritalStatus, resolvePtkpStatus, getPtkpDetails, PTKP_OPTIONS, formatPtkpBadge } from '../utils/taxHelper';
 import { api } from '../services/api';
 import { BiometricEnrollmentModal } from './BiometricEnrollmentModal';
 
@@ -220,6 +224,31 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
   const [employeeStatus, setEmployeeStatus] = useState<'ACTIVE' | 'INACTIVE'>('ACTIVE');
   const [inactiveReason, setInactiveReason] = useState('');
 
+  // Status Perkawinan & Pajak PPh 21 (PTKP)
+  const [maritalStatusForm, setMaritalStatusForm] = useState<string>('TK');
+  const [dependentsForm, setDependentsForm] = useState<number>(0);
+  const [ptkpStatusForm, setPtkpStatusForm] = useState<string>('TK/0');
+  const [npwpNumberForm, setNpwpNumberForm] = useState<string>('');
+
+  const handleMaritalStatusChange = (newMs: string) => {
+    setMaritalStatusForm(newMs);
+    const newPtkp = resolvePtkpStatus(newMs, dependentsForm);
+    setPtkpStatusForm(newPtkp);
+  };
+
+  const handleDependentsChange = (newDep: number) => {
+    setDependentsForm(newDep);
+    const newPtkp = resolvePtkpStatus(maritalStatusForm, newDep);
+    setPtkpStatusForm(newPtkp);
+  };
+
+  const handlePtkpChange = (newPtkp: string) => {
+    setPtkpStatusForm(newPtkp);
+    const details = getPtkpDetails(newPtkp);
+    setMaritalStatusForm(details.maritalStatus);
+    setDependentsForm(details.dependents);
+  };
+
   // Department autocomplete & suggestion state
   const [showDeptSuggestions, setShowDeptSuggestions] = useState(false);
   const deptInputRef = useRef<HTMLInputElement>(null);
@@ -305,6 +334,10 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
     setAccountHolder('');
     setEmployeeStatus('ACTIVE');
     setInactiveReason('');
+    setMaritalStatusForm('TK');
+    setDependentsForm(0);
+    setPtkpStatusForm('TK/0');
+    setNpwpNumberForm('');
     setModalOpen(true);
   };
 
@@ -354,6 +387,12 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
     setAccountHolder(emp.bankAccount.accountHolder);
     setEmployeeStatus(emp.status || 'ACTIVE');
     setInactiveReason(emp.inactiveReason || '');
+    const initMs = normalizeMaritalStatus(emp.maritalStatus);
+    const initDep = emp.dependents ?? 0;
+    setMaritalStatusForm(initMs);
+    setDependentsForm(initDep);
+    setPtkpStatusForm(emp.ptkpStatus || resolvePtkpStatus(initMs, initDep));
+    setNpwpNumberForm(emp.npwpNumber || '');
     setModalOpen(true);
   };
 
@@ -399,6 +438,10 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
       dailyAllowance: Number(dailyAllowance),
       leaveQuota: Number(leaveQuota),
       usedLeave: editingEmployee ? editingEmployee.usedLeave : 0,
+      maritalStatus: maritalStatusForm,
+      dependents: Number(dependentsForm),
+      ptkpStatus: ptkpStatusForm,
+      npwpNumber: npwpNumberForm.trim(),
       workLocationType: workLocationTypeForm,
       status: employeeStatus,
       inactiveReason: employeeStatus === 'INACTIVE' ? inactiveReason : undefined,
@@ -833,6 +876,7 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
               <tr className="border-b border-slate-200/80 text-slate-500 uppercase tracking-wider text-[10px] font-mono-code">
                 <th className="py-2.5 px-3">Karyawan</th>
                 <th className="py-2.5 px-3">ID Login Akun</th>
+                <th className="py-2.5 px-3">PTKP (PPh 21)</th>
                 <th className="py-2.5 px-3">Status Lokal / Non-Lokal</th>
                 <th className="py-2.5 px-3">Role & Hak Akses</th>
                 <th className="py-2.5 px-3">Status</th>
@@ -878,6 +922,35 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                         <KeyRound className="w-3.5 h-3.5 text-indigo-500" />
                         <span>{emp.loginId || (emp.id === 'EMP-001' ? 'admin' : emp.id)}</span>
                       </span>
+                    </td>
+
+                    <td className="py-3 px-3 whitespace-nowrap">
+                      {(() => {
+                        const ptkp = emp.ptkpStatus || resolvePtkpStatus(emp.maritalStatus, emp.dependents);
+                        const details = getPtkpDetails(ptkp);
+                        const isKawin = details.maritalStatus !== 'TK';
+                        return (
+                          <div className="flex flex-col items-start gap-0.5">
+                            <span
+                              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl font-mono-code text-xs font-bold shadow-2xs border ${
+                                isKawin 
+                                  ? 'bg-amber-50 text-amber-900 border-amber-200/90' 
+                                  : 'bg-slate-50 text-slate-700 border-slate-200/90'
+                              }`}
+                              title={`${details.label} • ${details.terCategory} • Batas Bebas Pajak: Rp ${details.annualAmount.toLocaleString('id-ID')}/thn`}
+                            >
+                              <Receipt className="w-3.5 h-3.5 text-orange-600 shrink-0" />
+                              <span>{details.code}</span>
+                              <span className="text-[9.5px] px-1 py-0.2 rounded bg-white/80 text-slate-600 font-semibold border border-slate-200/60">
+                                {details.terCategory}
+                              </span>
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-mono-code">
+                              {isKawin ? `Kawin (${details.dependents} Tgg)` : `Lajang (${details.dependents} Tgg)`}
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </td>
 
                     <td className="py-3 px-3 whitespace-nowrap">
@@ -1754,6 +1827,100 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                     </div>
                   </>
                 )}
+              </div>
+
+              {/* Seksi 5: Status Perkawinan & Ketentuan Pajak PPh 21 (PTKP) */}
+              <div className="space-y-2.5 pt-1">
+                <div className="text-[11px] font-bold text-slate-800 pb-1.5 border-b border-slate-100 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Receipt className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Status Perkawinan & Pajak PPh 21 (PTKP)</span>
+                  </div>
+                  <span className="text-[9.5px] font-mono-code font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
+                    UU HPP & PMK 168/2023
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-600 uppercase">Status Perkawinan</label>
+                    <select
+                      value={maritalStatusForm}
+                      onChange={e => handleMaritalStatusChange(e.target.value)}
+                      className="w-full glass-input rounded-xl px-3 py-2 font-bold text-slate-900 mt-1 bg-white border border-slate-200"
+                    >
+                      <option value="TK">Tidak Kawin / Belum Menikah (TK)</option>
+                      <option value="K">Kawin / Menikah (K)</option>
+                      <option value="K/I">Kawin - Istri Digabung (K/I)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-600 uppercase">Jumlah Tanggungan</label>
+                    <select
+                      value={dependentsForm}
+                      onChange={e => handleDependentsChange(Number(e.target.value))}
+                      className="w-full glass-input rounded-xl px-3 py-2 font-bold text-slate-900 mt-1 bg-white border border-slate-200"
+                    >
+                      <option value={0}>0 Orang (Tanpa Tanggungan)</option>
+                      <option value={1}>1 Orang Tanggungan</option>
+                      <option value={2}>2 Orang Tanggungan</option>
+                      <option value={3}>3 Orang Tanggungan (Maksimal)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-600 uppercase">Kategori PTKP PPh 21</label>
+                    <select
+                      value={ptkpStatusForm}
+                      onChange={e => handlePtkpChange(e.target.value)}
+                      className="w-full glass-input rounded-xl px-3 py-2 font-bold text-orange-950 mt-1 bg-orange-50/60 border border-orange-200"
+                    >
+                      {PTKP_OPTIONS.map(opt => (
+                        <option key={opt.code} value={opt.code}>
+                          {opt.code} ({opt.terCategory} - Rp {(opt.annualAmount / 1_000_000).toLocaleString('id-ID')} Jt/thn)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-600 uppercase">
+                      Nomor Pokok Wajib Pajak (NPWP)
+                    </label>
+                    <input
+                      type="text"
+                      value={npwpNumberForm}
+                      onChange={e => setNpwpNumberForm(e.target.value)}
+                      placeholder="Nomor NPWP / NIK 16 Digit"
+                      className="w-full glass-input rounded-xl px-3 py-2 font-mono-code mt-1 bg-white border border-slate-200"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2 bg-gradient-to-br from-amber-50/70 to-orange-50/40 p-2.5 rounded-2xl border border-amber-200/80 flex items-center gap-2.5 text-xs">
+                    <div className="p-1.5 rounded-xl bg-orange-500 text-white shrink-0">
+                      <BadgePercent className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-slate-900 font-mono-code">
+                          {getPtkpDetails(ptkpStatusForm).code}
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-900 font-mono-code font-black text-[9.5px]">
+                          {getPtkpDetails(ptkpStatusForm).terCategory}
+                        </span>
+                        <span className="text-slate-500 font-mono-code text-[10.5px]">
+                          Bebas Pajak: <strong>Rp {getPtkpDetails(ptkpStatusForm).annualAmount.toLocaleString('id-ID')}/thn</strong>
+                        </span>
+                      </div>
+                      <p className="text-[10.5px] text-slate-600 line-clamp-1 mt-0.5">
+                        {getPtkpDetails(ptkpStatusForm).description}
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Action Buttons */}
