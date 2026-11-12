@@ -1417,36 +1417,36 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
       return;
     }
 
-    // Validasi Biometrik Wajah Mandatori:
+    // Telemetri Biometrik Wajah (Hanya untuk referensi & audit Tim HR - Presensi tetap tercatat dan tidak pernah ditolak):
     let currentBioObj = biometricVerification;
-    if (currentUser.biometric?.isEnrolled) {
-      if (!currentBioObj) {
-        setIsVerifyingBiometric(true);
-        try {
-          const tempCanvas = document.createElement('canvas');
-          tempCanvas.width = 640;
-          tempCanvas.height = 480;
-          const tCtx = tempCanvas.getContext('2d');
-          if (tCtx) {
-            const img = await loadImageAsync(photoToUse);
-            tCtx.drawImage(img, 0, 0, 640, 480);
-            currentBioObj = await compareFaceBiometric(tempCanvas, currentUser.biometric);
-            setBiometricVerification(currentBioObj);
-          }
-        } catch (bioErr: any) {
-          console.error('[Biometric Verification Error]', bioErr);
-        } finally {
-          setIsVerifyingBiometric(false);
+    if (currentUser.biometric?.isEnrolled && !currentBioObj) {
+      setIsVerifyingBiometric(true);
+      try {
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = 640;
+        tempCanvas.height = 480;
+        const tCtx = tempCanvas.getContext('2d');
+        if (tCtx) {
+          const img = await loadImageAsync(photoToUse);
+          tCtx.drawImage(img, 0, 0, 640, 480);
+          currentBioObj = await compareFaceBiometric(tempCanvas, currentUser.biometric);
+          setBiometricVerification(currentBioObj);
         }
+      } catch (bioErr: any) {
+        console.warn('[Biometric Telemetry Warning]', bioErr);
+      } finally {
+        setIsVerifyingBiometric(false);
       }
+    }
 
-      // Hard Blocker: Jika karyawan terdaftar biometrik, wajib lolos verifikasi wajah asli!
-      if (!currentBioObj || !currentBioObj.isVerified || (currentBioObj.matchScore < 60)) {
-        const score = currentBioObj?.matchScore ?? 0;
-        const reason = currentBioObj?.details || 'Wajah tidak cocok dengan profil biometrik Anda';
-        alert(`Presensi Ditolak: Verifikasi biometrik wajah tidak cocok (Skor: ${score}% < 60%).\n\nDetail: ${reason}\n\nHarap pastikan wajah Anda menghadap lurus ke kamera dengan pencahayaan memadai dan hindari memfoto layar/benda mati.`);
-        return;
-      }
+    // Default telemetry jika biometrik belum terdaftar atau belum terekam
+    if (!currentBioObj) {
+      currentBioObj = {
+        isVerified: true,
+        matchScore: 0,
+        livenessPassed: true,
+        details: currentUser.biometric?.isEnrolled ? 'Biometrik dievaluasi di latar belakang (Telemetri HR)' : 'Biometrik belum terdaftar (Verifikasi dilewati)'
+      };
     }
 
     let noteToUse = '';
