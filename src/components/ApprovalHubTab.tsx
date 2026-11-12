@@ -489,7 +489,7 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
   // - PM: Melihat pengajuan miliknya + pengajuan staf dari proyek yang dipimpinnya
   // - Staff: Melihat HANYA pengajuan miliknya sendiri
   const baseApprovals = React.useMemo(() => {
-    const isFinance = currentRole === 'finance';
+    const isFinance = currentRole === 'finance' || currentUser.role === 'Finance' || isFinanceEmployee(currentUser as any);
     if (currentRole === 'superuser' || currentRole === 'admin' || isHrManager || isFinance) {
       return approvals;
     }
@@ -919,7 +919,7 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
               </button>
             )}
 
-            {approvableFilteredPending.length > 0 && (isHrManager || isProjectManager || currentRole === 'superuser' || currentRole === 'admin') && (
+            {approvableFilteredPending.length > 0 && (isHrManager || isProjectManager || currentRole === 'superuser' || currentRole === 'admin' || currentRole === 'finance' || currentUser.role === 'Finance' || isFinanceEmployee(currentUser as any)) && (
               <button
                 type="button"
                 onClick={handleTriggerApproveAllFiltered}
@@ -974,6 +974,7 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                   const isSelected = selectedIds.has(item.id);
                   const isApplicantHr = isHrEmployee(emp) || item.employeeId === 'EMP-022';
                   const isApplicantFinance = isFinanceEmployee(emp) || item.employeeId === 'EMP-015' || item.employeeId === 'EMP-045';
+                  const isFinanceItem = item.type === 'SLIP_ACCESS' || item.type === 'KASBON' || item.targetApproverRole === 'FINANCE';
 
                   return (
                     <tr
@@ -1114,8 +1115,31 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                           {/* Route Icon Badge */}
                           {item.pmApprovedBy ? (
                             <div
-                              title={`Tahap 1: Disetujui PM (${item.pmApprovedBy}) • Tahap 2: Menunggu Otorisasi Akhir ${isApplicantHr ? 'Finance Manager (Otorisasi Silang HR ➔ Finance)' : isApplicantFinance ? 'HR Manager (Otorisasi Silang Finance ➔ HR)' : 'HR Manager'}`}
+                              title={`Tahap 1: Disetujui PM (${item.pmApprovedBy}) • Tahap 2: Menunggu Otorisasi Akhir ${
+                                isFinanceItem
+                                  ? (isApplicantFinance ? 'HR Manager (Otorisasi Silang Finance ➔ HR)' : 'Finance Manager (Divisi Finance)')
+                                  : isApplicantHr
+                                  ? 'Finance Manager (Otorisasi Silang HR ➔ Finance)'
+                                  : isApplicantFinance
+                                  ? 'HR Manager (Otorisasi Silang Finance ➔ HR)'
+                                  : 'HR Manager'
+                              }`}
                               className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-300 flex items-center justify-center shadow-2xs hover:scale-110 transition-transform cursor-help"
+                            >
+                              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                            </div>
+                          ) : isFinanceItem ? (
+                            <div
+                              title={
+                                isApplicantFinance
+                                  ? "Rute Otorisasi: HR Manager Saja (Otorisasi Silang Finance ➔ HR)"
+                                  : "Rute Otorisasi: Divisi Finance (Approval Finansial & Slip Gaji)"
+                              }
+                              className={`w-7 h-7 rounded-lg flex items-center justify-center shadow-2xs hover:scale-110 transition-transform cursor-help ${
+                                isApplicantFinance
+                                  ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/90'
+                                  : 'bg-emerald-50 text-emerald-700 border border-emerald-200/90'
+                              }`}
                             >
                               <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
                             </div>
@@ -1273,7 +1297,17 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                               <button
                                 type="button"
                                 onClick={() => handleActionClick(item, 'APPROVE')}
-                                title={item.targetApproverRole === 'PM' || (!item.pmApprovedBy && item.projectManagerId) ? "Setujui Tahap 1 (Rekomendasi PM)" : isApplicantHr ? "Setujui Otorisasi Akhir (Finance Manager - Otorisasi Silang)" : isApplicantFinance ? "Setujui Otorisasi Akhir (HR Manager - Otorisasi Silang)" : "Setujui Otorisasi Akhir (HR Manager)"}
+                                title={
+                                  !isFinanceItem && (item.targetApproverRole === 'PM' || (!item.pmApprovedBy && item.projectManagerId))
+                                    ? "Setujui Tahap 1 (Rekomendasi PM)"
+                                    : isFinanceItem
+                                    ? (isApplicantFinance ? "Setujui Otorisasi Akhir (HR Manager - Otorisasi Silang)" : item.type === 'SLIP_ACCESS' ? "Setujui Izin Buka Slip (Divisi Finance - Akses 10 Menit)" : "Setujui Otorisasi (Divisi Finance)")
+                                    : isApplicantHr
+                                    ? "Setujui Otorisasi Akhir (Finance Manager - Otorisasi Silang)"
+                                    : isApplicantFinance
+                                    ? "Setujui Otorisasi Akhir (HR Manager - Otorisasi Silang)"
+                                    : "Setujui Otorisasi Akhir (HR Manager)"
+                                }
                                 className="w-7 h-7 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center transition-all cursor-pointer shadow-2xs hover:shadow active:scale-90 shrink-0"
                               >
                                 <Check className="w-3.5 h-3.5 stroke-[2.5]" />
@@ -1297,11 +1331,45 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                             </>
                           ) : isPending && !canApprove ? (
                             <div
-                              className="text-[10px] text-amber-700 bg-amber-50/90 border border-amber-200/80 px-2 py-0.8 rounded-lg font-medium inline-flex items-center gap-1 max-w-[130px] truncate"
-                              title={item.pmApprovedBy ? (isApplicantHr ? 'Disetujui PM • Menunggu Otorisasi Akhir Finance Manager (Otorisasi Silang)' : isApplicantFinance ? 'Disetujui PM • Menunggu Otorisasi Akhir HR Manager (Otorisasi Silang)' : 'Disetujui PM • Menunggu Otorisasi Akhir HR Manager') : (item.targetApproverRole === 'PM' || (!item.pmApprovedBy && item.projectManagerId)) ? `Menunggu Otorisasi PM Terkait: ${item.projectManagerName || 'Project Manager'}` : isApplicantHr ? 'Menunggu Otorisasi Finance Manager (Otorisasi Silang)' : isApplicantFinance ? 'Menunggu Otorisasi HR Manager (Otorisasi Silang)' : 'Menunggu Otorisasi HR Manager'}
+                              className={`text-[10px] px-2 py-0.8 rounded-lg font-medium inline-flex items-center gap-1 max-w-[130px] truncate ${
+                                isFinanceItem && !isApplicantFinance
+                                  ? 'text-emerald-700 bg-emerald-50/90 border border-emerald-200/80'
+                                  : 'text-amber-700 bg-amber-50/90 border border-amber-200/80'
+                              }`}
+                              title={
+                                !isFinanceItem && (item.targetApproverRole === 'PM' || (!item.pmApprovedBy && item.projectManagerId))
+                                  ? `Menunggu Otorisasi PM Terkait: ${item.projectManagerName || 'Project Manager'}`
+                                  : item.pmApprovedBy
+                                  ? (isFinanceItem
+                                      ? (isApplicantFinance ? 'Disetujui PM • Menunggu Otorisasi Akhir HR Manager (Otorisasi Silang)' : 'Disetujui PM • Menunggu Otorisasi Akhir Finance Manager')
+                                      : isApplicantHr
+                                      ? 'Disetujui PM • Menunggu Otorisasi Akhir Finance Manager (Otorisasi Silang)'
+                                      : isApplicantFinance
+                                      ? 'Disetujui PM • Menunggu Otorisasi Akhir HR Manager (Otorisasi Silang)'
+                                      : 'Disetujui PM • Menunggu Otorisasi Akhir HR Manager')
+                                  : isFinanceItem
+                                  ? (isApplicantFinance ? 'Menunggu Otorisasi HR Manager (Otorisasi Silang Finance ➔ HR)' : 'Menunggu Otorisasi Divisi Finance (Approval Finansial & Slip Gaji)')
+                                  : isApplicantHr
+                                  ? 'Menunggu Otorisasi Finance Manager (Otorisasi Silang HR ➔ Finance)'
+                                  : isApplicantFinance
+                                  ? 'Menunggu Otorisasi HR Manager (Otorisasi Silang Finance ➔ HR)'
+                                  : 'Menunggu Otorisasi HR Manager'
+                              }
                             >
-                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0 animate-ping"></span>
-                              <span className="truncate">{item.pmApprovedBy ? (isApplicantHr ? 'Menunggu Finance' : 'Menunggu HR') : (item.targetApproverRole === 'PM' || (!item.pmApprovedBy && item.projectManagerId)) ? 'Tunggu PM' : (isApplicantHr ? 'Menunggu Finance' : 'Menunggu HR')}</span>
+                              <span className={`w-1.5 h-1.5 rounded-full shrink-0 animate-ping ${
+                                isFinanceItem && !isApplicantFinance ? 'bg-emerald-500' : 'bg-amber-500'
+                              }`}></span>
+                              <span className="truncate">
+                                {!isFinanceItem && (item.targetApproverRole === 'PM' || (!item.pmApprovedBy && item.projectManagerId))
+                                  ? 'Tunggu PM'
+                                  : isFinanceItem
+                                  ? (isApplicantFinance ? 'Menunggu HR' : 'Menunggu Finance')
+                                  : item.pmApprovedBy
+                                  ? (isApplicantHr ? 'Menunggu Finance' : 'Menunggu HR')
+                                  : isApplicantHr
+                                  ? 'Menunggu Finance'
+                                  : 'Menunggu HR'}
+                              </span>
                             </div>
                           ) : null}
                           <button
@@ -2438,6 +2506,11 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                     Batas Waktu Akses: <b>{new Date(detailModalItem.slipAccessExpiresAt).toLocaleTimeString('id-ID')} WIB</b>
                   </div>
                 )}
+                <div className="text-xs pt-1 text-slate-700 flex items-center justify-between flex-wrap gap-2 border-t border-emerald-200/50">
+                  <span>
+                    Rute Otorisasi: <b>Divisi Finance (Approval Finansial & Akses Slip Gaji)</b>
+                  </span>
+                </div>
               </div>
             )}
 
@@ -2485,32 +2558,45 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
               const detailApplicant = employees.find(e => e.id === detailModalItem.employeeId);
               const isDetailApplicantHr = isHrEmployee(detailApplicant) || detailModalItem.employeeId === 'EMP-022';
               const isDetailApplicantFinance = isFinanceEmployee(detailApplicant) || detailModalItem.employeeId === 'EMP-015' || detailModalItem.employeeId === 'EMP-045';
+              const isDetailFinanceItem = detailModalItem.type === 'SLIP_ACCESS' || detailModalItem.type === 'KASBON' || detailModalItem.targetApproverRole === 'FINANCE';
+
+              const finalRoleLabel = isDetailFinanceItem
+                ? (isDetailApplicantFinance ? 'HR Manager [Otorisasi Silang Finance ➔ HR]' : 'Finance Manager')
+                : isDetailApplicantHr
+                ? 'Finance Manager [Otorisasi Silang HR ➔ Finance]'
+                : isDetailApplicantFinance
+                ? 'HR Manager [Otorisasi Silang Finance ➔ HR]'
+                : 'HR Manager';
 
               return (
                 <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 text-xs space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-slate-800 flex items-center gap-1.5">
                       <ShieldCheck className="w-4 h-4 text-indigo-600" />
-                      <span>Alur Otorisasi Bertingkat (PM Terkait ➔ {isDetailApplicantHr ? 'Finance Manager [Otorisasi Silang HR ➔ Finance]' : isDetailApplicantFinance ? 'HR Manager [Otorisasi Silang Finance ➔ HR]' : 'HR Manager'})</span>
+                      <span>{isDetailFinanceItem ? `Alur Otorisasi Finansial (${finalRoleLabel})` : `Alur Otorisasi Bertingkat (PM Terkait ➔ ${finalRoleLabel})`}</span>
                     </span>
                     <span className="text-[10px] font-mono-code text-slate-500">
-                      {detailModalItem.projectName ? `Proyek: ${detailModalItem.projectName}` : 'Kantor Pusat / Non-Proyek'}
+                      {isDetailFinanceItem ? 'Otorisasi Finansial' : detailModalItem.projectName ? `Proyek: ${detailModalItem.projectName}` : 'Kantor Pusat / Non-Proyek'}
                     </span>
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-[11px]">
-                    <div className={`p-2.5 rounded-xl border ${detailModalItem.pmApprovedBy ? 'bg-emerald-50 border-emerald-300 text-emerald-900' : (detailModalItem.targetApproverRole === 'PM' || !detailModalItem.pmApprovedBy) && (detailModalItem.projectManagerId || (detailModalItem.projectAdminIds && detailModalItem.projectAdminIds.length > 0)) ? 'bg-amber-50 border-amber-300 text-amber-900 font-semibold ring-2 ring-amber-400/30' : 'bg-slate-100 border-slate-200 text-slate-500'}`}>
-                      <div className="text-[9.5px] uppercase font-mono-code tracking-wider text-slate-400">Tahap 1: Otorisasi PM / Admin Proyek</div>
+                    <div className={`p-2.5 rounded-xl border ${detailModalItem.pmApprovedBy ? 'bg-emerald-50 border-emerald-300 text-emerald-900' : isDetailFinanceItem ? 'bg-emerald-50/70 border-emerald-200 text-emerald-900' : (!isDetailFinanceItem && (detailModalItem.targetApproverRole === 'PM' || !detailModalItem.pmApprovedBy) && (detailModalItem.projectManagerId || (detailModalItem.projectAdminIds && detailModalItem.projectAdminIds.length > 0))) ? 'bg-amber-50 border-amber-300 text-amber-900 font-semibold ring-2 ring-amber-400/30' : 'bg-slate-100 border-slate-200 text-slate-500'}`}>
+                      <div className="text-[9.5px] uppercase font-mono-code tracking-wider text-slate-400">
+                        {isDetailFinanceItem ? 'Tahap 1: Verifikasi Sistem' : 'Tahap 1: Otorisasi PM / Admin Proyek'}
+                      </div>
                       <div className="font-bold truncate mt-0.5">
-                        {detailModalItem.projectManagerName ? `PM: ${detailModalItem.projectManagerName}` : 'Tidak Ada PM'}
-                        {detailModalItem.projectAdminNames && detailModalItem.projectAdminNames.length > 0 ? ` (Admin: ${detailModalItem.projectAdminNames.join(', ')})` : ''}
+                        {isDetailFinanceItem ? 'Langsung Divisi Finance' : detailModalItem.projectManagerName ? `PM: ${detailModalItem.projectManagerName}` : 'Tidak Ada PM'}
+                        {!isDetailFinanceItem && detailModalItem.projectAdminNames && detailModalItem.projectAdminNames.length > 0 ? ` (Admin: ${detailModalItem.projectAdminNames.join(', ')})` : ''}
                       </div>
                       <div className="text-[10px] mt-1">
-                        {detailModalItem.pmApprovedBy ? (
+                        {isDetailFinanceItem ? (
+                          <span className="text-emerald-700 font-medium">✓ Verifikasi Parameter Slip Valid (Tanpa PM Proyek)</span>
+                        ) : detailModalItem.pmApprovedBy ? (
                           <span className="text-emerald-700 font-medium">✓ Disetujui ({detailModalItem.pmApprovedBy})</span>
                         ) : (detailModalItem.projectManagerId || (detailModalItem.projectAdminIds && detailModalItem.projectAdminIds.length > 0)) ? (
                           <span className="text-amber-800 font-medium">⏳ Menunggu Persetujuan PM / Admin Proyek</span>
                         ) : (
-                          <span className="text-slate-400">Langsung ke {isDetailApplicantHr ? 'Finance Manager' : 'HR Manager'}</span>
+                          <span className="text-slate-400">Langsung ke {finalRoleLabel}</span>
                         )}
                       </div>
                       {detailModalItem.pmReviewNote && (
@@ -2518,22 +2604,22 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                       )}
                     </div>
 
-                    <div className={`p-2.5 rounded-xl border ${detailModalItem.status === 'APPROVED' ? 'bg-emerald-50 border-emerald-300 text-emerald-900' : (detailModalItem.targetApproverRole === 'HR' || detailModalItem.targetApproverRole === 'FINANCE' || detailModalItem.pmApprovedBy || !detailModalItem.projectManagerId) && detailModalItem.status === 'PENDING' ? 'bg-indigo-50 border-indigo-300 text-indigo-900 font-semibold ring-2 ring-indigo-400/30' : 'bg-slate-100 border-slate-200 text-slate-400'}`}>
+                    <div className={`p-2.5 rounded-xl border ${detailModalItem.status === 'APPROVED' ? 'bg-emerald-50 border-emerald-300 text-emerald-900' : (isDetailFinanceItem || detailModalItem.targetApproverRole === 'HR' || detailModalItem.targetApproverRole === 'FINANCE' || detailModalItem.pmApprovedBy || !detailModalItem.projectManagerId) && detailModalItem.status === 'PENDING' ? 'bg-indigo-50 border-indigo-300 text-indigo-900 font-semibold ring-2 ring-indigo-400/30' : 'bg-slate-100 border-slate-200 text-slate-400'}`}>
                       <div className="text-[9.5px] uppercase font-mono-code tracking-wider text-slate-400">
-                        Tahap 2: {isDetailApplicantHr ? 'Otorisasi Finance (Cross-Approval)' : 'Otorisasi HR'}
+                        Tahap 2: {isDetailFinanceItem ? (isDetailApplicantFinance ? 'Otorisasi HR (Cross-Approval)' : 'Otorisasi Finance') : isDetailApplicantHr ? 'Otorisasi Finance (Cross-Approval)' : 'Otorisasi HR'}
                       </div>
-                      <div className="font-bold truncate mt-0.5">{isDetailApplicantHr ? 'Finance Manager' : 'HR Manager'}</div>
+                      <div className="font-bold truncate mt-0.5">{finalRoleLabel}</div>
                       <div className="text-[10px] mt-1">
                         {detailModalItem.status === 'APPROVED' ? (
-                          <span className="text-emerald-700 font-medium">✓ Disetujui Final ({(isDetailApplicantHr ? detailModalItem.financeApprovedBy : detailModalItem.hrApprovedBy) || detailModalItem.reviewedBy || (isDetailApplicantHr ? 'Finance' : 'HR')})</span>
-                        ) : (detailModalItem.targetApproverRole === 'HR' || detailModalItem.targetApproverRole === 'FINANCE' || detailModalItem.pmApprovedBy || !detailModalItem.projectManagerId) ? (
-                          <span className="text-indigo-700 font-medium">⏳ Siap Diotorisasi {isDetailApplicantHr ? 'Finance Manager' : 'HR Manager'}</span>
+                          <span className="text-emerald-700 font-medium">✓ Disetujui Final ({(isDetailFinanceItem || isDetailApplicantHr ? detailModalItem.financeApprovedBy : detailModalItem.hrApprovedBy) || detailModalItem.reviewedBy || (isDetailFinanceItem ? 'Finance' : 'HR')})</span>
+                        ) : (isDetailFinanceItem || detailModalItem.targetApproverRole === 'HR' || detailModalItem.targetApproverRole === 'FINANCE' || detailModalItem.pmApprovedBy || !detailModalItem.projectManagerId) ? (
+                          <span className="text-indigo-700 font-medium">⏳ Siap Diotorisasi {finalRoleLabel}</span>
                         ) : (
                           <span className="text-slate-400">🔒 Terkunci (Tunggu PM)</span>
                         )}
                       </div>
-                      {((isDetailApplicantHr ? detailModalItem.financeReviewNote : detailModalItem.hrReviewNote) || detailModalItem.reviewNote) && (
-                        <div className="text-[9.5px] italic text-indigo-800 mt-1">"{(isDetailApplicantHr ? detailModalItem.financeReviewNote : detailModalItem.hrReviewNote) || detailModalItem.reviewNote}"</div>
+                      {((isDetailFinanceItem || isDetailApplicantHr ? detailModalItem.financeReviewNote : detailModalItem.hrReviewNote) || detailModalItem.reviewNote) && (
+                        <div className="text-[9.5px] italic text-indigo-800 mt-1">"{(isDetailFinanceItem || isDetailApplicantHr ? detailModalItem.financeReviewNote : detailModalItem.hrReviewNote) || detailModalItem.reviewNote}"</div>
                       )}
                     </div>
                   </div>
@@ -2584,11 +2670,20 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                     }}
                     className="px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 text-white text-xs font-bold cursor-pointer transition-all shadow-xs"
                   >
-                    {detailModalItem.targetApproverRole === 'PM' || (!detailModalItem.pmApprovedBy && (detailModalItem.projectManagerId || (detailModalItem.projectAdminIds && detailModalItem.projectAdminIds.length > 0)))
-                      ? 'Setujui Tahap 1 (Rekomendasi PM / Admin Proyek)'
-                      : (isHrEmployee(employees.find(e => e.id === detailModalItem.employeeId)) || detailModalItem.employeeId === 'EMP-022')
-                      ? 'Setujui Akhir (Otorisasi Finance)'
-                      : 'Setujui Akhir (Otorisasi HR)'}
+                    {(() => {
+                      const detailApp = employees.find(e => e.id === detailModalItem.employeeId);
+                      const isDetailAppHr = isHrEmployee(detailApp) || detailModalItem.employeeId === 'EMP-022';
+                      const isDetailAppFin = isFinanceEmployee(detailApp) || detailModalItem.employeeId === 'EMP-015' || detailModalItem.employeeId === 'EMP-045';
+                      const isDetailFin = detailModalItem.type === 'SLIP_ACCESS' || detailModalItem.type === 'KASBON' || detailModalItem.targetApproverRole === 'FINANCE';
+
+                      if (!isDetailFin && (detailModalItem.targetApproverRole === 'PM' || (!detailModalItem.pmApprovedBy && (detailModalItem.projectManagerId || (detailModalItem.projectAdminIds && detailModalItem.projectAdminIds.length > 0))))) {
+                        return 'Setujui Tahap 1 (Rekomendasi PM / Admin Proyek)';
+                      }
+                      if (isDetailFin) {
+                        return isDetailAppFin ? 'Setujui Akhir (Otorisasi HR)' : detailModalItem.type === 'SLIP_ACCESS' ? 'Setujui Izin Buka Slip (Otorisasi Finance)' : 'Setujui Akhir (Otorisasi Finance)';
+                      }
+                      return isDetailAppHr ? 'Setujui Akhir (Otorisasi Finance)' : 'Setujui Akhir (Otorisasi HR)';
+                    })()}
                   </button>
                 </div>
               ) : detailModalItem.status === 'PENDING' && !canUserApproveItem(detailModalItem) ? (
@@ -2599,6 +2694,13 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                       const dApplicant = employees.find(e => e.id === detailModalItem.employeeId);
                       const isDHr = isHrEmployee(dApplicant) || detailModalItem.employeeId === 'EMP-022';
                       const isDFin = isFinanceEmployee(dApplicant) || detailModalItem.employeeId === 'EMP-015' || detailModalItem.employeeId === 'EMP-045';
+                      const isDFinanceItem = detailModalItem.type === 'SLIP_ACCESS' || detailModalItem.type === 'KASBON' || detailModalItem.targetApproverRole === 'FINANCE';
+
+                      if (isDFinanceItem) {
+                        return isDFin
+                          ? 'Menunggu Otorisasi HR Manager (Otorisasi Silang Finance ➔ HR).'
+                          : 'Menunggu Otorisasi Divisi Finance (Approval Finansial & Slip Gaji).';
+                      }
 
                       if (!detailModalItem.pmApprovedBy && (detailModalItem.projectManagerId || (detailModalItem.projectAdminIds && detailModalItem.projectAdminIds.length > 0))) {
                         return `Menunggu Otorisasi PM Terkait (${detailModalItem.projectManagerName || 'Project Manager'}) atau Admin Proyek sebelum dapat diproses oleh ${isDHr ? 'Finance Manager' : 'HR Manager'}.`;
