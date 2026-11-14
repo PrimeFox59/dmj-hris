@@ -154,7 +154,10 @@ export const EmployeeTimesheetDetailModal: React.FC<EmployeeTimesheetDetailModal
         if (record.checkInTime && record.checkOutTime) {
           const [inH, inM] = record.checkInTime.replace(/\./g, ':').split(':').map(Number);
           const [outH, outM] = record.checkOutTime.replace(/\./g, ':').split(':').map(Number);
-          const diffMinutes = (outH * 60 + outM) - (inH * 60 + inM);
+          let diffMinutes = (outH * 60 + outM) - (inH * 60 + inM);
+          if (diffMinutes < 0) {
+            diffMinutes += 24 * 60; // Toleransi shift malam / lintas hari
+          }
           if (diffMinutes > 0) {
             const h = Math.floor(diffMinutes / 60);
             const m = diffMinutes % 60;

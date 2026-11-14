@@ -298,6 +298,24 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
   const [projectCode, setProjectCode] = useState('PRJ-VALE-02');
   const [dinasPurpose, setDinasPurpose] = useState('Panggilan darurat perbaikan bearing SAG Mill 02 mendadak');
 
+  // Deteksi tanggal hari ini & sesi aktif lintas hari (Cross-Day Shift)
+  const todayDateStr = useMemo(() => {
+    const now = rtcService.getServerNow();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }, []);
+
+  const openPreviousSession = useMemo(() => {
+    const today = attendanceHistory.find(a => a.employeeId === currentUser.id && a.date === todayDateStr);
+    if (today && today.checkInTime && !today.checkOutTime) {
+      return null; // Sesi aktif adalah hari ini
+    }
+    // Cari sesi kemarin atau sebelumnya yang sudah check-in tapi belum check-out
+    return attendanceHistory.find(a => a.employeeId === currentUser.id && a.date !== todayDateStr && Boolean(a.checkInTime) && !a.checkOutTime) || null;
+  }, [attendanceHistory, currentUser.id, todayDateStr]);
+
   // Real IP Network Detection States
   const [activeIp, setActiveIp] = useState<string>(realDetectedIp);
   const [activeIsp, setActiveIsp] = useState<string>(realDetectedIsp);
@@ -820,6 +838,15 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
   // Cutoff & Pulang Lebih Awal calculation
   useEffect(() => {
     const checkScheduleStatus = () => {
+      // Pada mode fleksibel proyek, karyawan tidak pernah terlambat atau pulang awal
+      if (userSchedule.isFlexible) {
+        setIsLate(false);
+        setLateMinutes(0);
+        setIsEarlyCheckOut(false);
+        setEarlyCheckOutMinutes(0);
+        return;
+      }
+
       const now = rtcService.getServerNow();
 
       if (attendanceAction === 'CHECK_OUT') {
@@ -864,11 +891,21 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
     checkScheduleStatus();
     const timer = setInterval(checkScheduleStatus, 30000);
     return () => clearInterval(timer);
-  }, [userSchedule.cutoffTime, userSchedule.checkOutTime, attendanceAction]);
+  }, [userSchedule.cutoffTime, userSchedule.checkOutTime, userSchedule.isFlexible, attendanceAction]);
 
   // Handler toggle jenis presensi Masuk / Pulang dengan auto-clear keterlambatan & pulang awal
   const handleToggleAttendanceAction = (action: 'CHECK_IN' | 'CHECK_OUT') => {
     setAttendanceAction(action);
+    if (userSchedule.isFlexible) {
+      setIsLate(false);
+      setLateMinutes(0);
+      setLateReason('');
+      setIsEarlyCheckOut(false);
+      setEarlyCheckOutMinutes(0);
+      setEarlyCheckOutReason('');
+      return;
+    }
+
     const now = rtcService.getServerNow();
 
     if (action === 'CHECK_OUT') {
@@ -1468,9 +1505,18 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
     const dd = String(now.getDate()).padStart(2, '0');
     const dateStr = `${yyyy}-${mm}-${dd}`;
 
-    const existingToday = attendanceHistory.find(
+    // Deteksi sesi absen aktif: Prioritas 1: hari ini.
+    // Prioritas 2 (jika mau check-out / belum checkout): open session kemarin/sebelumnya yang belum check-out
+    const todayRecord = attendanceHistory.find(
       a => a.employeeId === currentUser.id && a.date === dateStr
     );
+    const openPreviousRecord = attendanceHistory.find(
+      a => a.employeeId === currentUser.id && a.date !== dateStr && Boolean(a.checkInTime) && !a.checkOutTime
+    );
+
+    const existingToday = (!isCheckIn && (!todayRecord || !todayRecord.checkInTime) && openPreviousRecord)
+      ? openPreviousRecord
+      : todayRecord;
 
     // Deteksi jika karyawan melakukan Absen Pulang tanpa pernah Absen Masuk
     const isClockOutWithoutCheckIn = !isCheckIn && !existingToday?.checkInTime;
@@ -1492,7 +1538,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
     // Deteksi jika karyawan melakukan Pulang Lebih Awal (sebelum jam selesai kerja proyek/kantor)
     let effectiveIsEarlyOut = false;
     let effectiveEarlyMinutes = 0;
-    if (!isCheckIn && finalCheckOutTime) {
+    if (!isCheckIn && finalCheckOutTime && !userSchedule.isFlexible) {
       const normalizedOut = finalCheckOutTime.replace(/\./g, ':');
       const [outH, outM] = normalizedOut.split(':').map(Number);
       const [schedOutH, schedOutM] = (userSchedule.checkOutTime || '17:00').replace(/\./g, ':').split(':').map(Number);
@@ -1510,31 +1556,53 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
     let finalStatus: AttendanceStatus = 'ON_TIME';
     let finalApprovalStatus: 'NOT_REQUIRED' | 'PENDING' | 'APPROVED' | 'REJECTED' = 'NOT_REQUIRED';
 
-    if (isClockOutWithoutCheckIn) {
-      // Sesuai aturan sistem: Jika absen pulang tanpa absen masuk, status adalah ALPA / Tidak Absen
-      // dan MEMERLUKAN APPROVAL BERJENJANG (PM KEMUDIAN HR)
-      finalStatus = 'ALPA';
-      finalApprovalStatus = 'PENDING';
-      noteToUse = '[Tidak Absen Masuk] Hanya Absen Pulang - Memerlukan Approval PM & HR';
-    } else if (mode === 'DINAS_LUAR') {
-      finalStatus = 'DINAS_LUAR_PENDING';
-      finalApprovalStatus = 'PENDING';
-    } else if (mode === 'WFH') {
-      finalStatus = effectiveIsLate ? 'LATE' : 'WFH_APPROVED';
-      finalApprovalStatus = (effectiveIsLate || effectiveIsEarlyOut) ? 'PENDING' : 'NOT_REQUIRED';
-    } else if (!isPhysicallyInGeofence) {
-      finalStatus = 'OUT_OF_GEOFENCE';
-      finalApprovalStatus = 'PENDING';
-    } else if (effectiveIsLate) {
-      finalStatus = 'LATE';
-      finalApprovalStatus = 'PENDING';
-    } else if (effectiveIsEarlyOut) {
-      finalStatus = existingToday?.status || 'ON_TIME';
-      finalApprovalStatus = 'PENDING';
-      noteToUse = `[Pulang Lebih Awal ${effectiveEarlyMinutes} Mnt Sebelum ${userSchedule.checkOutTime} WIB]: ${earlyCheckOutReason.trim() || 'Izin pulang lebih awal'}`;
+    if (userSchedule.isFlexible) {
+      // MODE JAM KERJA FLEKSIBEL PROYEK (Bebas / Tanpa Jam Kantor):
+      // 1. Tidak terikat jam kantor / cutoff HO (selalu ON_TIME selama tidak di luar geofence)
+      // 2. Bisa absen lintas hari (check-in hari ini, check-out besoknya)
+      // 3. HANYA memerlukan approval jika absen di luar radius Geofence!
+      if (isClockOutWithoutCheckIn) {
+        finalStatus = 'ALPA';
+        finalApprovalStatus = 'PENDING';
+        noteToUse = '[Tidak Absen Masuk] Sesi masuk belum tercatat - Memerlukan Approval';
+      } else if (mode === 'DINAS_LUAR') {
+        finalStatus = 'DINAS_LUAR_PENDING';
+        finalApprovalStatus = 'PENDING';
+      } else if (!isPhysicallyInGeofence) {
+        finalStatus = 'OUT_OF_GEOFENCE';
+        finalApprovalStatus = 'PENDING';
+        noteToUse = outOfRangeReason.trim() ? `[Luar Radius Geofence]: ${outOfRangeReason.trim()}` : (noteToUse || 'Presensi di luar geofence proyek fleksibel');
+      } else {
+        finalStatus = 'ON_TIME';
+        finalApprovalStatus = 'NOT_REQUIRED';
+      }
     } else {
-      finalStatus = existingToday?.status || 'ON_TIME';
-      finalApprovalStatus = 'NOT_REQUIRED';
+      if (isClockOutWithoutCheckIn) {
+        // Sesuai aturan sistem: Jika absen pulang tanpa absen masuk, status adalah ALPA / Tidak Absen
+        // dan MEMERLUKAN APPROVAL BERJENJANG (PM KEMUDIAN HR)
+        finalStatus = 'ALPA';
+        finalApprovalStatus = 'PENDING';
+        noteToUse = '[Tidak Absen Masuk] Hanya Absen Pulang - Memerlukan Approval PM & HR';
+      } else if (mode === 'DINAS_LUAR') {
+        finalStatus = 'DINAS_LUAR_PENDING';
+        finalApprovalStatus = 'PENDING';
+      } else if (mode === 'WFH') {
+        finalStatus = effectiveIsLate ? 'LATE' : 'WFH_APPROVED';
+        finalApprovalStatus = (effectiveIsLate || effectiveIsEarlyOut) ? 'PENDING' : 'NOT_REQUIRED';
+      } else if (!isPhysicallyInGeofence) {
+        finalStatus = 'OUT_OF_GEOFENCE';
+        finalApprovalStatus = 'PENDING';
+      } else if (effectiveIsLate) {
+        finalStatus = 'LATE';
+        finalApprovalStatus = 'PENDING';
+      } else if (effectiveIsEarlyOut) {
+        finalStatus = existingToday?.status || 'ON_TIME';
+        finalApprovalStatus = 'PENDING';
+        noteToUse = `[Pulang Lebih Awal ${effectiveEarlyMinutes} Mnt Sebelum ${userSchedule.checkOutTime} WIB]: ${earlyCheckOutReason.trim() || 'Izin pulang lebih awal'}`;
+      } else {
+        finalStatus = existingToday?.status || 'ON_TIME';
+        finalApprovalStatus = 'NOT_REQUIRED';
+      }
     }
 
     const currentLocationObj = {
@@ -1547,6 +1615,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
     };
 
     // currentBioObj telah divalidasi dan dihitung kemiripan wajahnya secara aktual di atas
+    const sessionDate = (existingToday && !isCheckIn) ? existingToday.date : dateStr;
 
     const newRecord: AttendanceRecord = {
       id: isCheckIn ? `ATT-${Date.now()}` : (existingToday?.id || `ATT-${Date.now()}`),
@@ -1555,10 +1624,12 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
       employeeName: currentUser.name,
       employeeNik: currentUser.nik,
       department: currentUser.department,
-      date: dateStr,
+      date: sessionDate,
       checkInTime: finalCheckInTime,
+      checkOutDate: !isCheckIn ? dateStr : undefined,
       checkOutTime: finalCheckOutTime,
       attendanceType: attendanceAction,
+      isFlexibleSchedule: Boolean(userSchedule.isFlexible),
       mode: mode,
       status: finalStatus,
       isEarlyCheckOut: effectiveIsEarlyOut,
@@ -1582,9 +1653,9 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
       note: noteToUse,
       checkInNote: isCheckIn ? noteToUse : (existingToday?.checkInNote || (existingToday?.attendanceType === 'CHECK_IN' ? existingToday.note : undefined)),
       checkOutNote: !isCheckIn ? noteToUse : existingToday?.checkOutNote,
-      isLate: effectiveIsLate,
-      lateMinutes: effectiveLateMinutes,
-      lateReason: lateReasonToUse,
+      isLate: userSchedule.isFlexible ? false : effectiveIsLate,
+      lateMinutes: userSchedule.isFlexible ? 0 : effectiveLateMinutes,
+      lateReason: userSchedule.isFlexible ? undefined : lateReasonToUse,
       outOfRangeReason: !isWithinAnyAuthorizedGeofence ? (effectiveOutOfRangeReason || outOfRangeReason.trim()) : undefined,
       dinasLuarDetails: mode === 'DINAS_LUAR' ? {
         destination,
@@ -1657,20 +1728,42 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
 
         <div className="flex items-center gap-2.5 w-full md:w-auto justify-between md:justify-end flex-wrap">
           {/* Shift Schedule Chip */}
-          <div className="px-3.5 py-1.5 rounded-2xl bg-slate-100/90 border border-slate-200 text-right">
-            <p className="text-[9px] uppercase font-bold text-slate-400">
-              {userSchedule.isCustom ? `Shift Site (${userSchedule.projectCode})` : 'Jadwal Standar'}
-            </p>
-            <p className="text-xs font-black text-slate-800 font-mono-code">
-              {userSchedule.checkInTime} - {userSchedule.checkOutTime} WIB
-            </p>
-            <p className="text-[9px] text-orange-600 font-semibold">
-              Cutoff {userSchedule.cutoffTime}
-            </p>
-          </div>
+          {userSchedule.isFlexible ? (
+            <div className="px-3.5 py-1.5 rounded-2xl bg-teal-50 border border-teal-200 text-right">
+              <p className="text-[9px] uppercase font-bold text-teal-600">
+                Jam Kerja Fleksibel ({userSchedule.projectCode})
+              </p>
+              <p className="text-xs font-black text-teal-900 font-mono-code">
+                Bebas Jam Masuk & Pulang
+              </p>
+              <p className="text-[9px] text-teal-600 font-semibold">
+                Validasi Radius Geofence
+              </p>
+            </div>
+          ) : (
+            <div className="px-3.5 py-1.5 rounded-2xl bg-slate-100/90 border border-slate-200 text-right">
+              <p className="text-[9px] uppercase font-bold text-slate-400">
+                {userSchedule.isCustom ? `Shift Site (${userSchedule.projectCode})` : 'Jadwal Standar'}
+              </p>
+              <p className="text-xs font-black text-slate-800 font-mono-code">
+                {userSchedule.checkInTime} - {userSchedule.checkOutTime} WIB
+              </p>
+              <p className="text-[9px] text-orange-600 font-semibold">
+                Cutoff {userSchedule.cutoffTime}
+              </p>
+            </div>
+          )}
 
           {/* Status Chip */}
-          {isLate ? (
+          {userSchedule.isFlexible ? (
+            <div className="px-3 py-1.5 rounded-2xl bg-teal-50 border border-teal-300 text-teal-800 flex items-center gap-1.5 shadow-2xs">
+              <CheckCircle2 className="w-4 h-4 text-teal-600" />
+              <div>
+                <p className="text-[9px] uppercase font-black tracking-wider">Fleksibel</p>
+                <p className="text-xs font-bold font-mono-code">Bebas Cutoff</p>
+              </div>
+            </div>
+          ) : isLate ? (
             <div className="px-3 py-1.5 rounded-2xl bg-rose-50 border border-rose-300 text-rose-700 flex items-center gap-1.5 shadow-2xs">
               <ShieldAlert className="w-4 h-4 text-rose-600 animate-pulse" />
               <div>
@@ -1765,6 +1858,37 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
             </span>
           </div>
         </div>
+
+        {/* Banner Open Session Lintas Hari (Beda Hari) */}
+        {openPreviousSession && (
+          <div className="p-3.5 rounded-2xl bg-amber-50/90 border border-amber-300 flex items-center justify-between gap-3 text-amber-950 shadow-xs motion-fade-in-up">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-amber-200/80 border border-amber-400 flex items-center justify-center text-amber-900 shrink-0">
+                <Clock className="w-5 h-5 animate-pulse" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase font-mono-code bg-amber-200 text-amber-900">
+                    SESI AKTIF LINTAS HARI
+                  </span>
+                  <span className="text-xs font-bold">
+                    Masuk pada: {openPreviousSession.date} pukul {openPreviousSession.checkInTime} WIB
+                  </span>
+                </div>
+                <p className="text-[11px] text-amber-800 mt-0.5">
+                  {userSchedule.isFlexible ? 'Proyek Jam Fleksibel: ' : ''}Anda belum melakukan check-out untuk sesi sebelumnya. Klik <strong>ABSEN PULANG (OUT)</strong> untuk menutup sesi kerja ini.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => handleOpenAttendance('CHECK_OUT')}
+              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 text-white text-xs font-bold hover:brightness-105 transition cursor-pointer shrink-0 shadow-sm"
+            >
+              Check-Out Sesi Ini
+            </button>
+          </div>
+        )}
 
         {/* HANYA 2 TOMBOL BESAR: CHECK IN & CHECK OUT */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2111,7 +2235,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                 </div>
 
                 {/* Status Keterlambatan: 1 Baris Input & Tanpa Preset */}
-                {attendanceAction === 'CHECK_IN' && isLate && (
+                {attendanceAction === 'CHECK_IN' && isLate && !userSchedule.isFlexible && (
                   <div className="p-3 rounded-2xl bg-rose-50/90 border border-rose-300 shadow-xs space-y-1.5 motion-fade-in-up">
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5 text-rose-900 font-bold text-xs">
@@ -2134,7 +2258,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                 )}
 
                 {/* Status Pulang Lebih Awal: Warning & Alasan (Wajib diisi & Memerlukan Approval PKM dan HR) */}
-                {attendanceAction === 'CHECK_OUT' && isEarlyCheckOut && (
+                {attendanceAction === 'CHECK_OUT' && isEarlyCheckOut && !userSchedule.isFlexible && (
                   <div className="p-3.5 rounded-2xl bg-amber-50/95 border border-amber-400 shadow-xs space-y-2 motion-fade-in-up">
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5 text-amber-950 font-bold text-xs">

@@ -384,7 +384,8 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
       checkInTime: '08:00',
       checkOutTime: '17:00',
       cutoffTime: '08:15',
-      workDaysPerWeek: 6
+      workDaysPerWeek: 6,
+      isFlexible: false
     };
   }, [detectedEmployee, pendingEmployee, projects]);
 
@@ -645,14 +646,15 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
       const existingToday = todayAttendances[emp.id];
 
       // Calculate Late Status
+      const isFlexible = Boolean(activeSchedule.isFlexible);
       const [nowH, nowM] = timeStr.split(':').map(Number);
       const [cutoffH, cutoffM] = (activeSchedule.cutoffTime || '08:15').split(':').map(Number);
-      const isLate = isClockIn && (nowH * 60 + nowM) > (cutoffH * 60 + cutoffM);
+      const isLate = !isFlexible && isClockIn && (nowH * 60 + nowM) > (cutoffH * 60 + cutoffM);
       const lateMinutes = isLate ? (nowH * 60 + nowM) - (cutoffH * 60 + cutoffM) : 0;
 
       // Evaluasi Pulang Lebih Awal (sebelum jam selesai kerja shift proyek / kantor)
       const [schedOutH, schedOutM] = (activeSchedule.checkOutTime || '17:00').split(':').map(Number);
-      const isEarlyCheckOut = !isClockIn && ((nowH * 60 + nowM) < (schedOutH * 60 + schedOutM));
+      const isEarlyCheckOut = !isFlexible && !isClockIn && ((nowH * 60 + nowM) < (schedOutH * 60 + schedOutM));
       const earlyCheckOutMinutes = isEarlyCheckOut ? ((schedOutH * 60 + schedOutM) - (nowH * 60 + nowM)) : 0;
 
       const defaultNote = isInsideRadius

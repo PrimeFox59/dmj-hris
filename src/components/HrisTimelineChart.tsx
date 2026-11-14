@@ -128,6 +128,9 @@ export const HrisTimelineChart: React.FC<HrisTimelineChartProps> = ({
       if (att) {
         if (att.mode === 'DINAS_LUAR') {
           status = 'DINAS_LUAR';
+        } else if (schedule.isFlexible || att.isFlexibleSchedule) {
+          status = 'ON_TIME';
+          effectiveLateMinutes = 0;
         } else {
           // ATURAN MUTLAK: Jika check-in melebihi batas cutoff (proyek terkait atau office utama 08:15), otomatis status TELAT
           // Meskipun sudah diapprove oleh PM/HR, status histori kedatangan tetap TELAT (isLate = true, status = LATE)

@@ -9,6 +9,7 @@ export interface EffectiveSchedule {
   endDecimal: number;       // e.g. 16.5
   lateGraceMinutes: number; // e.g. 15
   isCustom: boolean;
+  isFlexible?: boolean;
   projectName?: string;
   projectCode?: string;
   projectId?: string;
@@ -72,8 +73,27 @@ export function getEmployeeProjectSchedule(
 
   // Check if project has custom work schedule enabled
   const customSched = matchedProject?.customRules?.workSchedule;
-  if (customSched && customSched.enabled && customSched.checkInTime) {
-    const checkIn = customSched.checkInTime; // e.g. "08:00" atau "07:00"
+  if (customSched && customSched.enabled && (customSched.allowFlexibleHours || customSched.checkInTime)) {
+    const isFlexible = Boolean(customSched.allowFlexibleHours);
+
+    if (isFlexible) {
+      return {
+        checkInTime: customSched.checkInTime || 'Fleksibel',
+        checkOutTime: customSched.checkOutTime || 'Fleksibel',
+        cutoffTime: 'Fleksibel',
+        cutoffDecimal: 24.0,
+        startDecimal: 0.0,
+        endDecimal: 24.0,
+        lateGraceMinutes: 0,
+        isCustom: true,
+        isFlexible: true,
+        projectName: matchedProject?.name || 'Proyek Lapangan Fleksibel',
+        projectCode: matchedProject?.code || matchedProject?.id || 'FLEX',
+        projectId: matchedProject?.id
+      };
+    }
+
+    const checkIn = customSched.checkInTime || '08:00'; // e.g. "08:00" atau "07:00"
     const checkOut = customSched.checkOutTime || '17:00';
     const grace = typeof customSched.lateGraceMinutes === 'number' ? customSched.lateGraceMinutes : 15;
     const cutoffTime = addMinutesToTimeString(checkIn, grace); // e.g. 08:00 + 15m = 08:15
@@ -93,6 +113,7 @@ export function getEmployeeProjectSchedule(
       endDecimal,
       lateGraceMinutes: grace,
       isCustom: !isOffice,
+      isFlexible: false,
       projectName: matchedProject?.name || (isOffice ? 'Kantor Pusat / Operasional' : 'Proyek Site'),
       projectCode: matchedProject?.code || matchedProject?.id || (isOffice ? 'PRJ-001' : 'SITE'),
       projectId: matchedProject?.id

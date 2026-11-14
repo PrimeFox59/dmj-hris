@@ -1084,7 +1084,37 @@ export function saveAttendance(record) {
     ORDER BY id ASC;
   `).all(record.employeeId, record.date);
 
-  const existing = existingRows[0] || null;
+  let existing = existingRows[0] || null;
+
+  // Cross-day check-out support (Beda hari / Shift Malam Lintas Hari):
+  // Jika karyawan melakukan presensi pulang (CHECK_OUT) tetapi di tanggal hari ini belum pernah absen masuk,
+  // otomatis cari record presensi terbuka (open check-in) sebelumnya yang belum memiliki checkOutTime.
+  if (attType === 'CHECK_OUT' && (!existing || !existing.checkInTime)) {
+    if (record.id) {
+      const rowById = db.prepare('SELECT id, data_json, checkInTime, checkOutTime, date, isLate, lateMinutes, status, approvalStatus FROM attendances WHERE id = ?;').get(record.id);
+      if (rowById && rowById.checkInTime) {
+        existing = rowById;
+        record.checkOutDate = record.date;
+        record.date = rowById.date;
+      }
+    }
+    if (!existing || !existing.checkInTime) {
+      const openCrossDayRow = db.prepare(`
+        SELECT id, data_json, checkInTime, checkOutTime, date, isLate, lateMinutes, status, approvalStatus 
+        FROM attendances 
+        WHERE employeeId = ? AND (checkOutTime IS NULL OR checkOutTime = '') 
+        ORDER BY date DESC, checkInTime DESC 
+        LIMIT 1;
+      `).get(record.employeeId);
+      if (openCrossDayRow) {
+        existing = openCrossDayRow;
+        record.id = openCrossDayRow.id;
+        record.checkOutDate = record.date;
+        record.date = openCrossDayRow.date; // Pertahankan tanggal sesi check-in awal
+      }
+    }
+  }
+
   // If there were duplicate rows from earlier versions, purge extras
   if (existingRows.length > 1) {
     for (let i = 1; i < existingRows.length; i++) {
@@ -1140,14 +1170,19 @@ export function saveAttendance(record) {
 
     // Evaluasi batas waktu keterlambatan terhadap jadwal proyek/kantor
     if (finalCheckIn) {
-      const [inH, inM] = finalCheckIn.split(':').map(Number);
-      const [cutH, cutM] = (sched.cutoffTime || '08:15').split(':').map(Number);
-      const inMins = (inH || 0) * 60 + (inM || 0);
-      const cutMins = (cutH || 0) * 60 + (cutM || 0);
+      if (sched.isFlexible) {
+        finalIsLate = 0;
+        finalLateMinutes = 0;
+      } else {
+        const [inH, inM] = finalCheckIn.split(':').map(Number);
+        const [cutH, cutM] = (sched.cutoffTime || '08:15').split(':').map(Number);
+        const inMins = (inH || 0) * 60 + (inM || 0);
+        const cutMins = (cutH || 0) * 60 + (cutM || 0);
 
-      if (inMins > cutMins) {
-        finalIsLate = 1;
-        finalLateMinutes = inMins - cutMins;
+        if (inMins > cutMins) {
+          finalIsLate = 1;
+          finalLateMinutes = inMins - cutMins;
+        }
       }
     }
 
@@ -1162,7 +1197,7 @@ export function saveAttendance(record) {
     }
 
     finalLateReason = finalIsLate ? (record.lateReason || null) : null;
-    const checkInNeedsApproval = Boolean(record.mode === 'DINAS_LUAR' || finalStatus === 'OUT_OF_GEOFENCE' || finalIsLate === 1);
+    const checkInNeedsApproval = Boolean(record.mode === 'DINAS_LUAR' || finalStatus === 'OUT_OF_GEOFENCE' || (!sched.isFlexible && finalIsLate === 1));
     finalApprovalStatus = checkInNeedsApproval ? 'PENDING' : 'APPROVED';
 
     const checkInPhoto = record.checkInPhotoUrl || record.photoUrl || prevData.checkInPhotoUrl || prevData.photoUrl || null;
@@ -1181,6 +1216,7 @@ export function saveAttendance(record) {
       isLate: Boolean(finalIsLate),
       lateMinutes: finalLateMinutes,
       lateReason: finalLateReason,
+      isFlexibleSchedule: Boolean(sched.isFlexible),
       approvalStatus: finalApprovalStatus,
       photoUrl: checkInPhoto,
       checkInPhotoUrl: checkInPhoto,
@@ -1206,28 +1242,36 @@ export function saveAttendance(record) {
     finalCheckOut = (record.checkOutTime || record.checkInTime || '').replace(/\./g, ':') || null;
 
     // Evaluasi Pulang Lebih Awal (sebelum jam selesai operasional proyek / kantor)
-    const [outH, outM] = (finalCheckOut || '').replace(/\./g, ':').split(':').map(Number);
-    const [schedOutH, schedOutM] = (sched.checkOutTime || '17:00').replace(/\./g, ':').split(':').map(Number);
-    const outMins = (outH || 0) * 60 + (outM || 0);
-    const schedOutMins = (schedOutH || 0) * 60 + (schedOutM || 0);
-
     let isEarlyOut = false;
     let earlyOutMins = 0;
-    if (finalCheckOut && !isNaN(outH) && outMins < schedOutMins) {
-      isEarlyOut = true;
-      earlyOutMins = Math.max(1, schedOutMins - outMins);
+
+    if (!sched.isFlexible) {
+      const [outH, outM] = (finalCheckOut || '').replace(/\./g, ':').split(':').map(Number);
+      const [schedOutH, schedOutM] = (sched.checkOutTime || '17:00').replace(/\./g, ':').split(':').map(Number);
+      const outMins = (outH || 0) * 60 + (outM || 0);
+      const schedOutMins = (schedOutH || 0) * 60 + (schedOutM || 0);
+
+      if (finalCheckOut && !isNaN(outH) && outMins < schedOutMins) {
+        isEarlyOut = true;
+        earlyOutMins = Math.max(1, schedOutMins - outMins);
+      }
     }
+
+    const isOutOfGeofenceOut = record.location && record.location.inGeofence === false && (record.mode === 'WFO' || prevData.mode === 'WFO');
 
     if (!finalCheckIn) {
       // Tidak pernah absen masuk: Status Alpa & butuh approval koreksi presensi
       finalStatus = 'ALPA';
+      finalApprovalStatus = 'PENDING';
+    } else if (isOutOfGeofenceOut) {
+      finalStatus = 'OUT_OF_GEOFENCE';
       finalApprovalStatus = 'PENDING';
     } else if (isEarlyOut) {
       finalStatus = existing?.status || 'ON_TIME';
       finalApprovalStatus = 'PENDING';
     } else {
       finalStatus = existing?.status || 'ON_TIME';
-      finalApprovalStatus = existing?.approvalStatus || 'APPROVED';
+      finalApprovalStatus = (existing?.approvalStatus === 'PENDING' && !sched.isFlexible) ? 'PENDING' : 'APPROVED';
     }
 
     finalIsLate = existing?.isLate !== undefined ? existing.isLate : 0;
@@ -2144,8 +2188,23 @@ export function getEmployeeProjectSchedule(employeeOrId, fallbackRules = null) {
   }
 
   const customSched = matchedProject?.customRules?.workSchedule;
-  if (customSched && customSched.enabled && customSched.checkInTime) {
-    const checkIn = customSched.checkInTime; // e.g. "08:00"
+  if (customSched && customSched.enabled && (customSched.allowFlexibleHours || customSched.checkInTime)) {
+    const isFlexible = Boolean(customSched.allowFlexibleHours);
+    if (isFlexible) {
+      return {
+        checkInTime: customSched.checkInTime || 'Fleksibel',
+        checkOutTime: customSched.checkOutTime || 'Fleksibel',
+        cutoffTime: 'Fleksibel',
+        lateGraceMinutes: 0,
+        projectName: matchedProject?.name || 'Proyek Lapangan Fleksibel',
+        projectCode: matchedProject?.code || matchedProject?.id || assignedId,
+        projectId: matchedProject?.id || assignedId,
+        isCustom: true,
+        isFlexible: true
+      };
+    }
+
+    const checkIn = customSched.checkInTime || '08:00'; // e.g. "08:00"
     const checkOut = customSched.checkOutTime || '17:00';
     const grace = typeof customSched.lateGraceMinutes === 'number' ? customSched.lateGraceMinutes : 15;
     
@@ -2164,7 +2223,8 @@ export function getEmployeeProjectSchedule(employeeOrId, fallbackRules = null) {
       projectName: matchedProject?.name || 'Proyek Lapangan Penugasan',
       projectCode: matchedProject?.code || matchedProject?.id || assignedId,
       projectId: matchedProject?.id || assignedId,
-      isCustom: true
+      isCustom: true,
+      isFlexible: false
     };
   }
 
@@ -2176,7 +2236,8 @@ export function getEmployeeProjectSchedule(employeeOrId, fallbackRules = null) {
     projectName: matchedProject?.name || 'Kantor Pusat / Proyek Terkait',
     projectCode: matchedProject?.code || matchedProject?.id || (assignedId || 'PRJ-001'),
     projectId: matchedProject?.id || assignedId || 'PRJ-001',
-    isCustom: false
+    isCustom: false,
+    isFlexible: false
   };
 }
 

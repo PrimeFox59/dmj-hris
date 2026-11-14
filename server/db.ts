@@ -717,19 +717,48 @@ export function saveAttendance(record: AttendanceRecord): {
   const db = getDatabase();
 
   // Query existing row to preserve check-in vs check-out metadata
-  const existingRow = db.prepare(`
+  let existingRow = db.prepare(`
     SELECT id, data_json, checkInTime, checkOutTime, isLate, lateMinutes, status, approvalStatus 
     FROM attendances 
     WHERE employeeId = ? AND date = ? 
     ORDER BY id ASC;
   `).get(record.employeeId, record.date) as any;
 
+  // Cross-day check-out support (Beda hari / Shift Malam Lintas Hari):
+  // Jika karyawan melakukan presensi pulang (CHECK_OUT) tetapi di tanggal hari ini belum pernah absen masuk,
+  // otomatis cari record presensi terbuka (open check-in) sebelumnya yang belum memiliki checkOutTime.
+  const isCheckIn = record.attendanceType === 'CHECK_IN' || (!record.checkOutTime && Boolean(record.checkInTime));
+  if (!isCheckIn && (!existingRow || !existingRow.checkInTime)) {
+    if (record.id) {
+      const rowById = db.prepare('SELECT id, data_json, checkInTime, checkOutTime, date, isLate, lateMinutes, status, approvalStatus FROM attendances WHERE id = ?;').get(record.id) as any;
+      if (rowById && rowById.checkInTime) {
+        existingRow = rowById;
+        record.checkOutDate = record.date;
+        record.date = rowById.date;
+      }
+    }
+    if (!existingRow || !existingRow.checkInTime) {
+      const openCrossDayRow = db.prepare(`
+        SELECT id, data_json, checkInTime, checkOutTime, date, isLate, lateMinutes, status, approvalStatus 
+        FROM attendances 
+        WHERE employeeId = ? AND (checkOutTime IS NULL OR checkOutTime = '') 
+        ORDER BY date DESC, checkInTime DESC 
+        LIMIT 1;
+      `).get(record.employeeId) as any;
+      if (openCrossDayRow) {
+        existingRow = openCrossDayRow;
+        record.id = openCrossDayRow.id;
+        record.checkOutDate = record.date;
+        record.date = openCrossDayRow.date;
+      }
+    }
+  }
+
   let prevData: Partial<AttendanceRecord> = {};
   if (existingRow && existingRow.data_json) {
     try { prevData = JSON.parse(existingRow.data_json); } catch (e) {}
   }
 
-  const isCheckIn = record.attendanceType === 'CHECK_IN' || (!record.checkOutTime && Boolean(record.checkInTime));
   let mergedRecord: AttendanceRecord = {
     ...prevData,
     ...record,

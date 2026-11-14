@@ -302,7 +302,9 @@ export interface AttendanceRecord {
   department: string;
   date: string; // YYYY-MM-DD
   checkInTime?: string; // HH:mm:ss
+  checkOutDate?: string; // YYYY-MM-DD (Beda hari / overnight check-out)
   checkOutTime?: string;
+  isFlexibleSchedule?: boolean;
   attendanceType?: 'CHECK_IN' | 'CHECK_OUT';
   mode: AttendanceMode;
   status: AttendanceStatus;

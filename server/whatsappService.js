@@ -397,6 +397,9 @@ export async function notifyOverdueCheckIn(employee, projectSchedule = null, dat
     ? projectSchedule
     : getEmployeeProjectSchedule(employee);
 
+  // Jadwal fleksibel: Bebas jam masuk tanpa cutoff
+  if (sched.isFlexible) return null;
+
   const todayStr = dateStr || new Date().toISOString().substring(0, 10);
   const nowWib = new Date().toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hour12: false }).replace(/\./g, ':');
   const cutoffStr = sched.cutoffTime || '08:15';
@@ -433,6 +436,9 @@ export async function notifyCheckOutReminder(employee, projectSchedule = null, d
   const sched = typeof projectSchedule === 'object' && projectSchedule !== null
     ? projectSchedule
     : getEmployeeProjectSchedule(employee);
+
+  // Jadwal fleksibel: Bebas jam masuk tanpa cutoff
+  if (sched.isFlexible) return null;
 
   const todayStr = dateStr || new Date().toISOString().substring(0, 10);
   const projectName = sched.projectName ? (sched.projectName + ' (' + sched.projectCode + ')') : 'Site Penugasan Proyek';

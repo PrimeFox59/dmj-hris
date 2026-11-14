@@ -1626,7 +1626,57 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
 
                   {editingProject.customRules?.workSchedule?.enabled ? (
                     <div className="space-y-4 p-5 rounded-2xl bg-amber-50/40 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-800/40">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* Sub-toggle: Mode Jam Kerja Fleksibel */}
+                      <div className="p-4 rounded-xl bg-teal-50 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800/50 flex items-center justify-between">
+                        <div className="pr-4">
+                          <div className="flex items-center gap-2">
+                            <Sparkles className="w-4 h-4 text-teal-600" />
+                            <span className="font-bold text-xs text-teal-950 dark:text-teal-200">
+                              Mode Jam Kerja Fleksibel (Bebas Shift / Tanpa Jam Kantor)
+                            </span>
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-teal-200 dark:bg-teal-900/60 text-teal-900 dark:text-teal-200 uppercase">
+                              Fitur Rekomendasi
+                            </span>
+                          </div>
+                          <p className="text-[11.5px] text-teal-800 dark:text-teal-300 mt-1 leading-relaxed">
+                            Karyawan di proyek ini bebas jam masuk & pulang tanpa terikat jam kantor/cutoff HO (tidak ada status terlambat & tidak ada penalti pulang cepat). <strong>Bisa absen masuk & pulang beda hari (lintas hari).</strong> Approval hanya diperlukan jika absen di luar radius Geofence site.
+                          </p>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(editingProject.customRules.workSchedule.allowFlexibleHours)}
+                            onChange={e =>
+                              setEditingProject({
+                                ...editingProject,
+                                customRules: {
+                                  ...editingProject.customRules,
+                                  workSchedule: {
+                                    ...editingProject.customRules!.workSchedule!,
+                                    allowFlexibleHours: e.target.checked
+                                  }
+                                }
+                              })
+                            }
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
+                        </label>
+                      </div>
+
+                      {editingProject.customRules.workSchedule.allowFlexibleHours ? (
+                        <div className="p-4 rounded-xl bg-white dark:bg-slate-800/90 border border-teal-200 dark:border-teal-800/40 text-xs text-slate-600 dark:text-slate-300 space-y-1">
+                          <div className="flex items-center gap-2 font-bold text-teal-700 dark:text-teal-400">
+                            <CheckCircle2 className="w-4 h-4 text-teal-600" />
+                            <span>Jadwal Fleksibel Aktif untuk Seluruh Tim Proyek Ini</span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                            Setiap presensi masuk dan pulang akan langsung tercatat sebagai <strong>TEPAT WAKTU (ON_TIME)</strong> kapan pun dilakukan. Jika teknisi check-in malam dan check-out keesokan harinya, sistem otomatis menutup sesi tersebut tanpa terhitung Alpa. Approval hanya berlaku jika presensi dilakukan di luar area radius Geofence site.
+                          </p>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                           <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                             Jam Masuk (Check-In) Site
@@ -1778,7 +1828,9 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
                           </div>
                         </div>
                       )}
-                    </div>
+                    </>
+                  )}
+                </div>
                   ) : (
                     <div className="p-6 text-center text-slate-400 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl">
                       <Clock className="w-8 h-8 mx-auto mb-2 opacity-40 text-slate-400" />
