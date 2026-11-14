@@ -1157,6 +1157,7 @@ export function saveAttendance(record) {
   }
 
   const sched = getEmployeeProjectSchedule(record.employeeId);
+  const isFlexible = Boolean(sched.isFlexible || record.isFlexibleSchedule);
 
   if (attType === 'CHECK_IN') {
     // ==========================================
@@ -1170,7 +1171,7 @@ export function saveAttendance(record) {
 
     // Evaluasi batas waktu keterlambatan terhadap jadwal proyek/kantor
     if (finalCheckIn) {
-      if (sched.isFlexible) {
+      if (isFlexible) {
         finalIsLate = 0;
         finalLateMinutes = 0;
       } else {
@@ -1190,14 +1191,14 @@ export function saveAttendance(record) {
       finalStatus = 'DINAS_LUAR';
     } else if (record.status === 'OUT_OF_GEOFENCE' || (record.location && record.location.inGeofence === false && record.mode === 'WFO')) {
       finalStatus = 'OUT_OF_GEOFENCE';
-    } else if (finalIsLate === 1) {
+    } else if (finalIsLate === 1 && !isFlexible) {
       finalStatus = 'LATE';
     } else {
       finalStatus = 'ON_TIME';
     }
 
-    finalLateReason = finalIsLate ? (record.lateReason || null) : null;
-    const checkInNeedsApproval = Boolean(record.mode === 'DINAS_LUAR' || finalStatus === 'OUT_OF_GEOFENCE' || (!sched.isFlexible && finalIsLate === 1));
+    finalLateReason = (finalIsLate && !isFlexible) ? (record.lateReason || null) : null;
+    const checkInNeedsApproval = Boolean(record.mode === 'DINAS_LUAR' || finalStatus === 'OUT_OF_GEOFENCE' || (!isFlexible && finalIsLate === 1));
     finalApprovalStatus = checkInNeedsApproval ? 'PENDING' : 'APPROVED';
 
     const checkInPhoto = record.checkInPhotoUrl || record.photoUrl || prevData.checkInPhotoUrl || prevData.photoUrl || null;
@@ -1213,10 +1214,10 @@ export function saveAttendance(record) {
       checkOutTime: finalCheckOut || undefined,
       mode: record.mode || prevData.mode || 'WFO',
       status: finalStatus,
-      isLate: Boolean(finalIsLate),
-      lateMinutes: finalLateMinutes,
-      lateReason: finalLateReason,
-      isFlexibleSchedule: Boolean(sched.isFlexible),
+      isLate: Boolean(finalIsLate && !isFlexible),
+      lateMinutes: isFlexible ? 0 : finalLateMinutes,
+      lateReason: isFlexible ? null : finalLateReason,
+      isFlexibleSchedule: isFlexible,
       approvalStatus: finalApprovalStatus,
       photoUrl: checkInPhoto,
       checkInPhotoUrl: checkInPhoto,
@@ -1245,7 +1246,7 @@ export function saveAttendance(record) {
     let isEarlyOut = false;
     let earlyOutMins = 0;
 
-    if (!sched.isFlexible) {
+    if (!isFlexible) {
       const [outH, outM] = (finalCheckOut || '').replace(/\./g, ':').split(':').map(Number);
       const [schedOutH, schedOutM] = (sched.checkOutTime || '17:00').replace(/\./g, ':').split(':').map(Number);
       const outMins = (outH || 0) * 60 + (outM || 0);
@@ -1271,12 +1272,12 @@ export function saveAttendance(record) {
       finalApprovalStatus = 'PENDING';
     } else {
       finalStatus = existing?.status || 'ON_TIME';
-      finalApprovalStatus = (existing?.approvalStatus === 'PENDING' && !sched.isFlexible) ? 'PENDING' : 'APPROVED';
+      finalApprovalStatus = (existing?.approvalStatus === 'PENDING' && !isFlexible) ? 'PENDING' : 'APPROVED';
     }
 
-    finalIsLate = existing?.isLate !== undefined ? existing.isLate : 0;
-    finalLateMinutes = existing?.lateMinutes !== undefined ? existing.lateMinutes : 0;
-    finalLateReason = existing?.lateReason || null;
+    finalIsLate = isFlexible ? 0 : (existing?.isLate !== undefined ? existing.isLate : 0);
+    finalLateMinutes = isFlexible ? 0 : (existing?.lateMinutes !== undefined ? existing.lateMinutes : 0);
+    finalLateReason = isFlexible ? null : (existing?.lateReason || null);
 
     // Foto Masuk hanya ada jika karyawan sebelumnya pernah melakukan presensi masuk secara riil
     const isClockOutWithoutCheckIn = !finalCheckIn || !prevData.checkInTime || Boolean(record.note && record.note.toLowerCase().includes('tanpa absen masuk'));
@@ -1379,10 +1380,10 @@ export function saveAttendance(record) {
   `).all(record.employeeId, record.date);
 
   if (attType === 'CHECK_IN') {
-    const checkInNeedsApproval = Boolean(record.mode === 'DINAS_LUAR' || finalStatus === 'OUT_OF_GEOFENCE' || finalIsLate === 1);
+    const checkInNeedsApproval = Boolean(record.mode === 'DINAS_LUAR' || finalStatus === 'OUT_OF_GEOFENCE' || (!isFlexible && finalIsLate === 1));
 
-    if (!checkInNeedsApproval) {
-      // Presensi sekarang VALID & TEPAT WAKTU:
+    if (!checkInNeedsApproval || (isFlexible && finalStatus !== 'OUT_OF_GEOFENCE' && record.mode !== 'DINAS_LUAR')) {
+      // Presensi sekarang VALID & TEPAT WAKTU (atau Mode Fleksibel di dalam Geofence):
       // Hapus otomatis SEMUA permohonan approval check-in sebelumnya (hilang tanpa sisa)
       for (const app of existingPendingApprovals) {
         if (app.type !== 'EARLY_CHECKOUT') {
@@ -1391,20 +1392,25 @@ export function saveAttendance(record) {
         }
       }
     } else {
-      // Presensi butuh persetujuan:
-      // Replace approval lama dengan 1 single canonical approval baru
-      const approvalId = `APPR-${targetId}`;
-
-      for (const app of existingPendingApprovals) {
-        if (app.type !== 'EARLY_CHECKOUT' && app.id !== approvalId) {
-          db.prepare('DELETE FROM approvals WHERE id = ?;').run(app.id);
-          removedApprovalIds.push(app.id);
-        }
-      }
-
       const isDinasLuar = record.mode === 'DINAS_LUAR';
       const isOutOfGeofence = finalStatus === 'OUT_OF_GEOFENCE';
-      const approvalType = isDinasLuar ? 'DINAS_LUAR' : (isOutOfGeofence ? 'OUT_OF_GEOFENCE' : 'LATE_JUSTIFICATION');
+
+      // MUTLAK: Mode fleksibel tidak pernah membuat approval keterlambatan (LATE_JUSTIFICATION)
+      if (isFlexible && !isDinasLuar && !isOutOfGeofence) {
+        // Skip pembuatan approval keterlambatan
+      } else {
+        // Presensi butuh persetujuan:
+        // Replace approval lama dengan 1 single canonical approval baru
+        const approvalId = `APPR-${targetId}`;
+
+        for (const app of existingPendingApprovals) {
+          if (app.type !== 'EARLY_CHECKOUT' && app.id !== approvalId) {
+            db.prepare('DELETE FROM approvals WHERE id = ?;').run(app.id);
+            removedApprovalIds.push(app.id);
+          }
+        }
+
+        const approvalType = isDinasLuar ? 'DINAS_LUAR' : (isOutOfGeofence ? 'OUT_OF_GEOFENCE' : 'LATE_JUSTIFICATION');
 
       const distText = record.location?.distanceMeters ? ` (${record.location.distanceMeters >= 1000 ? (record.location.distanceMeters / 1000).toFixed(1) + ' km' : record.location.distanceMeters + 'm'})` : '';
       const approvalTitle = isDinasLuar
@@ -1487,15 +1493,16 @@ export function saveAttendance(record) {
         null, null, approvalItem.lateMinutes || null, approvalItem.status,
         approvalItem.submittedAt, null, null, null, JSON.stringify(approvalItem)
       );
+      }
     }
   } else {
     // attType === 'CHECK_OUT'
-    const isEarlyCheckOut = Boolean(mergedData.isEarlyCheckOut);
+    const isEarlyCheckOut = !isFlexible && Boolean(mergedData.isEarlyCheckOut);
     const isMissingCheckIn = !finalCheckIn && Boolean(finalCheckOut);
     const checkOutNeedsApproval = isEarlyCheckOut || isMissingCheckIn;
 
-    if (!checkOutNeedsApproval) {
-      // Kepulangan normal (tepat jam operasional & ada absen masuk):
+    if (!checkOutNeedsApproval || (isFlexible && !isMissingCheckIn)) {
+      // Kepulangan normal (atau Mode Fleksibel):
       // Bersihkan pengajuan EARLY_CHECKOUT / ATTENDANCE_CORRECTION lama jika ada
       for (const app of existingPendingApprovals) {
         if (app.type === 'EARLY_CHECKOUT' || app.type === 'ATTENDANCE_CORRECTION') {
@@ -1504,7 +1511,11 @@ export function saveAttendance(record) {
         }
       }
     } else {
-      const approvalId = isEarlyCheckOut ? `APPR-EARLY-${targetId}` : `APPR-${targetId}`;
+      // MUTLAK: Mode fleksibel tidak pernah membuat approval pulang awal (EARLY_CHECKOUT)
+      if (isFlexible && !isMissingCheckIn) {
+        // Skip approval apa pun
+      } else {
+        const approvalId = isEarlyCheckOut ? `APPR-EARLY-${targetId}` : `APPR-${targetId}`;
 
       for (const app of existingPendingApprovals) {
         if ((app.type === 'EARLY_CHECKOUT' || app.type === 'ATTENDANCE_CORRECTION') && app.id !== approvalId) {
@@ -1594,7 +1605,18 @@ export function saveAttendance(record) {
         null, null, approvalItem.lateMinutes || null, approvalItem.status,
         approvalItem.submittedAt, null, null, null, JSON.stringify(approvalItem)
       );
+      }
     }
+  }
+
+  // MUTLAK: Mode Fleksibel tidak pernah menyisakan approval Keterlambatan atau Pulang Awal
+  if (isFlexible) {
+    db.prepare(`
+      DELETE FROM approvals 
+      WHERE employeeId = ? 
+        AND startDate = ? 
+        AND type IN ('LATE_JUSTIFICATION', 'EARLY_CHECKOUT');
+    `).run(record.employeeId, record.date);
   }
 
   const isCheckOut = attType === 'CHECK_OUT';
@@ -2188,7 +2210,7 @@ export function getEmployeeProjectSchedule(employeeOrId, fallbackRules = null) {
   }
 
   const customSched = matchedProject?.customRules?.workSchedule;
-  if (customSched && customSched.enabled && (customSched.allowFlexibleHours || customSched.checkInTime)) {
+  if (customSched && (customSched.allowFlexibleHours || (customSched.enabled && customSched.checkInTime))) {
     const isFlexible = Boolean(customSched.allowFlexibleHours);
     if (isFlexible) {
       return {
@@ -2828,6 +2850,20 @@ export function saveProject(proj) {
     proj.hourlyRateMultiplier || 1.0,
     JSON.stringify(proj)
   );
+
+  if (proj.customRules?.workSchedule?.allowFlexibleHours) {
+    // Otomatis bersihkan pengajuan LATE_JUSTIFICATION & EARLY_CHECKOUT yang masih PENDING bagi seluruh karyawan proyek ini
+    const assignedIds = Array.isArray(proj.assignedEmployeeIds) ? proj.assignedEmployeeIds : [];
+    if (assignedIds.length > 0) {
+      const placeholders = assignedIds.map(() => '?').join(',');
+      db.prepare(`
+        DELETE FROM approvals 
+        WHERE employeeId IN (${placeholders}) 
+          AND status = 'PENDING' 
+          AND type IN ('LATE_JUSTIFICATION', 'EARLY_CHECKOUT');
+      `).run(...assignedIds);
+    }
+  }
 
   addAuditLog({
     action: 'SAVE_PROJECT',

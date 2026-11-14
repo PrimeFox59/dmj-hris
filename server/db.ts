@@ -812,14 +812,35 @@ export function saveAttendance(record: AttendanceRecord): {
   );
   record = mergedRecord;
 
+  // Mode Fleksibel: Karyawan tidak terikat shift & tidak ada approval keterlambatan maupun pulang awal
+  const isFlexible = Boolean(record.isFlexibleSchedule);
+  if (isFlexible) {
+    record.isLate = false;
+    record.lateMinutes = 0;
+    record.lateReason = undefined;
+    record.isEarlyCheckOut = false;
+    record.earlyCheckOutMinutes = 0;
+    record.earlyCheckOutReason = undefined;
+    if (record.status !== 'OUT_OF_GEOFENCE' && record.mode !== 'DINAS_LUAR' && (!record.checkOutTime || record.checkInTime)) {
+      record.status = 'ON_TIME';
+      record.approvalStatus = 'APPROVED';
+    }
+  }
+
   // If this attendance needs approval (Dinas Luar, Late, or Early Check-Out), create approval item in SQLite
   if (record.approvalStatus === 'PENDING') {
-    const isEarlyCheckOut = Boolean(record.isEarlyCheckOut);
+    const isEarlyCheckOut = !isFlexible && Boolean(record.isEarlyCheckOut);
     const isMissingCheckIn = !record.checkInTime && Boolean(record.checkOutTime);
     const isDinasLuar = record.mode === 'DINAS_LUAR';
     const isOutOfGeofence = record.status === 'OUT_OF_GEOFENCE';
 
-    if (!isDinasLuar && !isOutOfGeofence && !isMissingCheckIn && !isEarlyCheckOut && record.attendanceType === 'CHECK_OUT') {
+    if (isFlexible && !isOutOfGeofence && !isDinasLuar && !isMissingCheckIn) {
+      // Tolak / skip pembuatan approval keterlambatan & pulang awal pada mode fleksibel
+      db.prepare(`
+        DELETE FROM approvals 
+        WHERE employeeId = ? AND startDate = ? AND type IN ('LATE_JUSTIFICATION', 'EARLY_CHECKOUT');
+      `).run(record.employeeId, record.date);
+    } else if (!isDinasLuar && !isOutOfGeofence && !isMissingCheckIn && !isEarlyCheckOut && record.attendanceType === 'CHECK_OUT') {
       // Skip late justification approval saat absen pulang normal tepat waktu
     } else {
       const approvalId = isEarlyCheckOut ? `APPR-EARLY-${record.id}` : `APPR-${record.id}`;
@@ -912,6 +933,14 @@ export function saveAttendance(record: AttendanceRecord): {
       JSON.stringify(approvalItem)
     );
     }
+  }
+
+  // MUTLAK: Mode Fleksibel tidak pernah menyisakan approval Keterlambatan atau Pulang Awal
+  if (isFlexible) {
+    db.prepare(`
+      DELETE FROM approvals 
+      WHERE employeeId = ? AND startDate = ? AND type IN ('LATE_JUSTIFICATION', 'EARLY_CHECKOUT');
+    `).run(record.employeeId, record.date);
   }
 
   // Audit log
@@ -1288,6 +1317,19 @@ export function saveProject(proj: Project) {
     proj.hourlyRateMultiplier || 1.0,
     JSON.stringify(proj)
   );
+
+  if (proj.customRules?.workSchedule?.allowFlexibleHours) {
+    const assignedIds = Array.isArray(proj.assignedEmployeeIds) ? proj.assignedEmployeeIds : [];
+    if (assignedIds.length > 0) {
+      const placeholders = assignedIds.map(() => '?').join(',');
+      db.prepare(`
+        DELETE FROM approvals 
+        WHERE employeeId IN (${placeholders}) 
+          AND status = 'PENDING' 
+          AND type IN ('LATE_JUSTIFICATION', 'EARLY_CHECKOUT');
+      `).run(...assignedIds);
+    }
+  }
 
   db.prepare(`
     INSERT INTO audit_logs (action, entity, entityId, details)

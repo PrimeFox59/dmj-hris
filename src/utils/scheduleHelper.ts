@@ -73,7 +73,7 @@ export function getEmployeeProjectSchedule(
 
   // Check if project has custom work schedule enabled
   const customSched = matchedProject?.customRules?.workSchedule;
-  if (customSched && customSched.enabled && (customSched.allowFlexibleHours || customSched.checkInTime)) {
+  if (customSched && (customSched.allowFlexibleHours || (customSched.enabled && customSched.checkInTime))) {
     const isFlexible = Boolean(customSched.allowFlexibleHours);
 
     if (isFlexible) {

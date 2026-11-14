@@ -705,6 +705,7 @@ export const QuickAttendancePublicPortal: React.FC<QuickAttendancePublicPortalPr
         lateMinutes,
         isEarlyCheckOut,
         earlyCheckOutMinutes,
+        isFlexibleSchedule: isFlexible,
         earlyCheckOutReason: isEarlyCheckOut ? (customNote.trim() || `Pulang ${earlyCheckOutMinutes} menit lebih awal melalui Kiosk Publik`) : undefined,
         scheduledCheckOutTime: activeSchedule.checkOutTime || '17:00',
         approvalStatus: (!isClockIn && (!existingToday?.checkInTime || isEarlyCheckOut)) ? 'PENDING' : 'NOT_REQUIRED',

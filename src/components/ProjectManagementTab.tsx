@@ -1639,7 +1639,7 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
                             </span>
                           </div>
                           <p className="text-[11.5px] text-teal-800 dark:text-teal-300 mt-1 leading-relaxed">
-                            Karyawan di proyek ini bebas jam masuk & pulang tanpa terikat jam kantor/cutoff HO (tidak ada status terlambat & tidak ada penalti pulang cepat). <strong>Bisa absen masuk & pulang beda hari (lintas hari).</strong> Approval hanya diperlukan jika absen di luar radius Geofence site.
+                            Karyawan di proyek ini bebas jam masuk & pulang tanpa terikat jam kantor/cutoff HO. <strong>Tidak ada status terlambat & tidak ada penalti pulang cepat (Zero Approval Keterlambatan & Pulang Awal).</strong> Bisa absen masuk & pulang beda hari (lintas hari/overnight). Approval hanya diperlukan jika absen di luar radius Geofence site.
                           </p>
                         </div>
                         <label className="relative inline-flex items-center cursor-pointer shrink-0">
@@ -1665,14 +1665,37 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
                       </div>
 
                       {editingProject.customRules.workSchedule.allowFlexibleHours ? (
-                        <div className="p-4 rounded-xl bg-white dark:bg-slate-800/90 border border-teal-200 dark:border-teal-800/40 text-xs text-slate-600 dark:text-slate-300 space-y-1">
-                          <div className="flex items-center gap-2 font-bold text-teal-700 dark:text-teal-400">
-                            <CheckCircle2 className="w-4 h-4 text-teal-600" />
-                            <span>Jadwal Fleksibel Aktif untuk Seluruh Tim Proyek Ini</span>
+                        <div className="p-4 rounded-xl bg-white dark:bg-slate-800/90 border border-teal-300 dark:border-teal-700/60 text-xs text-slate-600 dark:text-slate-300 space-y-2.5 shadow-xs">
+                          <div className="flex items-center gap-2 font-bold text-teal-800 dark:text-teal-300 text-sm">
+                            <CheckCircle2 className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
+                            <span>Jadwal Fleksibel Aktif: Zero Approval Keterlambatan & Pulang Cepat</span>
                           </div>
-                          <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                            Setiap presensi masuk dan pulang akan langsung tercatat sebagai <strong>TEPAT WAKTU (ON_TIME)</strong> kapan pun dilakukan. Jika teknisi check-in malam dan check-out keesokan harinya, sistem otomatis menutup sesi tersebut tanpa terhitung Alpa. Approval hanya berlaku jika presensi dilakukan di luar area radius Geofence site.
-                          </p>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 text-[11px]">
+                            <div className="p-2.5 rounded-lg bg-teal-50/70 dark:bg-teal-950/40 border border-teal-200/70 dark:border-teal-800/50">
+                              <span className="font-bold text-teal-900 dark:text-teal-200 block">⏰ Check-In Bebas (0 Approval)</span>
+                              <span className="text-teal-700 dark:text-teal-400 leading-tight block mt-0.5">
+                                Bebas masuk jam berapa pun (pagi/siang/malam). Langsung tercatat ON_TIME tanpa penalti atau form alasan keterlambatan.
+                              </span>
+                            </div>
+                            <div className="p-2.5 rounded-lg bg-teal-50/70 dark:bg-teal-950/40 border border-teal-200/70 dark:border-teal-800/50">
+                              <span className="font-bold text-teal-900 dark:text-teal-200 block">🚪 Check-Out Bebas (0 Approval)</span>
+                              <span className="text-teal-700 dark:text-teal-400 leading-tight block mt-0.5">
+                                Bebas pulang kapan pun tanpa hitungan pulang lebih awal. Tidak memerlukan approval PM maupun HR.
+                              </span>
+                            </div>
+                            <div className="p-2.5 rounded-lg bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200/70 dark:border-emerald-800/50">
+                              <span className="font-bold text-emerald-900 dark:text-emerald-200 block">🌙 Presensi Lintas Hari (Overnight)</span>
+                              <span className="text-emerald-700 dark:text-emerald-400 leading-tight block mt-0.5">
+                                Check-in malam ini dan check-out keesokan harinya otomatis dipasangkan tanpa terhitung Alpa.
+                              </span>
+                            </div>
+                            <div className="p-2.5 rounded-lg bg-amber-50/70 dark:bg-amber-950/40 border border-amber-200/70 dark:border-amber-800/50">
+                              <span className="font-bold text-amber-900 dark:text-amber-200 block">📍 Geofence Site Validation</span>
+                              <span className="text-amber-800 dark:text-amber-300 leading-tight block mt-0.5">
+                                Persetujuan (Approval) <strong>HANYA diwajibkan</strong> jika karyawan melakukan presensi di luar radius Geofence proyek.
+                              </span>
+                            </div>
+                          </div>
                         </div>
                       ) : (
                         <>
