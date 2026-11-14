@@ -1,5 +1,5 @@
 // DMJ HRIS — High Performance Progressive Web App (PWA) Service Worker
-const SW_VERSION = '2026.11.12-v6';
+const SW_VERSION = '2026.11.14-v7';
 const CACHE_NAME = `prime-hris-core-${SW_VERSION}`;
 
 // Core assets to pre-cache on install for instant native boot
@@ -125,6 +125,96 @@ self.addEventListener('fetch', (event) => {
         .catch(() => cachedResponse);
 
       return cachedResponse || fetchPromise;
+    })
+  );
+});
+
+// =========================================================================
+// PWA SYSTEM NOTIFICATION BAR (Android / iOS / Desktop Native Tray)
+// =========================================================================
+
+// 1. Message listener to trigger system notification via Service Worker
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SHOW_SYSTEM_NOTIFICATION') {
+    const { title, options } = event.data;
+    const notificationTitle = title || 'DMJ HRIS Notifikasi';
+    const notificationOptions = {
+      body: options?.body || 'Pemberitahuan dari sistem DMJ HRIS.',
+      icon: options?.icon || '/icons/icon-192x192.png',
+      badge: options?.badge || '/favicon.svg',
+      vibrate: options?.vibrate || [250, 100, 250],
+      tag: options?.tag || 'dmj-hris-notif',
+      renotify: true,
+      data: {
+        url: options?.url || options?.data?.url || '/',
+        timestamp: Date.now()
+      },
+      ...options
+    };
+
+    event.waitUntil(
+      self.registration.showNotification(notificationTitle, notificationOptions)
+    );
+  }
+});
+
+// 2. Web Push Listener for remote server events
+self.addEventListener('push', (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch (e) {
+    data = { title: 'DMJ HRIS System Alert', body: event.data ? event.data.text() : '' };
+  }
+
+  const title = data.title || 'DMJ HRIS Pemberitahuan';
+  const options = {
+    body: data.body || 'Pemberitahuan penting dari aplikasi DMJ HRIS.',
+    icon: data.icon || '/icons/icon-192x192.png',
+    badge: data.badge || '/favicon.svg',
+    vibrate: data.vibrate || [300, 150, 300],
+    tag: data.tag || 'dmj-hris-push',
+    renotify: true,
+    data: {
+      url: data.url || '/',
+      timestamp: Date.now()
+    },
+    actions: data.actions || [
+      { action: 'open', title: 'Buka Aplikasi' },
+      { action: 'dismiss', title: 'Tutup' }
+    ]
+  };
+
+  event.waitUntil(
+    self.registration.showNotification(title, options)
+  );
+});
+
+// 3. Notification Click: Opens/focuses the PWA window and navigates to the target URL
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+
+  if (event.action === 'dismiss') {
+    return;
+  }
+
+  const targetUrl = (event.notification.data && event.notification.data.url) ? event.notification.data.url : '/';
+
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      // If a window is already open, focus it and navigate
+      for (const client of clientList) {
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
+          if (client.url !== targetUrl) {
+            client.navigate(targetUrl);
+          }
+          return client.focus();
+        }
+      }
+      // Otherwise, open a new window
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(targetUrl);
+      }
     })
   );
 });

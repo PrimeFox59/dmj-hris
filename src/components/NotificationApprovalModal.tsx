@@ -38,6 +38,10 @@ import {
   isFinanceEmployee, 
   UserAuthorityContext 
 } from '../utils/approvalAuthorityHelper';
+import { 
+  getNotificationPermission, 
+  requestNotificationPermission 
+} from '../utils/pwaNotificationService';
 
 interface NotificationApprovalModalProps {
   isOpen: boolean;
@@ -133,6 +137,7 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
   // Modal active tab: 'reviews' | 'notifications' | 'new_request'
   const [activeTab, setActiveTab] = useState<'reviews' | 'notifications' | 'new_request'>('reviews');
   const [filterType, setFilterType] = useState<string>('ALL');
+  const [notificationPerm, setNotificationPerm] = useState<NotificationPermission | 'unsupported'>(() => getNotificationPermission());
 
   // Review confirmation / note state
   const [activeReviewAction, setActiveReviewAction] = useState<{
@@ -578,6 +583,36 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* PWA System Notification Bar Quick Enable Banner */}
+        {notificationPerm !== 'granted' && notificationPerm !== 'unsupported' && (
+          <div className="mx-5 sm:mx-6 mt-3 p-3 rounded-2xl bg-gradient-to-r from-orange-50 via-amber-50 to-indigo-50 border border-orange-200/80 flex items-center justify-between gap-3 text-xs shrink-0 shadow-2xs">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-[#FF6B00] text-white flex items-center justify-center shrink-0 shadow-xs">
+                <Bell className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="font-bold text-slate-900 leading-tight flex items-center gap-1.5">
+                  <span>Aktifkan Notifikasi di Bar HP (Status Bar & Layar Kunci)</span>
+                  <span className="px-1.5 py-0.2 rounded text-[9.5px] font-mono-code font-bold bg-orange-100 text-[#FF6B00] border border-orange-200">PWA</span>
+                </p>
+                <p className="text-[11px] text-slate-600 mt-0.5">
+                  Dapatkan pengingat otomatis absen masuk/pulang, approval atasan, dan info kasbon langsung di notif tray HP Anda.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                const res = await requestNotificationPermission();
+                setNotificationPerm(res);
+              }}
+              className="px-3.5 py-1.5 rounded-xl bg-[#FF6B00] hover:bg-[#e05e00] text-white font-bold text-xs shrink-0 cursor-pointer shadow-xs active:scale-95 transition-all whitespace-nowrap"
+            >
+              Aktifkan
+            </button>
+          </div>
+        )}
 
         {/* Modal Sub-Tabs Switcher */}
         <div className="px-5 sm:px-6 pt-3 pb-2 bg-slate-50/70 border-b border-slate-200/70 flex items-center justify-between gap-2 overflow-x-auto shrink-0">

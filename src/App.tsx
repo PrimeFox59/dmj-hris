@@ -28,6 +28,12 @@ import { PwaInstallPrompt } from './components/PwaInstallPrompt';
 import { PwaUpdateToast } from './components/PwaUpdateToast';
 import { BiometricDailyReminderModal } from './components/BiometricDailyReminderModal';
 import { BiometricEnrollmentModal } from './components/BiometricEnrollmentModal';
+import { 
+  showSystemNotification, 
+  evaluateAttendanceReminder, 
+  requestNotificationPermission, 
+  getNotificationPermission 
+} from './utils/pwaNotificationService';
 
 import {
   INITIAL_EMPLOYEES,
@@ -665,6 +671,25 @@ export function App() {
         const { id, status, reviewNote, reviewedBy, item } = packet.payload;
         setApprovals(prev => prev.map(a => a.id === id ? { ...a, status, reviewNote, reviewedBy, ...(item || {}) } : a));
         showLiveToast(`Status Pengajuan Diperbarui: ${status} oleh ${reviewedBy || 'Atasan'}`, 'info');
+
+        // PWA System Notification Bar (Alert on mobile phone status bar / lockscreen)
+        const activeUser = currentUserRef.current;
+        if (activeUser && (item?.employeeId === activeUser.id || (activeUser.nik && item?.employeeNik === activeUser.nik))) {
+          const isApproved = status === 'APPROVED';
+          const isKasbon = item?.type === 'KASBON' || (item?.title && item.title.includes('Kasbon'));
+          const notifTitle = isKasbon
+            ? (isApproved ? '💳 Kasbon Pribadi Dicairkan!' : '❌ Pengajuan Kasbon Ditolak')
+            : (isApproved ? '✅ Pengajuan Disetujui' : status === 'REJECTED' ? '❌ Pengajuan Ditolak' : '⚠️ Revisi Pengajuan Diminta');
+          const notifBody = isKasbon && item?.kasbonData?.amount
+            ? `Kasbon Rp ${item.kasbonData.amount.toLocaleString('id-ID')} telah ${isApproved ? 'disetujui & dicairkan oleh Finance' : 'ditolak'}. ${reviewNote ? `Catatan: ${reviewNote}` : ''}`
+            : `${item?.title || 'Pengajuan'} telah ${status.toLowerCase()} oleh ${reviewedBy || 'Atasan'}. ${reviewNote ? `Catatan: ${reviewNote}` : ''}`;
+
+          showSystemNotification(notifTitle, {
+            body: notifBody,
+            tag: `approval-update-${id}`,
+            url: '/?tab=approvals'
+          });
+        }
       } else if (packet.type === 'APPROVAL_SUBMITTED') {
         const newItem: ApprovalItem = packet.payload;
         if (newItem && newItem.id) {
@@ -678,6 +703,26 @@ export function App() {
             return [newItem, ...prev];
           });
           showLiveToast(`Pengajuan Baru Masuk: ${newItem.employeeName} (${newItem.type})`, 'info');
+
+          // PWA System Notification Bar (Alert to approvers on phone status bar)
+          const activeUser = currentUserRef.current;
+          if (activeUser && activeUser.id !== newItem.employeeId) {
+            const isFinItem = newItem.type === 'KASBON' || newItem.type === 'SLIP_ACCESS';
+            const isFinUser = isFinanceEmployee(activeUser);
+            const isHrUser = isHrEmployee(activeUser);
+            const sysRole = getEffectiveSystemRole(activeUser);
+            const isSuperOrAdmin = sysRole === 'superuser' || sysRole === 'admin';
+            const isPmOfItem = Boolean(activeUser.id === newItem.projectManagerId);
+            const shouldAlert = (isFinItem && isFinUser) || (!isFinItem && (isHrUser || isSuperOrAdmin || isPmOfItem));
+
+            if (shouldAlert) {
+              showSystemNotification(`🔔 Pengajuan Baru: ${newItem.employeeName}`, {
+                body: `${newItem.title} (${newItem.department || 'Operasional'}). Buka untuk review & persetujuan.`,
+                tag: `approval-new-${newItem.id}`,
+                url: '/?tab=approvals'
+              });
+            }
+          }
         }
       } else if (packet.type === 'EMPLOYEE_SAVED' || packet.type === 'EMPLOYEE_UPDATED') {
         const updatedEmp: Employee = packet.payload;
@@ -808,6 +853,30 @@ export function App() {
 
     return () => unsub();
   }, []);
+
+  // Periodic PWA Attendance Check-In / Check-Out Reminders (Native Notification Bar)
+  useEffect(() => {
+    if (!currentUser || isAuthChecking || isKioskPortalActive) return;
+
+    const checkReminder = () => {
+      const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date());
+      const todayAtt = attendances.find(a => 
+        (a.employeeId === currentUser.id || (currentUser.nik && a.employeeNik === currentUser.nik)) && 
+        a.date === todayStr
+      );
+      const userProject = projects.find(p => p.id === currentUser.assignedProjectId || p.code === currentUser.assignedProjectId);
+      evaluateAttendanceReminder(currentUser, todayAtt, userProject);
+    };
+
+    // Run once after boot, then check every 60 seconds
+    const initialTimer = setTimeout(checkReminder, 3000);
+    const interval = setInterval(checkReminder, 60000);
+
+    return () => {
+      clearTimeout(initialTimer);
+      clearInterval(interval);
+    };
+  }, [currentUser, attendances, projects, isAuthChecking, isKioskPortalActive]);
 
   // Only launch Tour Demo if explicitly requested via query parameter (?tour=true)
   useEffect(() => {

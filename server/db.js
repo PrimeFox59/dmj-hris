@@ -1816,7 +1816,24 @@ export function updateApproval(id, status, reviewNote, reviewedBy = 'Direksi / H
       item.financeApprovedAt = now;
       item.targetApproverRole = 'FINANCE';
     }
+
+    // If KASBON: tandai kasbonData sebagai disetujui / dicairkan (DISBURSED)
+    if (item.type === 'KASBON') {
+      if (item.kasbonData) {
+        item.kasbonData.status = 'DISBURSED';
+        item.kasbonData.disbursedAt = now;
+        item.kasbonData.disbursedBy = reviewedBy;
+        item.kasbonData.hrApprovedBy = reviewedBy;
+        item.kasbonData.hrApprovedAt = now;
+      }
+      item.financeApprovedBy = reviewedBy;
+      item.financeApprovedAt = now;
+      item.targetApproverRole = 'FINANCE';
+    }
   } else {
+    if (item.type === 'KASBON' && item.kasbonData) {
+      item.kasbonData.status = 'REJECTED';
+    }
     if (isPmStage) {
       item.pmReviewNote = reviewNote || null;
     } else {

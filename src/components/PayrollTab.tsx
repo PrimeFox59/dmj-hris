@@ -92,7 +92,7 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
     return localStorage.getItem('prime_payroll_selected_period') || 'Periode Oktober 2026';
   });
   const [currentProjectFilter, setCurrentProjectFilter] = useState<string>(selectedProjectId);
-  const [activeSubView, setActiveSubView] = useState<'REKAP_GAJI' | 'ALOKASI_PROYEK' | 'PROYEKSI_EAC'>('REKAP_GAJI');
+  const [activeSubView, setActiveSubView] = useState<'REKAP_GAJI' | 'ALOKASI_PROYEK' | 'PROYEKSI_EAC' | 'KASBON_PRIBADI'>('REKAP_GAJI');
   const [searchQuery, setSearchQuery] = useState('');
   const [validationFilter, setValidationFilter] = useState<'ALL' | 'PENDING' | 'VALIDATED'>('ALL');
 
@@ -189,6 +189,109 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
   const [kasbonAccountHolder, setKasbonAccountHolder] = useState<string>('');
   const [kasbonSuccessMsg, setKasbonSuccessMsg] = useState<string | null>(null);
   const [kasbonSearchQuery, setKasbonSearchQuery] = useState<string>('');
+
+  const handleCreateKasbonDirect = (e: React.FormEvent) => {
+    e.preventDefault();
+    const emp = employees.find(x => x.id === kasbonEmpId);
+    if (!emp) return;
+
+    const installmentCount = kasbonRepaymentType === 'TOTAL_BULANAN' ? 1 : Math.max(2, kasbonInstallments);
+    const monthlyAmt = Math.round(kasbonAmount / installmentCount);
+    const now = new Date();
+    const nowIso = now.toISOString();
+
+    const monthNamesIndo = [
+      'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+    ];
+    const startMonthIdx = now.getMonth();
+    const startYear = now.getFullYear();
+
+    const schedules: KasbonInstallmentSchedule[] = [];
+    for (let i = 1; i <= installmentCount; i++) {
+      const curM = (startMonthIdx + i - 1) % 12;
+      const curY = startYear + Math.floor((startMonthIdx + i - 1) / 12);
+      const pLabel = `Periode ${monthNamesIndo[curM]} ${curY}`;
+      schedules.push({
+        installmentNumber: i,
+        period: pLabel,
+        amount: i === installmentCount ? kasbonAmount - (monthlyAmt * (installmentCount - 1)) : monthlyAmt,
+        isDeducted: false
+      });
+    }
+
+    const assignedProj = projects.find(p => p.id === emp.assignedProjectId || p.code === emp.assignedProjectId);
+    const newRecord: KasbonRecord = {
+      id: `KSB-${Date.now().toString().slice(-6)}`,
+      employeeId: emp.id,
+      employeeName: emp.name,
+      employeeNik: emp.nik,
+      department: emp.department,
+      position: emp.position,
+      projectId: assignedProj?.id,
+      projectCode: assignedProj?.code,
+      projectName: assignedProj?.name,
+      amount: kasbonAmount,
+      reason: kasbonReason || 'Kasbon pribadi karyawan',
+      repaymentType: kasbonRepaymentType,
+      totalInstallments: installmentCount,
+      monthlyDeduction: monthlyAmt,
+      startPeriod: schedules[0]?.period || selectedPeriod,
+      disbursementBankName: kasbonBankName,
+      disbursementAccountNumber: kasbonAccountNumber,
+      disbursementAccountHolder: kasbonAccountHolder || emp.name,
+      status: 'DISBURSED',
+      submittedAt: nowIso,
+      disbursedBy: currentUser?.name || 'Finance DMJ',
+      disbursedAt: nowIso,
+      totalPaid: 0,
+      remainingBalance: kasbonAmount,
+      installments: schedules,
+      notes: 'Pencairan langsung oleh Divisi Finance'
+    };
+
+    saveKasbonList([newRecord, ...localKasbonRecords]);
+    setIsKasbonModalOpen(false);
+    setKasbonReason('');
+    setKasbonSuccessMsg(`Kasbon Rp ${kasbonAmount.toLocaleString('id-ID')} untuk ${emp.name} berhasil dicatat & dicairkan!`);
+    setTimeout(() => setKasbonSuccessMsg(null), 4000);
+  };
+
+  const handleToggleInstallment = (kasbonId: string, instNum: number) => {
+    const updated = localKasbonRecords.map(k => {
+      if (k.id !== kasbonId) return k;
+      const nextInst = k.installments.map(inst => {
+        if (inst.installmentNumber === instNum) {
+          const nextDeducted = !inst.isDeducted;
+          return {
+            ...inst,
+            isDeducted: nextDeducted,
+            deductedAt: nextDeducted ? new Date().toISOString().slice(0, 10) : undefined
+          };
+        }
+        return inst;
+      });
+
+      const totalPaid = nextInst.filter(i => i.isDeducted).reduce((sum, i) => sum + i.amount, 0);
+      const remainingBalance = Math.max(0, k.amount - totalPaid);
+      const isCompleted = remainingBalance === 0;
+
+      const updatedRecord: KasbonRecord = {
+        ...k,
+        installments: nextInst,
+        totalPaid,
+        remainingBalance,
+        status: isCompleted ? 'COMPLETED' : 'DISBURSED'
+      };
+
+      if (selectedKasbonDetail && selectedKasbonDetail.id === kasbonId) {
+        setSelectedKasbonDetail(updatedRecord);
+      }
+      return updatedRecord;
+    });
+
+    saveKasbonList(updated);
+  };
 
   // =========================================================================
   // RANGE DATE OF WORKING DAY & CUTOFF STATE
@@ -388,7 +491,7 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
 
   // Lock subview to personal slip for staff
   useEffect(() => {
-    if (!canManagePayroll && activeSubView !== 'REKAP_GAJI') {
+    if (!canManagePayroll && activeSubView !== 'REKAP_GAJI' && activeSubView !== 'KASBON_PRIBADI') {
       setActiveSubView('REKAP_GAJI');
     }
   }, [canManagePayroll, activeSubView]);
@@ -1311,8 +1414,11 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                 { id: 'REKAP_GAJI', label: 'Rekap Gaji & Slip', icon: Banknote },
                 ...(canManagePayroll ? [
                   { id: 'ALOKASI_PROYEK', label: 'Alokasi Proyek', icon: Briefcase },
-                  { id: 'PROYEKSI_EAC', label: 'Proyeksi EAC', icon: TrendingUp }
-                ] : [])
+                  { id: 'PROYEKSI_EAC', label: 'Proyeksi EAC', icon: TrendingUp },
+                  { id: 'KASBON_PRIBADI', label: 'Kasbon & Cicilan', icon: CreditCard }
+                ] : [
+                  { id: 'KASBON_PRIBADI', label: 'Kasbon & Cicilan Saya', icon: CreditCard }
+                ])
               ].map(view => {
                 const Icon = view.icon;
                 const isActive = activeSubView === view.id;
@@ -1903,6 +2009,275 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                 );
               })}
             </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* SUBVIEW 4: KASBON PRIBADI & SKEMA CICILAN POTONGAN PAYROLL                */}
+        {/* ========================================================================= */}
+        {activeSubView === 'KASBON_PRIBADI' && (
+          <div className="p-4 sm:p-5 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-black text-slate-900 tracking-tight flex items-center gap-2">
+                  <CreditCard className="w-4 h-4 text-[#FF6B00]" />
+                  Pinjaman Kasbon Pribadi & Skema Cicilan Payroll
+                </h2>
+                <p className="text-xs text-slate-500">
+                  {canManagePayroll
+                    ? 'Manajemen pinjaman kasbon karyawan, otorisasi Finance, dan otomatisasi pemotongan angsuran pada slip gaji.'
+                    : 'Rincian pinjaman kasbon aktif, sisa pokok angsuran, dan riwayat potongan gaji bulanan Anda.'}
+                </p>
+              </div>
+
+              {canManagePayroll && (
+                <button
+                  type="button"
+                  onClick={() => setIsKasbonModalOpen(true)}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-bold shadow-md shadow-emerald-500/20 flex items-center gap-2 cursor-pointer active:scale-95 transition-all w-fit"
+                >
+                  <CreditCard className="w-4 h-4" />
+                  <span>+ Tambah Kasbon Baru</span>
+                </button>
+              )}
+            </div>
+
+            {/* Success alert message */}
+            {kasbonSuccessMsg && (
+              <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-300 text-emerald-900 text-xs font-semibold flex items-center gap-2 animate-in fade-in">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{kasbonSuccessMsg}</span>
+              </div>
+            )}
+
+            {/* 4 Metrics Summary Cards */}
+            {(() => {
+              const relevantKasbons = canManagePayroll
+                ? allKasbonRecords
+                : allKasbonRecords.filter(k => k.employeeId === currentUser?.id || (currentUser?.nik && k.employeeNik === currentUser.nik));
+              
+              const totalDisbursed = relevantKasbons
+                .filter(k => k.status === 'DISBURSED' || k.status === 'COMPLETED')
+                .reduce((acc, k) => acc + k.amount, 0);
+
+              const totalRemaining = relevantKasbons
+                .filter(k => k.status === 'DISBURSED')
+                .reduce((acc, k) => acc + k.remainingBalance, 0);
+
+              const totalPeriodDeduction = relevantKasbons
+                .filter(k => k.status === 'DISBURSED')
+                .reduce((acc, k) => {
+                  const inst = k.installments?.find(i => !i.isDeducted && i.period.toLowerCase().trim() === selectedPeriod.toLowerCase().trim());
+                  return acc + (inst ? inst.amount : (k.repaymentType === 'TOTAL_BULANAN' ? k.remainingBalance : k.monthlyDeduction));
+                }, 0);
+
+              const activeEmpCount = new Set(
+                relevantKasbons.filter(k => k.status === 'DISBURSED').map(k => k.employeeId)
+              ).size;
+
+              return (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 shadow-2xs">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Total Kasbon Dicairkan</span>
+                    <span className="text-base font-black text-slate-900 font-mono-code">Rp {totalDisbursed.toLocaleString('id-ID')}</span>
+                    <span className="text-[10px] text-slate-400 block mt-0.5">Kumulatif pinjaman sah</span>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200 shadow-2xs">
+                    <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block mb-1">Sisa Pokok Belum Lunas</span>
+                    <span className="text-base font-black text-amber-900 font-mono-code">Rp {totalRemaining.toLocaleString('id-ID')}</span>
+                    <span className="text-[10px] text-amber-700 block mt-0.5">Piutang berjalan karyawan</span>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl bg-emerald-50/80 border border-emerald-200 shadow-2xs">
+                    <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block mb-1">Potongan {selectedPeriod.replace('Periode ', '')}</span>
+                    <span className="text-base font-black text-emerald-900 font-mono-code">Rp {totalPeriodDeduction.toLocaleString('id-ID')}</span>
+                    <span className="text-[10px] text-emerald-700 block mt-0.5">Otomatis potong slip gaji</span>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl bg-indigo-50/80 border border-indigo-200 shadow-2xs">
+                    <span className="text-[10px] font-bold text-indigo-800 uppercase tracking-wider block mb-1">Karyawan Berjalan</span>
+                    <span className="text-base font-black text-indigo-900 font-mono-code">{activeEmpCount} Orang</span>
+                    <span className="text-[10px] text-indigo-700 block mt-0.5">Memiliki pinjaman aktif</span>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Filter & Search Bar */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 pt-1">
+              <div className="flex items-center gap-1.5 flex-wrap w-full sm:w-auto">
+                {[
+                  { id: 'ALL', label: 'Semua Status' },
+                  { id: 'DISBURSED', label: 'Berjalan / Aktif' },
+                  { id: 'PENDING', label: 'Menunggu Approval' },
+                  { id: 'COMPLETED', label: 'Lunas' }
+                ].map(f => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setKasbonFilterStatus(f.id)}
+                    className={`px-3 py-1 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                      kasbonFilterStatus === f.id
+                        ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
+                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="relative w-full sm:w-64">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  placeholder="Cari karyawan, NIK, ID..."
+                  value={kasbonSearchQuery}
+                  onChange={e => setKasbonSearchQuery(e.target.value)}
+                  className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs text-slate-800 focus:outline-none focus:border-[#FF6B00]"
+                />
+              </div>
+            </div>
+
+            {/* Table of Kasbon Records */}
+            {(() => {
+              const baseList = canManagePayroll
+                ? allKasbonRecords
+                : allKasbonRecords.filter(k => k.employeeId === currentUser?.id || (currentUser?.nik && k.employeeNik === currentUser.nik));
+
+              const filteredList = baseList.filter(k => {
+                if (kasbonFilterStatus !== 'ALL' && k.status !== kasbonFilterStatus) return false;
+                if (kasbonSearchQuery.trim()) {
+                  const q = kasbonSearchQuery.toLowerCase();
+                  const matchName = k.employeeName?.toLowerCase().includes(q);
+                  const matchNik = k.employeeNik?.includes(q);
+                  const matchId = k.id?.toLowerCase().includes(q);
+                  const matchProj = k.projectName?.toLowerCase().includes(q) || k.projectCode?.toLowerCase().includes(q);
+                  if (!matchName && !matchNik && !matchId && !matchProj) return false;
+                }
+                return true;
+              });
+
+              if (filteredList.length === 0) {
+                return (
+                  <div className="p-8 text-center bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2">
+                    <CreditCard className="w-8 h-8 text-slate-300 mx-auto" />
+                    <p className="text-xs font-bold text-slate-700">Tidak ada data pinjaman kasbon</p>
+                    <p className="text-[11px] text-slate-400">
+                      {canManagePayroll
+                        ? 'Gunakan tombol "+ Tambah Kasbon Baru" di atas untuk mencatat kasbon karyawan.'
+                        : 'Anda belum memiliki riwayat pengajuan pinjaman kasbon.'}
+                    </p>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="overflow-x-auto rounded-2xl border border-slate-200 shadow-2xs">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50/90 text-slate-500 uppercase font-mono-code text-[10px] tracking-wider border-b border-slate-200">
+                      <tr>
+                        <th className="px-3 py-2.5">Karyawan & Penugasan</th>
+                        <th className="px-3 py-2.5">Nominal Kasbon</th>
+                        <th className="px-3 py-2.5">Skema Potongan</th>
+                        <th className="px-3 py-2.5">Cicilan / Bulan</th>
+                        <th className="px-3 py-2.5">Pelunasan & Sisa Pokok</th>
+                        <th className="px-3 py-2.5">Tujuan Pencairan</th>
+                        <th className="px-3 py-2.5">Status</th>
+                        <th className="px-3 py-2.5 text-center">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {filteredList.map(k => {
+                        const paidPercent = Math.min(100, Math.round((k.totalPaid / k.amount) * 100));
+                        return (
+                          <tr key={k.id} className="hover:bg-slate-50/80 transition-colors">
+                            <td className="px-3 py-2.5">
+                              <div className="font-bold text-slate-900">{k.employeeName}</div>
+                              <div className="text-[10px] text-slate-400 font-mono-code flex items-center gap-1">
+                                <span>{k.employeeNik || k.employeeId}</span>
+                                {k.projectCode && (
+                                  <span className="px-1 py-0.2 rounded bg-orange-50 border border-orange-200 text-[#FF6B00] font-bold text-[9px]">
+                                    {k.projectCode}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            <td className="px-3 py-2.5 font-mono-code font-bold text-slate-900">
+                              Rp {k.amount.toLocaleString('id-ID')}
+                            </td>
+
+                            <td className="px-3 py-2.5">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold font-mono-code ${
+                                k.repaymentType === 'TOTAL_BULANAN'
+                                  ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                                  : 'bg-purple-100 text-purple-800 border border-purple-200'
+                              }`}>
+                                {k.repaymentType === 'TOTAL_BULANAN' ? 'Lunas 1 Bulan' : `Cicilan ${k.totalInstallments}x Bulan`}
+                              </span>
+                            </td>
+
+                            <td className="px-3 py-2.5 font-mono-code font-bold text-emerald-700">
+                              Rp {k.monthlyDeduction.toLocaleString('id-ID')}
+                            </td>
+
+                            <td className="px-3 py-2.5 min-w-[150px]">
+                              <div className="flex justify-between text-[10px] font-mono-code mb-1">
+                                <span className="text-slate-500">Terbayar: Rp {k.totalPaid.toLocaleString('id-ID')}</span>
+                                <span className="font-bold text-slate-800">{paidPercent}%</span>
+                              </div>
+                              <div className="w-full h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all ${
+                                    paidPercent === 100 ? 'bg-emerald-500' : 'bg-[#FF6B00]'
+                                  }`}
+                                  style={{ width: `${paidPercent}%` }}
+                                />
+                              </div>
+                              <div className="text-[9.5px] text-amber-700 font-mono-code font-bold mt-0.5">
+                                Sisa: Rp {k.remainingBalance.toLocaleString('id-ID')}
+                              </div>
+                            </td>
+
+                            <td className="px-3 py-2.5 text-[11px]">
+                              <div className="font-bold text-slate-800">{k.disbursementBankName || 'BCA'}</div>
+                              <div className="text-[10px] font-mono-code text-slate-500">{k.disbursementAccountNumber || '-'}</div>
+                              <div className="text-[9px] text-slate-400 truncate max-w-[120px]">a/n {k.disbursementAccountHolder || k.employeeName}</div>
+                            </td>
+
+                            <td className="px-3 py-2.5">
+                              <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold font-mono-code uppercase ${
+                                k.status === 'COMPLETED'
+                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                  : k.status === 'DISBURSED'
+                                  ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                                  : k.status === 'PENDING'
+                                  ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                  : 'bg-rose-100 text-rose-800 border border-rose-200'
+                              }`}>
+                                {k.status === 'COMPLETED' ? 'LUNAS' : k.status === 'DISBURSED' ? 'BERJALAN' : k.status === 'PENDING' ? 'MENUNGGU APPROVAL' : 'DITOLAK'}
+                              </span>
+                            </td>
+
+                            <td className="px-3 py-2.5 text-center">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedKasbonDetail(k)}
+                                className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] cursor-pointer transition-all"
+                              >
+                                Lihat Jadwal
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
           </div>
         )}
       </div>
@@ -2811,6 +3186,370 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
           onSaveCorrection={handleSaveTimesheetCorrection}
           salaryRules={salaryRules}
         />
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 5: TAMBAH PINJAMAN KASBON BARU (DIVISI FINANCE / HR)                 */}
+      {/* ========================================================================= */}
+      {isKasbonModalOpen && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed inset-0 z-[10000] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in"
+          onClick={() => setIsKasbonModalOpen(false)}
+        >
+          <div
+            className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-slate-200 relative my-auto modal-dialog-animate max-h-[92vh] overflow-y-auto custom-scrollbar"
+            onClick={e => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setIsKasbonModalOpen(false)}
+              className="absolute top-5 right-5 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-all cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center gap-2.5 mb-4">
+              <div className="p-2.5 rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-200">
+                <CreditCard className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-slate-900 tracking-tight">
+                  Pemberian Pinjaman Kasbon Pribadi
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Otorisasi langsung Divisi Finance & penjadwalan cicilan payroll otomatis.
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleCreateKasbonDirect} className="space-y-4 text-xs">
+              {/* Pilih Karyawan */}
+              <div>
+                <label className="block text-slate-700 font-bold mb-1">
+                  Pilih Karyawan Penerima:
+                </label>
+                <select
+                  value={kasbonEmpId}
+                  onChange={e => {
+                    setKasbonEmpId(e.target.value);
+                    const target = employees.find(x => x.id === e.target.value);
+                    if (target?.bankAccount) {
+                      setKasbonBankName(target.bankAccount.bankName || 'BCA');
+                      setKasbonAccountNumber(target.bankAccount.accountNumber || '');
+                      setKasbonAccountHolder(target.bankAccount.accountHolder || target.name);
+                    }
+                  }}
+                  className="w-full bg-slate-50 focus:bg-white border border-slate-200 rounded-xl px-3 py-2 text-slate-900 font-semibold focus:outline-none focus:border-[#FF6B00]"
+                  required
+                >
+                  {employees.map(emp => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.name} ({emp.nik}) — {emp.position}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Nominal Kasbon */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-slate-700 font-bold">
+                    Nominal Pinjaman Pokok (Rp):
+                  </label>
+                  <span className="font-mono-code font-bold text-emerald-700 text-sm">
+                    Rp {kasbonAmount.toLocaleString('id-ID')}
+                  </span>
+                </div>
+                <input
+                  type="number"
+                  step="50000"
+                  min="100000"
+                  max="50000000"
+                  value={kasbonAmount}
+                  onChange={e => setKasbonAmount(Math.max(0, Number(e.target.value)))}
+                  className="w-full bg-slate-50 focus:bg-white border border-slate-200 rounded-xl px-3 py-2 font-mono-code font-bold text-slate-900 text-sm focus:outline-none focus:border-[#FF6B00]"
+                  required
+                />
+                <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                  {[500000, 1000000, 2000000, 3000000, 5000000].map(amt => (
+                    <button
+                      key={amt}
+                      type="button"
+                      onClick={() => setKasbonAmount(amt)}
+                      className={`px-2 py-0.5 rounded-lg text-[10px] font-mono-code font-semibold border cursor-pointer transition-all ${
+                        kasbonAmount === amt
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      Rp {(amt / 1000).toLocaleString('id-ID')}rb
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Skema Pelunasan */}
+              <div>
+                <label className="block text-slate-700 font-bold mb-1">
+                  Metode Pemotongan Gaji:
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setKasbonRepaymentType('TOTAL_BULANAN')}
+                    className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${
+                      kasbonRepaymentType === 'TOTAL_BULANAN'
+                        ? 'bg-emerald-50/50 border-emerald-500 shadow-xs ring-2 ring-emerald-400/20'
+                        : 'bg-slate-50 border-slate-200 text-slate-600'
+                    }`}
+                  >
+                    <span className="font-bold text-slate-900 block text-xs">Lunas 1 Bulan</span>
+                    <span className="text-[10px] text-slate-500">Dipotong penuh bulan depan.</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setKasbonRepaymentType('CICILAN')}
+                    className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${
+                      kasbonRepaymentType === 'CICILAN'
+                        ? 'bg-emerald-50/50 border-emerald-500 shadow-xs ring-2 ring-emerald-400/20'
+                        : 'bg-slate-50 border-slate-200 text-slate-600'
+                    }`}
+                  >
+                    <span className="font-bold text-slate-900 block text-xs">Cicilan Bertahap</span>
+                    <span className="text-[10px] text-slate-500">Angsuran 2 s/d 12 bulan.</span>
+                  </button>
+                </div>
+
+                {kasbonRepaymentType === 'CICILAN' && (
+                  <div className="mt-2.5">
+                    <label className="text-[10.5px] font-bold text-slate-600 uppercase block mb-1">
+                      Pilihan Tenor Cicilan:
+                    </label>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {[2, 3, 4, 6, 10, 12].map(tenor => (
+                        <button
+                          key={tenor}
+                          type="button"
+                          onClick={() => setKasbonInstallments(tenor)}
+                          className={`px-3 py-1 rounded-xl text-xs font-mono-code font-bold border cursor-pointer transition-all ${
+                            kasbonInstallments === tenor
+                              ? 'bg-emerald-600 text-white border-emerald-600'
+                              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          {tenor}x Bln
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Rincian Rekening Transfer */}
+              <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2">
+                <span className="font-bold text-slate-800 block text-[11px]">
+                  Rekening Tujuan Pencairan
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div>
+                    <label className="text-[9.5px] font-bold text-slate-500 uppercase block mb-0.5">Nama Bank</label>
+                    <input
+                      type="text"
+                      value={kasbonBankName}
+                      onChange={e => setKasbonBankName(e.target.value)}
+                      className="w-full rounded-lg px-2.5 py-1.5 text-xs border border-slate-200 bg-white"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9.5px] font-bold text-slate-500 uppercase block mb-0.5">No. Rekening</label>
+                    <input
+                      type="text"
+                      value={kasbonAccountNumber}
+                      onChange={e => setKasbonAccountNumber(e.target.value)}
+                      className="w-full rounded-lg px-2.5 py-1.5 text-xs font-mono-code border border-slate-200 bg-white"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9.5px] font-bold text-slate-500 uppercase block mb-0.5">Atas Nama</label>
+                    <input
+                      type="text"
+                      value={kasbonAccountHolder}
+                      onChange={e => setKasbonAccountHolder(e.target.value)}
+                      className="w-full rounded-lg px-2.5 py-1.5 text-xs border border-slate-200 bg-white"
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Keterangan */}
+              <div>
+                <label className="block text-slate-700 font-bold mb-1">
+                  Keterangan / Alasan Pinjaman:
+                </label>
+                <textarea
+                  rows={2}
+                  value={kasbonReason}
+                  onChange={e => setKasbonReason(e.target.value)}
+                  placeholder="Kebutuhan mendesak operasional / keluarga..."
+                  className="w-full bg-slate-50 focus:bg-white border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:outline-none focus:border-[#FF6B00]"
+                  required
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setIsKasbonModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-bold shadow-md shadow-emerald-500/20 flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  Simpan & Cairkan Kasbon
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 6: DETAIL JADWAL ANGSURAN CICILAN KASBON                             */}
+      {/* ========================================================================= */}
+      {selectedKasbonDetail && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed inset-0 z-[10000] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in"
+          onClick={() => setSelectedKasbonDetail(null)}
+        >
+          <div
+            className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-slate-200 relative my-auto modal-dialog-animate max-h-[92vh] overflow-y-auto custom-scrollbar"
+            onClick={e => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setSelectedKasbonDetail(null)}
+              className="absolute top-5 right-5 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-all cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center gap-2.5 mb-4">
+              <div className="p-2.5 rounded-2xl bg-purple-50 text-purple-600 border border-purple-200">
+                <CreditCard className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-slate-900 tracking-tight">
+                  Jadwal Angsuran & Pelunasan Kasbon
+                </h3>
+                <p className="text-xs text-slate-500">
+                  {selectedKasbonDetail.employeeName} • {selectedKasbonDetail.id}
+                </p>
+              </div>
+            </div>
+
+            {/* Loan Card Summary */}
+            <div className="p-3.5 rounded-2xl bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 text-xs space-y-2 mb-4">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-600">Total Pinjaman Pokok:</span>
+                <span className="font-mono-code font-bold text-slate-900 text-sm">
+                  Rp {selectedKasbonDetail.amount.toLocaleString('id-ID')}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-slate-600">Total Terbayar:</span>
+                <span className="font-mono-code font-bold text-emerald-700">
+                  Rp {selectedKasbonDetail.totalPaid.toLocaleString('id-ID')}
+                </span>
+              </div>
+              <div className="flex items-center justify-between pt-1 border-t border-purple-200/60">
+                <span className="text-slate-700 font-bold">Sisa Pokok:</span>
+                <span className="font-mono-code font-bold text-amber-900 text-sm">
+                  Rp {selectedKasbonDetail.remainingBalance.toLocaleString('id-ID')}
+                </span>
+              </div>
+              <div className="text-[10.5px] text-slate-500 pt-1">
+                Tujuan Transfer: <b>{selectedKasbonDetail.disbursementBankName}</b> {selectedKasbonDetail.disbursementAccountNumber} a/n {selectedKasbonDetail.disbursementAccountHolder || selectedKasbonDetail.employeeName}
+              </div>
+            </div>
+
+            {/* Installments Table */}
+            <div className="space-y-2">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                Tabel Angsuran per Periode Payroll:
+              </span>
+              <div className="rounded-xl border border-slate-200 overflow-hidden">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 text-slate-500 font-mono-code text-[10px] uppercase border-b border-slate-200">
+                    <tr>
+                      <th className="px-3 py-2">Cicilan</th>
+                      <th className="px-3 py-2">Periode Gaji</th>
+                      <th className="px-3 py-2">Nominal</th>
+                      <th className="px-3 py-2">Status</th>
+                      {canManagePayroll && <th className="px-3 py-2 text-center">Aksi</th>}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {selectedKasbonDetail.installments?.map((inst, idx) => (
+                      <tr key={idx} className={inst.isDeducted ? 'bg-emerald-50/40' : ''}>
+                        <td className="px-3 py-2 font-mono-code font-bold text-slate-900">
+                          Ke-{inst.installmentNumber}
+                        </td>
+                        <td className="px-3 py-2 text-slate-700 font-medium">
+                          {inst.period}
+                        </td>
+                        <td className="px-3 py-2 font-mono-code font-bold text-slate-900">
+                          Rp {inst.amount.toLocaleString('id-ID')}
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className={`px-2 py-0.5 rounded-full text-[9.5px] font-bold font-mono-code ${
+                            inst.isDeducted
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                              : 'bg-amber-100 text-amber-800 border border-amber-200'
+                          }`}>
+                            {inst.isDeducted ? 'TERPOTONG' : 'PENDING'}
+                          </span>
+                        </td>
+                        {canManagePayroll && (
+                          <td className="px-3 py-2 text-center">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleInstallment(selectedKasbonDetail.id, inst.installmentNumber)}
+                              className={`px-2 py-0.5 rounded-lg text-[10px] font-bold cursor-pointer transition-all ${
+                                inst.isDeducted
+                                  ? 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                                  : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                              }`}
+                            >
+                              {inst.isDeducted ? 'Batal Potong' : 'Tandai Lunas'}
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="pt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setSelectedKasbonDetail(null)}
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all cursor-pointer"
+              >
+                Tutup Rincian
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );
