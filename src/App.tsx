@@ -681,8 +681,8 @@ export function App() {
             const isApproved = status === 'APPROVED';
             const isKasbon = item?.type === 'KASBON' || (item?.title && item.title.includes('Kasbon'));
             const notifTitle = isKasbon
-              ? (isApproved ? '💳 Kasbon Pribadi Dicairkan!' : '❌ Pengajuan Kasbon Ditolak')
-              : (isApproved ? '✅ Pengajuan Disetujui' : status === 'REJECTED' ? '❌ Pengajuan Ditolak' : '⚠️ Revisi Pengajuan Diminta');
+              ? (isApproved ? '💳 Kasbon Pribadi Dicairkan! • DMJ HRIS' : '❌ Pengajuan Kasbon Ditolak • DMJ HRIS')
+              : (isApproved ? '✅ Pengajuan Disetujui • DMJ HRIS' : status === 'REJECTED' ? '❌ Pengajuan Ditolak • DMJ HRIS' : '⚠️ Revisi Pengajuan Diminta • DMJ HRIS');
             const notifBody = isKasbon && item?.kasbonData?.amount
               ? `Kasbon Rp ${item.kasbonData.amount.toLocaleString('id-ID')} telah ${isApproved ? 'disetujui & dicairkan oleh Finance' : 'ditolak'}. ${reviewNote ? `Catatan: ${reviewNote}` : ''}`
               : `${item?.title || 'Pengajuan'} telah ${status.toLowerCase()} oleh ${reviewedBy || 'Atasan'}. ${reviewNote ? `Catatan: ${reviewNote}` : ''}`;
@@ -723,7 +723,7 @@ export function App() {
               const shouldAlert = (isFinItem && isFinUser) || (!isFinItem && (isHrUser || isSuperOrAdmin || isPmOfItem));
 
               if (shouldAlert) {
-                showSystemNotification(`🔔 Pengajuan Baru: ${newItem.employeeName}`, {
+                showSystemNotification(`🔔 Pengajuan Baru: ${newItem.employeeName} • DMJ HRIS`, {
                   body: `${newItem.title} (${newItem.department || 'Operasional'}). Buka untuk review & persetujuan.`,
                   tag: `approval-new-${newItem.id}`,
                   url: '/?tab=approvals',
@@ -1159,7 +1159,7 @@ export function App() {
           'warn'
         );
 
-        showSystemNotification('✈️ Cuti Roster Ditutup Lebih Awal', {
+        showSystemNotification('✈️ Cuti Roster Ditutup Lebih Awal • DMJ HRIS', {
           body: `Presensi diterima. Cuti ditutup per ${returnDate}. Sisa ${forfeitedDays} hari HANGUS dan tidak diakumulasikan ke periode cuti berikutnya.`,
           tag: `early-return-${res.earlyReturnInfo.approvalId}`,
           url: '/?tab=approvals'
@@ -1709,8 +1709,8 @@ export function App() {
   if (isAuthChecking) {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-white p-4">
-        <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center font-black text-3xl shadow-xl shadow-blue-500/30 mb-4 animate-pulse">
-          P
+        <div className="h-14 px-3 py-1 rounded-2xl bg-[#233360] border border-[#2e427b] shadow-xl shadow-blue-900/40 mb-4 flex items-center justify-center animate-pulse">
+          <img src="/dmj-logo.png" alt="DMJ HRIS" className="h-9 w-auto object-contain" />
         </div>
         <div className="w-6 h-6 border-2 border-blue-400 border-t-white rounded-full animate-spin mb-3"></div>
         <p className="text-xs font-mono text-slate-400">Memverifikasi Sesi DMJ HRIS...</p>

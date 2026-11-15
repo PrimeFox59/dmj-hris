@@ -176,7 +176,7 @@ export const TOUR_STEPS: TourStep[] = [
     badge: 'Menu 2 • Geofencing Satelit',
     module: 'Presensi',
     icon: MapPin,
-    text: 'Modul GPS menghitung jarak matematis real-time antara posisi karyawan dengan titik kantor pusat & tech hub PRIME (radius toleransi maksimal 100 meter) atau lokasi proyek yang ditugaskan, memastikan karyawan berada di titik fisik yang sah.'
+    text: 'Modul GPS menghitung jarak matematis real-time antara posisi karyawan dengan titik kantor pusat / workshop DMJ (radius toleransi maksimal 100 meter) atau lokasi proyek yang ditugaskan, memastikan karyawan berada di titik fisik yang sah.'
   },
   {
     id: 'attendance-form',
@@ -283,7 +283,7 @@ export const TOUR_STEPS: TourStep[] = [
     badge: 'Menu 4 • Slip Gaji',
     module: 'Payroll',
     icon: FileSpreadsheet,
-    text: 'Daftar slip penggajian individu lengkap dengan rincian komponen pendapatan dan potongan. Dilengkapi tombol "Cetak Slip" untuk menghasilkan dokumen slip gaji resmi berlogo PRIME lengkap dengan QR Code validasi dokumen.'
+    text: 'Daftar slip penggajian individu lengkap dengan rincian komponen pendapatan dan potongan. Dilengkapi tombol "Cetak Slip" untuk menghasilkan dokumen slip gaji resmi berlogo PT Dwi Martha Jaya (DMJ HRIS) lengkap dengan QR Code validasi dokumen.'
   },
 
   // ==========================================

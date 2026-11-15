@@ -247,7 +247,7 @@ export async function notifyAttendanceSuccess(employee, record) {
   const timeLabel = isCheckOut ? 'Waktu Pulang' : 'Waktu Masuk';
   const dateStr = record.date || new Date().toISOString().substring(0, 10);
   const modeStr = record.mode === 'DINAS_LUAR' ? 'Dinas Luar Lapangan' : 'Work From Office (WFO)';
-  const locationStr = record.location?.address || 'Kantor Pusat & Site Proyek PRIME';
+  const locationStr = record.location?.address || 'Kantor Pusat & Site Proyek DMJ';
   const bioScore = record.biometricVerification?.matchScore
     ? `Biometrik Wajah Valid (${record.biometricVerification.matchScore}%)`
     : 'Presensi Kamera Digital Valid';
@@ -265,7 +265,7 @@ Presensi kehadiran Anda (*${typeLabel}*) telah berhasil dicatat ke sistem:
 
 Terima kasih atas kedisiplinan Anda. ${isCheckOut ? 'Hati-hati di jalan dan selamat beristirahat!' : 'Semangat beraktivitas hari ini!'}
 
-_Sistem HRIS Otomatis PT Prime Infinity Systems_
+_Sistem Otomatis DMJ HRIS • PT Dwi Martha Jaya_
 🌐 https://hris.primeprojectx.net`;
 
   return sendWhatsAppMessage(employee.phone, msg, {
@@ -288,7 +288,7 @@ export async function notifyAttendanceLate(employee, record, salaryRules = null,
   const cutoffStr = sched.cutoffTime || salaryRules?.cutoffTime || '08:15';
   const lateMins = record.lateMinutes || 15;
   const dateStr = record.date || new Date().toISOString().substring(0, 10);
-  const projectName = sched.projectName ? (sched.projectName + ' (' + sched.projectCode + ')') : 'Site Operasional PRIME';
+  const projectName = sched.projectName ? (sched.projectName + ' (' + sched.projectCode + ')') : 'Site Operasional DMJ';
 
   const msg = 
 '⚠️ *PEMBERITAHUAN KETERLAMBATAN KERJA - DMJ HRIS*\n' +
@@ -304,7 +304,7 @@ export async function notifyAttendanceLate(employee, record, salaryRules = null,
 'Jika keterlambatan disebabkan kendala lalu lintas darurat, tugas operasional mendadak di lapangan, atau kerusakan armada, Anda berhak mengajukan *Formulir Justifikasi Keterlambatan* pada menu Pengajuan:\n' +
 '🌐 https://hris.primeprojectx.net\n\n' +
 'Pengajuan yang disetujui Project Manager / HR Manager akan membebaskan Anda dari pemotongan tunjangan kedisiplinan.\n\n' +
-'_HR & Operational Control PT Prime Infinity Systems_';
+'_HR & Operational Control DMJ HRIS • PT Dwi Martha Jaya_';
 
   return sendWhatsAppMessage(employee.phone, msg, {
     recipientId: employee.id,
@@ -340,7 +340,7 @@ export async function notifyMorningReminder(employee, projectScheduleOrRules = n
 '⏳ *Batas Cutoff Masuk:* *' + cutoffStr + ' WIB* (Toleransi: ' + sched.lateGraceMinutes + ' menit)\n' +
 '📍 *Portal Presensi:* https://hris.primeprojectx.net\n\n' +
 'Pastikan GPS perangkat Anda aktif dan Anda telah berada di dalam geofence site penugasan. Selamat bekerja dan semoga hari Anda produktif!\n\n' +
-'_Departemen Sumber Daya Manusia PT Prime Infinity Systems_';
+'_Departemen HRD DMJ HRIS • PT Dwi Martha Jaya_';
 
   return sendWhatsAppMessage(employee.phone, msg, {
     recipientId: employee.id,
@@ -367,7 +367,7 @@ export async function notifyApproachingCutoff(employee, projectScheduleOrCutoff 
   const projectName = sched.projectName ? (sched.projectName + ' (' + sched.projectCode + ')') : 'Site Penugasan Proyek';
 
   const msg = 
-'⏰ *PERINGATAN: ANDA BELUM MELAKUKAN PRESENSI HARI INI!*\n' +
+'⏰ *PERINGATAN: ANDA BELUM MELAKUKAN PRESENSI HARI INI - DMJ HRIS*\n' +
 'Halo *' + employee.name + '* (' + employee.id + '),\n\n' +
 'Hingga pukul *' + nowWib + ' WIB*, sistem mencatat Anda *BELUM* melakukan check-in presensi masuk hari ini (' + todayStr + ').\n\n' +
 '🏢 *Proyek Penugasan:* ' + projectName + '\n' +
@@ -376,7 +376,7 @@ export async function notifyApproachingCutoff(employee, projectScheduleOrCutoff 
 'Segera buka portal presensi kamera sebelum terhitung terlambat atau mangkir (Alpha):\n' +
 '🌐 https://hris.primeprojectx.net\n\n' +
 '_Abaikan pesan ini jika Anda sedang dalam status Cuti Tahunan / Izin Sakit yang telah disetujui HRD._\n\n' +
-'_Manajemen Operasional PT Prime Infinity Systems_';
+'_Manajemen Operasional DMJ HRIS • PT Dwi Martha Jaya_';
 
   return sendWhatsAppMessage(employee.phone, msg, {
     recipientId: employee.id,
@@ -416,7 +416,7 @@ export async function notifyOverdueCheckIn(employee, projectSchedule = null, dat
 'Segera buka portal presensi kamera untuk melakukan check-in dan menuliskan alasan keterlambatan agar kehadiran Anda tetap tercatat resmi dan terhindar dari status mangkir (Alpha):\n' +
 '🌐 https://hris.primeprojectx.net\n\n' +
 '_Abaikan pesan ini jika Anda sedang dalam status Cuti Tahunan / Izin Sakit yang telah disetujui HRD._\n\n' +
-'_Manajemen Operasional PT Prime Infinity Systems_';
+'_Manajemen Operasional DMJ HRIS • PT Dwi Martha Jaya_';
 
   return sendWhatsAppMessage(employee.phone, msg, {
     recipientId: employee.id,
@@ -451,7 +451,7 @@ export async function notifyCheckOutReminder(employee, projectSchedule = null, d
 'Silakan segera lakukan presensi pulang melalui portal sebelum meninggalkan site/kantor kerja:\n' +
 '🌐 https://hris.primeprojectx.net\n\n' +
 'Terima kasih atas kedisiplinan dan dedikasi Anda hari ini. Selamat beristirahat dan hati-hati dalam perjalanan pulang!\n\n' +
-'_Departemen HR & Manajemen Operasional PT Prime Infinity Systems_';
+'_Departemen HR & Manajemen Operasional DMJ HRIS • PT Dwi Martha Jaya_';
 
   return sendWhatsAppMessage(employee.phone, msg, {
     recipientId: employee.id,
@@ -558,7 +558,7 @@ export async function notifyApprovalDecision(approvalItem, employee) {
 '💬 *Catatan Review:* "' + note + '"\n\n' +
 'Detail lengkap dapat dilihat pada Portal Kinerja & Approval:\n' +
 '🌐 https://hris.primeprojectx.net\n\n' +
-'_Departemen HRD PT Prime Infinity Systems_';
+'_Departemen HRD DMJ HRIS • PT Dwi Martha Jaya_';
 
   return sendWhatsAppMessage(employee.phone, msg, {
     recipientId: employee.id,

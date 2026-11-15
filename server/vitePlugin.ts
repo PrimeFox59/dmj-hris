@@ -67,7 +67,7 @@ export function sqliteApiPlugin(): Plugin {
           if (cleanUrl === '/api/health' && method === 'GET') {
             return sendJson(200, {
               status: 'online',
-              message: 'SQLite Database Connected (PRIME HRIS Enterprise)',
+              message: 'SQLite Database Connected (DMJ HRIS Enterprise)',
               ...getDbInfo()
             });
           }

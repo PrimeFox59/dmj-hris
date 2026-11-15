@@ -147,7 +147,7 @@ function wrapHtmlEmailTemplate(contentHtml, title = 'Notifikasi DMJ HRIS') {
           <tr>
             <td>
               <div style="font-size: 10px; font-weight: 800; color: #FF8533; letter-spacing: 1.5px; text-transform: uppercase;">DMJ HRIS ENTERPRISE</div>
-              <div style="font-size: 20px; font-weight: 700; color: #ffffff; margin-top: 4px;">PT Prime Infinity Systems</div>
+              <div style="font-size: 20px; font-weight: 700; color: #ffffff; margin-top: 4px;">PT Dwi Martha Jaya</div>
             </td>
             <td align="right">
               <span style="display: inline-block; background: rgba(255,255,255,0.12); color: #ffffff; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2);">Official Notice</span>
@@ -186,7 +186,7 @@ function wrapHtmlEmailTemplate(contentHtml, title = 'Notifikasi DMJ HRIS') {
     <tr>
       <td style="background-color: #f8fafc; padding: 18px 28px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #64748b; text-align: center;">
         <p style="margin: 0 0 6px 0;">Notifikasi ini dikirimkan secara otomatis oleh sistem notifikasi server <strong>DMJ HRIS</strong>.</p>
-        <p style="margin: 0;">&copy; ${new Date().getFullYear()} PT Prime Infinity Systems &bull; <a href="https://hris.primeprojectx.net" style="color: #18345E; text-decoration: underline;">hris.primeprojectx.net</a></p>
+        <p style="margin: 0;">&copy; ${new Date().getFullYear()} DMJ HRIS Enterprise &bull; PT Dwi Martha Jaya &bull; <a href="https://hris.primeprojectx.net" style="color: #18345E; text-decoration: underline;">hris.primeprojectx.net</a></p>
       </td>
     </tr>
   </table>
@@ -300,7 +300,7 @@ export async function notifyAttendanceSuccessEmail(employee, record) {
   const timeStr = isCheckOut ? (record.checkOutTime || record.checkInTime || '17:00:00') : (record.checkInTime || '08:00:00');
   const dateStr = record.date || new Date().toISOString().substring(0, 10);
   const modeStr = record.mode === 'DINAS_LUAR' ? 'Dinas Luar Lapangan' : (record.mode === 'WFH' ? 'Work From Home' : 'Work From Office (WFO)');
-  const locationStr = record.location?.address || 'Kantor Pusat / Site Proyek PRIME';
+  const locationStr = record.location?.address || 'Kantor Pusat / Site Proyek DMJ';
   const bioScore = record.biometricVerification?.matchScore
     ? `Biometrik Wajah Valid (${record.biometricVerification.matchScore}%)`
     : 'Presensi Digital Terverifikasi';

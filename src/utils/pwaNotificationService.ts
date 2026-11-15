@@ -90,7 +90,7 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
     const permission = await Notification.requestPermission();
     if (permission === 'granted') {
       // Send a confirmation system notification to test the native notification bar
-      await showSystemNotification('🔔 Notifikasi Bar PWA Berhasil Diaktifkan', {
+      await showSystemNotification('🔔 Notifikasi Bar PWA Berhasil Diaktifkan • DMJ HRIS', {
         body: 'Anda akan menerima pengingat otomatis untuk absensi masuk, absen pulang, dan status persetujuan di bar HP.',
         tag: 'welcome-notification',
         url: '/'
@@ -231,7 +231,7 @@ export function evaluateAttendanceReminder(
     const alreadyRemindedIn = localStorage.getItem(checkInKey);
 
     if (isWithinLeadWindow && !alreadyRemindedIn) {
-      showSystemNotification(`⏰ Pengingat Presensi Masuk (H-${leadMinutes} Menit)`, {
+      showSystemNotification(`⏰ Pengingat Presensi Masuk (H-${leadMinutes} Menit) • DMJ HRIS`, {
         body: isFlexible
           ? `Halo ${currentUser.name}, jangan lupa lakukan presensi masuk hari ini (${projectName}). Proyek ini menggunakan jam kerja fleksibel.`
           : `Halo ${currentUser.name}, shift kerja di ${projectName} akan dimulai pukul ${shiftCheckInStr} WIB (${leadMinutes} menit lagi). Siapkan presensi masuk Anda.`,
@@ -251,7 +251,7 @@ export function evaluateAttendanceReminder(
 
     if (isLateWindow && !alreadyRemindedLate) {
       const minutesLate = currentTimeVal - shiftInMinutes;
-      showSystemNotification('⚠️ Peringatan Keterlambatan Presensi', {
+      showSystemNotification('⚠️ Peringatan Keterlambatan Presensi • DMJ HRIS', {
         body: `Halo ${currentUser.name}, jam masuk (${shiftCheckInStr} WIB) telah lewat ${minutesLate} menit di ${projectName} dan Anda belum presensi masuk. Segera lakukan presensi!`,
         tag: 'attendance-late-warning',
         url: '/?tab=attendance',
@@ -269,7 +269,7 @@ export function evaluateAttendanceReminder(
     const alreadyRemindedOut = localStorage.getItem(checkOutKey);
 
     if (isWithinEveningWindow && !alreadyRemindedOut) {
-      showSystemNotification('🏢 Pengingat Absensi Pulang (DMJ HRIS)', {
+      showSystemNotification('🏢 Pengingat Absensi Pulang • DMJ HRIS', {
         body: isFlexible
           ? `Halo ${currentUser.name}, jangan lupa tap Absen Pulang setelah menyelesaikan aktivitas di ${projectName}.`
           : `Halo ${currentUser.name}, jam kerja hari ini telah berakhir (${shiftCheckOutStr} WIB). Jangan lupa lakukan presensi pulang sebelum meninggalkan ${projectName}.`,
@@ -287,7 +287,7 @@ export function evaluateAttendanceReminder(
     const alreadyRemindedOverdue = localStorage.getItem(overdueCheckOutKey);
 
     if (isOverdueWindow && !alreadyRemindedOverdue) {
-      showSystemNotification(`🚨 Peringatan: Belum Absen Pulang (> ${settings.overdueCheckOutHours} Jam)`, {
+      showSystemNotification(`🚨 Peringatan: Belum Absen Pulang (> ${settings.overdueCheckOutHours} Jam) • DMJ HRIS`, {
         body: isFlexible
           ? `Halo ${currentUser.name}, sesi kerja Anda masih aktif sejak check-in. Jangan lupa lakukan Absen Pulang untuk merekam jam kerja Anda.`
           : `Halo ${currentUser.name}, jam kerja telah berakhir pukul ${shiftCheckOutStr} WIB (lebih dari ${settings.overdueCheckOutHours} jam yang lalu) dan Anda belum absen pulang. Tap untuk checkout sekarang!`,

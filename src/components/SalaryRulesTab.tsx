@@ -1134,7 +1134,7 @@ export const SalaryRulesTab: React.FC<SalaryRulesTabProps> = ({
               <div className="flex items-center gap-2 flex-wrap self-start lg:self-center">
                 {waStatus?.clientInfo?.phone && (
                   <a
-                    href={`https://wa.me/${waStatus.clientInfo.phone}?text=Halo%20PRIME%20HRIS`}
+                    href={`https://wa.me/${waStatus.clientInfo.phone}?text=Halo%20DMJ%20HRIS`}
                     target="_blank"
                     rel="noreferrer"
                     className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-2xs active:scale-95 transition-all cursor-pointer"
@@ -1475,7 +1475,7 @@ export const SalaryRulesTab: React.FC<SalaryRulesTabProps> = ({
                           <td className="py-2.5 px-3 text-center whitespace-nowrap">
                             {waStatus?.clientInfo?.phone ? (
                               <a
-                                href={`https://wa.me/${waStatus.clientInfo.phone}?text=Halo%20PRIME%20HRIS%20${opt.employee_id || ''}`}
+                                href={`https://wa.me/${waStatus.clientInfo.phone}?text=Halo%20DMJ%20HRIS%20${opt.employee_id || ''}`}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-200 hover:border-emerald-300 bg-white hover:bg-emerald-50 text-slate-600 hover:text-emerald-700 text-[10px] font-bold transition-all"

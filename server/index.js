@@ -1,4 +1,4 @@
-// Production Standalone Server for Prime HRIS SQLite API with RTC & Real-Time Sync
+// Production Standalone Server for DMJ HRIS SQLite API with RTC & Real-Time Sync
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -643,7 +643,7 @@ const server = http.createServer(async (req, res) => {
 
         // 1. WhatsApp Notification
         if (targetPhone) {
-          const waMessage = `*🔐 KATA SANDI SEMENTARA - PRIME HRIS*\n\nHalo *${displayName}*,\nPermintaan reset kata sandi akun PRIME HRIS Anda telah berhasil diproses.\n\nBerikut kredensial login sementara Anda:\n👤 *ID / Username:* \`${username}\`\n🔑 *Password Sementara:* \`${tempPassword}\`\n🌐 *Portal Login:* https://hris.primeprojectx.net\n\n⚠️ *Penting:* Demi keamanan data akun, segera ubah kata sandi ini setelah berhasil masuk.\n\n_Pesan otomatis • Security Gateway PRIME HRIS_`;
+          const waMessage = `*🔐 KATA SANDI SEMENTARA - DMJ HRIS*\n\nHalo *${displayName}*,\nPermintaan reset kata sandi akun DMJ HRIS Anda telah berhasil diproses.\n\nBerikut kredensial login sementara Anda:\n👤 *ID / Username:* \`${username}\`\n🔑 *Password Sementara:* \`${tempPassword}\`\n🌐 *Portal Login:* https://hris.primeprojectx.net\n\n⚠️ *Penting:* Demi keamanan data akun, segera ubah kata sandi ini setelah berhasil masuk.\n\n_Pesan otomatis • Security Gateway DMJ HRIS_`;
           try {
             const wRes = await sendWhatsAppMessage(targetPhone, waMessage, {
               recipientId: employeeId,
@@ -663,7 +663,7 @@ const server = http.createServer(async (req, res) => {
           const emailHtml = `
             <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 540px; margin: 0 auto; padding: 24px; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0;">
               <div style="text-align: center; margin-bottom: 24px;">
-                <h2 style="color: #1e3a8a; margin: 0 0 6px 0; font-size: 20px;">PRIME HRIS ENTERPRISE</h2>
+                <h2 style="color: #1e3a8a; margin: 0 0 6px 0; font-size: 20px;">DMJ HRIS ENTERPRISE</h2>
                 <p style="color: #64748b; font-size: 13px; margin: 0;">Sistem Manajemen SDM & Penggajian Terpadu</p>
               </div>
 
@@ -701,7 +701,7 @@ const server = http.createServer(async (req, res) => {
             const emRes = await sendEmailNotification({
               to: targetEmail,
               toName: displayName,
-              subject: `🔐 Password Sementara Akun PRIME HRIS - ${username}`,
+              subject: `🔐 Password Sementara Akun DMJ HRIS - ${username}`,
               html: emailHtml,
               text: `Password sementara untuk ${username} adalah: ${tempPassword}. Silakan login di https://hris.primeprojectx.net`,
               eventType: 'PASSWORD_RESET_NOTIFICATION',
@@ -861,7 +861,7 @@ const server = http.createServer(async (req, res) => {
             module: 'AUTH',
             ipAddress: clientIp,
             status: 'SUCCESS',
-            details: `Pengguna ${user.username} (${user.role} / ${user.systemRole}) keluar dari sistem PRIME HRIS.`
+            details: `Pengguna ${user.username} (${user.role} / ${user.systemRole}) keluar dari sistem DMJ HRIS.`
           });
         }
         return sendJson(200, { success: true, message: 'Berhasil logout' });
@@ -1926,7 +1926,7 @@ const server = http.createServer(async (req, res) => {
         if (!body.phone) {
           return sendJson(400, { success: false, error: 'Nomor telepon penerima wajib diisi' });
         }
-        const testMsg = body.message || `*TES NOTIFIKASI WHATSAPP - PRIME HRIS*\nKoneksi bot WhatsApp Baileys Gateway berhasil terhubung secara real-time!\nWaktu: ${new Date().toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta' })} WIB`;
+        const testMsg = body.message || `*TES NOTIFIKASI WHATSAPP - DMJ HRIS*\nKoneksi bot WhatsApp Baileys Gateway berhasil terhubung secara real-time!\nWaktu: ${new Date().toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta' })} WIB`;
         const resWa = await sendWhatsAppMessage(body.phone, testMsg, {
           eventType: 'TEST_MANUAL',
           title: 'Uji Coba Pesan Manual HR',
@@ -2093,7 +2093,7 @@ const server = http.createServer(async (req, res) => {
           userRole: user?.systemRole || 'superuser',
           module: 'SYSTEM',
           status: 'WARNING',
-          details: 'Seluruh basis data sistem PRIME HRIS di-reset ke konfigurasi awal pabrik oleh Superuser.'
+          details: 'Seluruh basis data sistem DMJ HRIS di-reset ke konfigurasi awal pabrik oleh Superuser.'
         });
         broadcastRealtimeEvent('DATABASE_RESET', {});
         return sendJson(200, { success: true, ...result });
@@ -2109,7 +2109,7 @@ const server = http.createServer(async (req, res) => {
         if (!fs.existsSync(dbPath)) return sendJson(404, { error: 'Database not found' });
         res.writeHead(200, {
           'Content-Type': 'application/x-sqlite3',
-          'Content-Disposition': 'attachment; filename="prime_hris.sqlite"'
+          'Content-Disposition': 'attachment; filename="dmj_hris.sqlite"'
         });
         return fs.createReadStream(dbPath).pipe(res);
       }
@@ -2399,7 +2399,7 @@ wss.on('connection', (ws, req) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`[Prime HRIS SQLite Server] Berjalan di http://localhost:${PORT}`);
+  console.log(`[DMJ HRIS SQLite Server] Berjalan di http://localhost:${PORT}`);
   console.log(`[Database] File: ${dbPath}`);
   console.log(`[Realtime Engine] WebSocket & SSE aktif`);
   startWaBackgroundScheduler();

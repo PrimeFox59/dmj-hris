@@ -1161,7 +1161,7 @@ export const UserPerformanceTab: React.FC<UserPerformanceTabProps> = ({
                 Rincian Penghasilan & Slip Gaji Karyawan
               </h2>
               <p className="text-xs text-slate-500">
-                Periode: <strong>September 2026</strong> • Berdasarkan regulasi ketenagakerjaan Depnaker RI & SOP PT Prime Infinity Systems.
+                Periode: <strong>September 2026</strong> • Berdasarkan regulasi ketenagakerjaan Depnaker RI & SOP PT Dwi Martha Jaya (DMJ HRIS).
               </p>
             </div>
 
@@ -1539,7 +1539,7 @@ export const UserPerformanceTab: React.FC<UserPerformanceTabProps> = ({
                 Manajemen Saldo Cuti & Izin Karyawan
               </h2>
               <p className="text-xs text-slate-500">
-                Hak cuti tahunan PT Prime Infinity Systems tahun kalender 2026.
+                Hak cuti tahunan PT Dwi Martha Jaya (DMJ HRIS) tahun kalender 2026.
               </p>
             </div>
             <button
@@ -1667,7 +1667,7 @@ export const UserPerformanceTab: React.FC<UserPerformanceTabProps> = ({
 
 
       {/* =========================================================================
-          MODAL: CETAK SLIP GAJI RESMI PRIME
+          MODAL: CETAK SLIP GAJI RESMI DMJ HRIS
          ========================================================================= */}
       {isSlipModalOpen && typeof document !== 'undefined' && createPortal(
         <div 

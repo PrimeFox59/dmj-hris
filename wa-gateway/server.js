@@ -284,28 +284,28 @@ async function buildClient() {
         lastError = `Gagal membuat QR gambar: ${err.message}`;
       }
       setState('qr_required');
-      console.log('[PRIME WA] QR Code baru siap di-scan untuk PRIME HRIS.');
+      console.log('[DMJ WA] QR Code baru siap di-scan untuk DMJ HRIS.');
     }
 
     if (connection === 'connecting') {
       isClientReady = false;
       setState('initializing');
-      console.log('[PRIME WA] Menghubungkan ke server WhatsApp...');
+      console.log('[DMJ WA] Menghubungkan ke server WhatsApp...');
     }
 
     if (connection === 'open') {
       isClientReady = true;
       const user = instance.user;
       clientInfo = {
-        pushname: user.name || 'PRIME HRIS Bot',
+        pushname: user.name || 'DMJ HRIS Bot',
         wid: user.id || null,
         phone: (user.id || '').split(':')[0] || null,
-        platform: 'baileys-prime-hris'
+        platform: 'baileys-dmj-hris'
       };
       lastQr = null;
       lastQrDataUrl = null;
       setState('ready');
-      console.log(`[PRIME WA] ✅ Bot WhatsApp TERHUBUNG! Akun: +${clientInfo.phone} (${clientInfo.pushname})`);
+      console.log(`[DMJ WA] ✅ Bot WhatsApp TERHUBUNG! Akun: +${clientInfo.phone} (${clientInfo.pushname})`);
     }
 
     if (connection === 'close') {
@@ -369,10 +369,10 @@ async function buildClient() {
         try {
           const matchedName = rec?.employeeName || pushName || 'Rekan Karyawan';
           const replyText =
-`*🤖 BOT NOTIFIKASI RESMI - PRIME HRIS*
+`*🤖 BOT NOTIFIKASI RESMI - DMJ HRIS*
 
 Halo *${matchedName}*! 👋
-Nomor WhatsApp Anda (*+${normPhone}*) telah *BERHASIL TERHUBUNG & TERVERIFIKASI* di sistem notifikasi otomatis PRIME HRIS.
+Nomor WhatsApp Anda (*+${normPhone}*) telah *BERHASIL TERHUBUNG & TERVERIFIKASI* di sistem notifikasi otomatis DMJ HRIS.
 
 Mulai sekarang, bot ini diizinkan untuk mengirimkan:
 ✅ Notifikasi Presensi Kehadiran (Masuk & Pulang)
@@ -454,7 +454,7 @@ async function destroyClient({ logout = false } = {}) {
 function getStatusPayload() {
   return {
     success: true,
-    service: 'PRIME HRIS Dedicated WhatsApp Gateway',
+    service: 'DMJ HRIS Dedicated WhatsApp Gateway',
     port,
     status: currentState,
     serviceStartedAt,
@@ -579,7 +579,7 @@ app.post('/send', async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Pesan berhasil terkirim via PRIME HRIS WhatsApp Gateway.',
+      message: 'Pesan berhasil terkirim via DMJ HRIS WhatsApp Gateway.',
       messageId: sent.key?.id || null,
       recipient: jid
     });
@@ -596,7 +596,7 @@ app.get('/', (_req, res) => {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PRIME HRIS - WhatsApp Gateway Mandiri</title>
+    <title>DMJ HRIS - WhatsApp Gateway Mandiri</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <style>
@@ -619,7 +619,7 @@ app.get('/', (_req, res) => {
                 </div>
             </div>
             <div class="text-left">
-                <h1 class="text-base font-black text-white tracking-wide">PRIME HRIS WA GATEWAY</h1>
+                <h1 class="text-base font-black text-white tracking-wide">DMJ HRIS WA GATEWAY</h1>
                 <p class="text-[11px] font-mono text-emerald-400 font-bold">PORT 9008 • SESI MANDIRI</p>
             </div>
         </div>
@@ -643,7 +643,7 @@ app.get('/', (_req, res) => {
                 </div>
                 <h3 class="text-base font-bold text-white">Bot WhatsApp Terhubung!</h3>
                 <p id="connectedPhone" class="text-xs font-mono text-emerald-300 px-3 py-1 rounded-lg bg-emerald-950/60 border border-emerald-500/30">-</p>
-                <p class="text-[11px] text-slate-400 max-w-xs mt-1">Layanan siap mengirimkan notifikasi presensi, keterlambatan, dan approval resmi PT Prime Infinity Systems.</p>
+                <p class="text-[11px] text-slate-400 max-w-xs mt-1">Layanan siap mengirimkan notifikasi presensi, keterlambatan, dan approval resmi PT Dwi Martha Jaya (DMJ HRIS).</p>
             </div>
         </div>
 
@@ -698,7 +698,7 @@ app.get('/', (_req, res) => {
                 instr.classList.add('hidden');
 
                 if (data.clientInfo && data.clientInfo.phone) {
-                    connectedPhone.innerText = '+' + data.clientInfo.phone + ' (' + (data.clientInfo.pushname || 'PRIME Bot') + ')';
+                    connectedPhone.innerText = '+' + data.clientInfo.phone + ' (' + (data.clientInfo.pushname || 'DMJ HRIS Bot') + ')';
                 }
             } else if (data.hasQr && data.qrDataUrl) {
                 badge.className = 'inline-flex items-center gap-2 px-3.5 py-1 rounded-full text-xs font-mono font-bold bg-amber-950/80 border border-amber-500/50 text-amber-400 mb-6';
@@ -729,7 +729,7 @@ app.get('/', (_req, res) => {
         }
 
         async function logoutClient() {
-            if (confirm('Yakin ingin memutuskan koneksi Bot WhatsApp PRIME HRIS ini? Anda harus melakukan scan QR ulang setelahnya.')) {
+            if (confirm('Yakin ingin memutuskan koneksi Bot WhatsApp DMJ HRIS ini? Anda harus melakukan scan QR ulang setelahnya.')) {
                 try {
                     await fetch('/logout', { method: 'POST' });
                     fetchStatus();

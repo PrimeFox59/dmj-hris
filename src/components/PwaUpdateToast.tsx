@@ -87,7 +87,7 @@ export const PwaUpdateToast: React.FC = () => {
                 </span>
               </div>
               <p className="text-[11.5px] text-slate-300 mt-0.5 leading-snug">
-                Versi terbaru PRIME HRIS telah dirilis di server. Muat ulang sekarang untuk menerapkan fitur & perbaikan terbaru.
+                Versi terbaru DMJ HRIS telah dirilis di server. Muat ulang sekarang untuk menerapkan fitur & perbaikan terbaru.
               </p>
             </div>
           </div>

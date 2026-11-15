@@ -233,7 +233,7 @@ export const EmployeeTimesheetDetailModal: React.FC<EmployeeTimesheetDetailModal
             lateMinutes: 0,
             photoInUrl: defaultFacePhoto,
             photoOutUrl: defaultSmilePhoto,
-            locationText: project?.location ? `Site Proyek ${project.name} (${project.location})` : 'Workshop Utama PRIME Enterprise',
+            locationText: project?.location ? `Site Proyek ${project.name} (${project.location})` : 'Workshop Utama DMJ Enterprise',
             inGeofence: true,
             distanceMeters: 16,
             isHrCorrected: false

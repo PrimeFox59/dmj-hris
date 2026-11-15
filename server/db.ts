@@ -487,7 +487,7 @@ export function seedInitialData(db: DatabaseSync) {
     'INIT_DATABASE',
     'DATABASE',
     'hris.sqlite',
-    'Initial database seeding executed successfully for PRIME HRIS Enterprise'
+    'Initial database seeding executed successfully for DMJ HRIS Enterprise'
   );
 
   console.log('[SQLite] Seeding selesai! Database hris.sqlite siap digunakan.');
@@ -1411,10 +1411,10 @@ export function seedRealisticAuditLogs(db: DatabaseSync) {
       module: 'SYSTEM',
       entity: 'database',
       entityId: 'hris.sqlite',
-      details: 'Inisialisasi awal database SQLite hris.sqlite untuk PRIME HRIS Enterprise.',
+      details: 'Inisialisasi awal database SQLite hris.sqlite untuk DMJ HRIS Enterprise.',
       ipAddress: '127.0.0.1',
       status: 'SUCCESS',
-      metadata: JSON.stringify({ version: '1.0.0', platform: 'PRIME HRIS Enterprise' })
+      metadata: JSON.stringify({ version: '1.0.0', platform: 'DMJ HRIS Enterprise' })
     },
     {
       timestamp: '2026-09-07 08:15:30',

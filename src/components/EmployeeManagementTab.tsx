@@ -708,12 +708,12 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
             </span>
           </div>
           <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-            {isStaff ? 'Profil Data Pribadi Karyawan' : 'User Management & Direktori Karyawan PRIME Enterprise'}
+            {isStaff ? 'Profil Data Pribadi Karyawan' : 'User Management & Direktori Karyawan DMJ HRIS Enterprise'}
           </h1>
           <p className="text-xs sm:text-sm text-slate-600 mt-0.5">
             {isStaff
               ? 'Berikut rincian master profil Anda: NIK resmi, alokasi kuota cuti tahunan, nomor rekening payroll, dan status verifikasi biometrik wajah.'
-              : 'Database pengguna resmi, pengaturan struktur gaji, tracking saldo cuti, dan manajemen hak akses RBAC PRIME Enterprise.'}
+              : 'Database pengguna resmi, pengaturan struktur gaji, tracking saldo cuti, dan manajemen hak akses RBAC DMJ HRIS Enterprise.'}
           </p>
         </div>
 

@@ -1,4 +1,4 @@
-name: Prime HRIS Enterprise CI/CD Pipeline
+name: DMJ HRIS Enterprise CI/CD Pipeline
 
 on:
   push:
@@ -54,7 +54,7 @@ jobs:
       - name: 📦 Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: prime-hris-dist-bundle
+          name: dmj-hris-dist-bundle
           path: dist/
           retention-days: 7
 
@@ -68,13 +68,13 @@ jobs:
       - name: 📥 Download Build Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: prime-hris-dist-bundle
+          name: dmj-hris-dist-bundle
           path: dist/
 
       - name: 📋 CI/CD Verification Summary
         run: |
           echo "============================================="
-          echo " PRIME HRIS ENTERPRISE - RELEASE CERTIFIED"
+          echo " DMJ HRIS ENTERPRISE - RELEASE CERTIFIED"
           echo " Commit: ${{ github.sha }}"
           echo " Actor:  ${{ github.actor }}"
           echo " Date:   $(date -u)"

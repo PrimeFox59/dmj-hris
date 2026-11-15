@@ -2,7 +2,7 @@
   "name": "prime-wa-gateway",
   "version": "1.0.0",
   "private": true,
-  "description": "Dedicated Standalone WhatsApp Baileys Gateway for PRIME HRIS Enterprise",
+  "description": "Dedicated Standalone WhatsApp Baileys Gateway for DMJ HRIS Enterprise",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

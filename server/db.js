@@ -710,7 +710,7 @@ export function cleanupDuplicateAttendanceAndApprovals(db) {
 }
 
 export function seedInitialData(db) {
-  console.log('[SQLite] Inisialisasi & Seeding data awal Prime HRIS Enterprise...');
+  console.log('[SQLite] Inisialisasi & Seeding data awal DMJ HRIS Enterprise...');
   if (!fs.existsSync(seedPath)) {
     console.warn('[SQLite] seedData.json tidak ditemukan di:', seedPath);
     return;
@@ -3126,7 +3126,7 @@ export function resetDatabase() {
 }
 
 export function seedDefaultUsers(db) {
-  console.log('[SQLite] Seeding akun pengguna default Prime HRIS...');
+  console.log('[SQLite] Seeding akun pengguna default DMJ HRIS...');
   const insertUser = db.prepare(`
     INSERT OR REPLACE INTO user_accounts (
       id, employee_id, email, username, password_hash, salt, role, system_role, status
@@ -3255,7 +3255,7 @@ export function authenticateUser(identifier, password, ipAddress = '127.0.0.1') 
     module: 'AUTH',
     ipAddress,
     status: 'SUCCESS',
-    details: `Pengguna ${user.username} (${user.role} / ${user.system_role}) berhasil login ke sistem PRIME HRIS.`
+    details: `Pengguna ${user.username} (${user.role} / ${user.system_role}) berhasil login ke sistem DMJ HRIS.`
   });
 
   const canonicalSystemRole = employee?.systemRole || user.system_role || 'staff';
@@ -3743,10 +3743,10 @@ export function seedRealisticAuditLogs(db) {
       module: 'SYSTEM',
       entity: 'database',
       entityId: 'hris.sqlite',
-      details: 'Inisialisasi awal database SQLite hris.sqlite untuk PRIME HRIS Enterprise.',
+      details: 'Inisialisasi awal database SQLite hris.sqlite untuk DMJ HRIS Enterprise.',
       ipAddress: '127.0.0.1',
       status: 'SUCCESS',
-      metadata: JSON.stringify({ version: '1.0.0', platform: 'PRIME HRIS Enterprise' })
+      metadata: JSON.stringify({ version: '1.0.0', platform: 'DMJ HRIS Enterprise' })
     },
     {
       timestamp: '2026-09-07 08:15:30',
