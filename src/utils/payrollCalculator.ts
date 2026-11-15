@@ -1,4 +1,4 @@
-import { Employee, Project, PayrollRecord, SalaryRuleConfig, AttendanceRecord, ProjectPayrollAllocation, getEmployeeAssignedProjects, KasbonRecord } from '../types';
+import { Employee, Project, PayrollRecord, SalaryRuleConfig, AttendanceRecord, ProjectPayrollAllocation, getEmployeeAssignedProjects, KasbonRecord, SalaryDailyDivisorMode } from '../types';
 import { getPtkpDetails, resolvePtkpStatus } from './taxHelper';
 
 export function formatIDR(amount: number, isMasked: boolean = false): string {
@@ -17,6 +17,101 @@ export function formatSalaryDisplay(amount: number, isVisible: boolean = false):
     return 'Rp ••••••••';
   }
   return formatIDR(amount);
+}
+
+export interface DailySalaryDivisorResult {
+  workingDays: number;
+  dailyDivisor: number;
+  divisorMode: SalaryDailyDivisorMode;
+  isOffice: boolean;
+  categoryLabel: string;
+  explanation: string;
+}
+
+/**
+ * Menghitung pembagi hari kerja (Divisor By Day) dan target hari kerja:
+ * - Office (Kantor Pusat): Mengikuti hari kerja yang di-set oleh HRD (default 21/22 HK), 25 HK, 30 HK, atau custom
+ * - Proyek (Site Lapangan): Standar 30 hari kalender, 25 hari kerja, mengikuti hari kerja HRD, atau custom
+ */
+export function resolveDailySalaryDivisor(
+  employee: Employee,
+  projects: Project[] = [],
+  rules?: SalaryRuleConfig,
+  customWorkingDays?: number
+): DailySalaryDivisorResult {
+  const isOffice = isEmployeeInOffice(employee, projects);
+  const assignedProject = projects?.find(p => p.id === employee.assignedProjectId || p.code === employee.assignedProjectId);
+
+  if (isOffice) {
+    const mode: SalaryDailyDivisorMode = rules?.officeDailyDivisorMode || 'OFFICE_WORKING_DAYS';
+    const workingDays = customWorkingDays || rules?.standardWorkDaysPerMonth || 22;
+    let divisorDays = 22;
+
+    if (mode === 'OFFICE_WORKING_DAYS') {
+      divisorDays = workingDays;
+    } else if (mode === 'PROJECT_25') {
+      divisorDays = 25;
+    } else if (mode === 'CALENDAR_30') {
+      divisorDays = 30;
+    } else if (mode === 'CUSTOM') {
+      divisorDays = rules?.officeDailyDivisorDays || 22;
+    }
+
+    const explanation = mode === 'OFFICE_WORKING_DAYS'
+      ? `Hari Kerja HRD (${divisorDays} HK Office)`
+      : mode === 'PROJECT_25'
+      ? `25 Hari Kerja (Office)`
+      : mode === 'CALENDAR_30'
+      ? `30 Hari Kalender (Office)`
+      : `Kustom (${divisorDays} Hari Office)`;
+
+    return {
+      workingDays,
+      dailyDivisor: Math.max(1, divisorDays),
+      divisorMode: mode,
+      isOffice: true,
+      categoryLabel: 'Office / Kantor Pusat',
+      explanation
+    };
+  } else {
+    // Proyek (Site Lapangan / Smelter / Konstruksi)
+    const projectPayrollRule = assignedProject?.customRules?.payrollRule;
+    const mode: SalaryDailyDivisorMode = projectPayrollRule?.dailyDivisorMode || rules?.projectDailyDivisorMode || 'CALENDAR_30';
+    let divisorDays = 30;
+    let workingDays = rules?.projectStandardWorkDaysPerMonth || 25;
+
+    if (mode === 'CALENDAR_30') {
+      divisorDays = 30;
+      workingDays = 30;
+    } else if (mode === 'PROJECT_25') {
+      divisorDays = 25;
+      workingDays = 25;
+    } else if (mode === 'OFFICE_WORKING_DAYS') {
+      divisorDays = customWorkingDays || rules?.standardWorkDaysPerMonth || 22;
+      workingDays = divisorDays;
+    } else if (mode === 'CUSTOM') {
+      divisorDays = projectPayrollRule?.customDailyDivisorDays || rules?.projectDailyDivisorDays || 30;
+      workingDays = rules?.projectStandardWorkDaysPerMonth || divisorDays;
+    }
+
+    const projectName = assignedProject?.name || 'Site Proyek';
+    const explanation = mode === 'CALENDAR_30'
+      ? `30 Hari Kalender (${projectName})`
+      : mode === 'PROJECT_25'
+      ? `25 Hari Kerja Proyek (${projectName})`
+      : mode === 'OFFICE_WORKING_DAYS'
+      ? `Hari Kerja HRD (${divisorDays} HK - ${projectName})`
+      : `Kustom (${divisorDays} Hari - ${projectName})`;
+
+    return {
+      workingDays,
+      dailyDivisor: Math.max(1, divisorDays),
+      divisorMode: mode,
+      isOffice: false,
+      categoryLabel: projectName,
+      explanation
+    };
+  }
 }
 
 export interface EmployeeAuditOverride {
@@ -101,7 +196,10 @@ export function calculateEmployeePayroll(
     return true;
   });
 
-  const workingDays = customWorkingDays || rules.standardWorkDaysPerMonth || 22;
+  const divisorInfo = resolveDailySalaryDivisor(employee, projects, rules, customWorkingDays);
+  const workingDays = divisorInfo.workingDays;
+  const dailyDivisor = divisorInfo.dailyDivisor;
+  const isOffice = divisorInfo.isOffice;
 
   // Actual count: STRICTLY REAL ATTENDANCES (NO DUMMY FALLBACK)
   const actualPresentDays = empAttendances.length;
@@ -119,13 +217,13 @@ export function calculateEmployeePayroll(
     ? auditOverride.unpaidLeaveDays 
     : 0;
 
-  // Gaji Pokok Harian (Ditentukan Finance atau Otomatis Gaji Pokok / Hari Kerja)
-  const defaultDailyBase = Math.round(employee.baseSalary / Math.max(1, workingDays));
+  // Gaji Pokok Harian (Ditentukan Finance / Audit Override atau Otomatis Gaji Pokok / Pembagi Hari Kerja)
+  const defaultDailyBase = Math.round(employee.baseSalary / Math.max(1, dailyDivisor));
   const dailyBaseSalary = (auditOverride?.customDailyRate !== undefined && auditOverride.customDailyRate > 0)
     ? auditOverride.customDailyRate
     : defaultDailyBase;
 
-  // Alpha / Mangkir (Hari Kerja - Hadir - Cuti)
+  // Alpha / Mangkir (Hari Kerja Target - Hadir - Cuti - Unpaid)
   const calculatedAlphaDays = Math.max(0, workingDays - presentDays - leaveDays - unpaidLeaveDays);
   const alphaDays = auditOverride?.alphaDays !== undefined
     ? auditOverride.alphaDays
@@ -165,7 +263,6 @@ export function calculateEmployeePayroll(
   // Aturan Pemotongan Keterlambatan DMJ HRIS:
   // - Karyawan di Office / Kantor Pusat: Denda keterlambatan Rp 50.000 / jam
   // - Selain Office (Site Proyek Lapangan): Bebas potongan jika terlambat (Rp 0)
-  const isOffice = isEmployeeInOffice(employee, projects);
   const officeHourlyPenalty = rules.officeLatePenaltyPerHour || 50000;
   const gracePeriod = rules.lateGracePeriodMinutes ?? 15;
 
@@ -369,6 +466,9 @@ export function calculateEmployeePayroll(
     alphaDays,
     alphaDeduction,
     dailyRate: dailyBaseSalary,
+    dailyDivisor,
+    dailyDivisorMode: divisorInfo.divisorMode,
+    divisorExplanation: divisorInfo.explanation,
     hrValidationStatus: auditOverride?.validated ? 'VALIDATED_BY_HR' : 'PENDING_VALIDATION',
     validationNotes: auditOverride?.notes,
     baseSalary: employee.baseSalary,

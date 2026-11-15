@@ -33,14 +33,16 @@ import {
   Lock,
   Unlock,
   Bell,
-  FileText
+  FileText,
+  SlidersHorizontal
 } from 'lucide-react';
-import { Employee, PayrollRecord, Project, SalaryRuleConfig, AttendanceRecord, SystemRole, getEffectiveSystemRole, AnnualWorkCalendarConfig, WorkPeriodItem, getEmployeeAssignedProjects, KasbonRecord, KasbonRepaymentType, KasbonStatus, KasbonInstallmentSchedule, ApprovalItem } from '../types';
+import { Employee, PayrollRecord, Project, SalaryRuleConfig, AttendanceRecord, SystemRole, getEffectiveSystemRole, AnnualWorkCalendarConfig, WorkPeriodItem, getEmployeeAssignedProjects, KasbonRecord, KasbonRepaymentType, KasbonStatus, KasbonInstallmentSchedule, ApprovalItem, SalaryDailyDivisorMode } from '../types';
 import { api } from '../services/api';
 import { rtcService } from '../services/rtcService';
-import { formatSalaryDisplay, calculateEmployeePayroll, EmployeeAuditOverride, isEmployeeInOffice } from '../utils/payrollCalculator';
+import { formatSalaryDisplay, calculateEmployeePayroll, EmployeeAuditOverride, isEmployeeInOffice, resolveDailySalaryDivisor } from '../utils/payrollCalculator';
 import { getPtkpDetails, resolvePtkpStatus } from '../utils/taxHelper';
 import { EmployeeTimesheetDetailModal } from './EmployeeTimesheetDetailModal';
+import { PayrollDailyDivisorSettingsModal } from './PayrollDailyDivisorSettingsModal';
 
 interface PayrollTabProps {
   currentUser?: Employee;
@@ -48,6 +50,7 @@ interface PayrollTabProps {
   projects: Project[];
   attendances: AttendanceRecord[];
   salaryRules: SalaryRuleConfig;
+  onUpdateSalaryRules?: (rules: SalaryRuleConfig) => void;
   workCalendar?: AnnualWorkCalendarConfig | null;
   selectedProjectId?: string;
   onSelectProjectId?: (projectId: string) => void;
@@ -65,6 +68,7 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
   projects,
   attendances,
   salaryRules,
+  onUpdateSalaryRules,
   workCalendar,
   selectedProjectId = 'ALL',
   onSelectProjectId,
@@ -344,6 +348,7 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
   const [editingSalaryEmp, setEditingSalaryEmp] = useState<Employee | null>(null);
   const [auditingEmployee, setAuditingEmployee] = useState<{ employee: Employee; record: PayrollRecord } | null>(null);
   const [viewingTimesheetEmp, setViewingTimesheetEmp] = useState<Employee | null>(null);
+  const [isDivisorModalOpen, setIsDivisorModalOpen] = useState<boolean>(false);
 
   // Slip Access 10-Minute Window State (Finance Approval System)
   const canViewSlipFreely = isFinanceOrSuper;
@@ -1375,6 +1380,20 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                 >
                   Bulan Penuh (1-30)
                 </button>
+
+                {/* Tombol Atur Pembagi Gaji Harian (Divisor By Day) */}
+                <button
+                  type="button"
+                  onClick={() => setIsDivisorModalOpen(true)}
+                  className="px-3 py-1 rounded-xl text-[11px] font-black bg-gradient-to-r from-orange-500 to-[#FF6B00] hover:from-orange-600 hover:to-[#e56000] text-white shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                  title="Atur Rumus Pembagi Gaji Harian & Potongan (Office vs Proyek)"
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5" />
+                  <span>Atur Pembagi Gaji</span>
+                  <span className="px-1.5 py-0.5 rounded-md bg-white/20 text-[10px] font-mono-code font-bold">
+                    🏢 {salaryRules.officeDailyDivisorMode === 'OFFICE_WORKING_DAYS' ? `${customWorkingDays || salaryRules.standardWorkDaysPerMonth || 22}HK` : salaryRules.officeDailyDivisorMode === 'PROJECT_25' ? '25HK' : salaryRules.officeDailyDivisorMode === 'CALENDAR_30' ? '30HK' : `${salaryRules.officeDailyDivisorDays || 22}HK`} • 🏗️ {salaryRules.projectDailyDivisorMode === 'PROJECT_25' ? '25H' : salaryRules.projectDailyDivisorMode === 'OFFICE_WORKING_DAYS' ? `${customWorkingDays}H` : '30H'}
+                  </span>
+                </button>
               </div>
             </div>
           </div>
@@ -1651,19 +1670,19 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                             }`}>
                               {item.presentDays}/{item.workingDays} Hadir
                             </span>
-                            <div className="flex items-center gap-1 text-[10px] text-slate-400 mt-0.5">
+                            <div className="flex items-center gap-1 text-[10px] text-slate-400 mt-0.5 flex-wrap justify-center">
+                              <span className="font-mono-code text-[9px] text-slate-600 bg-slate-100 px-1 py-0.2 rounded" title={item.divisorExplanation}>
+                                {item.isOfficeEmployee ? '🏢 Office' : '🏗️ Proyek'} • {item.dailyDivisor || item.workingDays}HK
+                              </span>
                               {item.leaveDays > 0 && <span>Cuti: {item.leaveDays}h</span>}
                               {item.alphaDays > 0 && (
                                 <span className={item.presentDays === 0 ? "text-slate-400 font-medium" : "text-amber-600 font-medium"}>
                                   Alpha: {item.alphaDays}h
                                 </span>
                               )}
-                              {item.leaveDays === 0 && item.alphaDays === 0 && (
-                                <span>Cuti: 0h</span>
-                              )}
                               {item.unpaidLeaveDays > 0 && (
                                 <span className="text-rose-600 font-bold">
-                                  • Unpaid: {item.unpaidLeaveDays}h
+                                  Unpaid: {item.unpaidLeaveDays}h
                                 </span>
                               )}
                             </div>
@@ -2576,25 +2595,33 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                   <input
                     type="number"
                     min={0}
-                    max={customWorkingDays}
+                    max={auditingEmployee.record.workingDays || customWorkingDays}
                     value={auditFormAlphaDays}
                     onChange={e => setAuditFormAlphaDays(Number(e.target.value))}
                     className="w-full bg-white border border-red-300 rounded-xl px-3 py-1.5 font-bold font-mono-code text-red-950 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
                   />
                   <span className="text-[9px] text-red-700 mt-0.5 block">
-                    Memotong gaji: -{formatSalaryDisplay(auditFormAlphaDays * (auditFormCustomDailyRate || Math.round(auditingEmployee.employee.baseSalary / customWorkingDays)), showPayrollNominal)}
+                    Memotong gaji: -{formatSalaryDisplay(auditFormAlphaDays * (auditFormCustomDailyRate || auditingEmployee.record.dailyRate || Math.round(auditingEmployee.employee.baseSalary / (auditingEmployee.record.dailyDivisor || customWorkingDays))), showPayrollNominal)}
                   </span>
                 </div>
 
                 <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-center text-xs space-y-1">
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Total Hari Kerja:</span>
-                    <span className="font-mono-code font-bold">{customWorkingDays} Hari</span>
+                    <span className="text-slate-500">Basis Hari / Divisor:</span>
+                    <span className="font-mono-code font-bold">
+                      {auditingEmployee.record.workingDays} Hari ({auditingEmployee.record.divisorExplanation || (auditingEmployee.record.isOfficeEmployee ? 'Office' : 'Proyek')})
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Nilai Gaji Harian:</span>
+                    <span className="font-mono-code font-bold text-slate-800">
+                      {formatSalaryDisplay(auditFormCustomDailyRate || auditingEmployee.record.dailyRate || Math.round(auditingEmployee.employee.baseSalary / (auditingEmployee.record.dailyDivisor || customWorkingDays)), showPayrollNominal)} / hari
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500">Total Potongan Kehadiran:</span>
                     <span className="font-mono-code font-bold text-rose-600">
-                      -{formatSalaryDisplay((auditFormUnpaidLeaveDays + auditFormAlphaDays) * (auditFormCustomDailyRate || Math.round(auditingEmployee.employee.baseSalary / customWorkingDays)), showPayrollNominal)}
+                      -{formatSalaryDisplay((auditFormUnpaidLeaveDays + auditFormAlphaDays) * (auditFormCustomDailyRate || auditingEmployee.record.dailyRate || Math.round(auditingEmployee.employee.baseSalary / (auditingEmployee.record.dailyDivisor || customWorkingDays))), showPayrollNominal)}
                     </span>
                   </div>
                 </div>
@@ -2605,7 +2632,7 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                 <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 flex items-center justify-between text-xs">
                   <span className="font-semibold">Beban Potongan Cuti Tanpa Upah (Unpaid):</span>
                   <span className="font-mono-code font-black text-rose-700">
-                    -{formatSalaryDisplay(auditFormUnpaidLeaveDays * Math.round(auditingEmployee.employee.baseSalary / customWorkingDays), showPayrollNominal)}
+                    -{formatSalaryDisplay(auditFormUnpaidLeaveDays * (auditFormCustomDailyRate || auditingEmployee.record.dailyRate || Math.round(auditingEmployee.employee.baseSalary / (auditingEmployee.record.dailyDivisor || customWorkingDays))), showPayrollNominal)}
                   </span>
                 </div>
               )}
@@ -2883,7 +2910,8 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
             {/* Attendance & Audit Info Box */}
             <div className="p-2.5 rounded-xl bg-orange-50/60 border border-orange-200/70 mb-4 flex flex-wrap items-center justify-between text-[11px] gap-2">
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-slate-600 font-medium">
-                <span>Presensi: <strong>{selectedSlip.presentDays}</strong> Hadir / <strong>{selectedSlip.workingDays}</strong> Hari Kerja</span>
+                <span>Presensi: <strong>{selectedSlip.presentDays}</strong> Hadir / <strong>{selectedSlip.workingDays}</strong> Hari Kerja ({selectedSlip.divisorExplanation || `${selectedSlip.dailyDivisor || selectedSlip.workingDays} HK`})</span>
+                <span>• Upah Harian: <strong>{formatSalaryDisplay(selectedSlip.dailyRate || 0, showPayrollNominal)}</strong>/hari</span>
                 <span>• Cuti: <strong>{selectedSlip.leaveDays || 0}</strong>h</span>
                 {Boolean(selectedSlip.unpaidLeaveDays && selectedSlip.unpaidLeaveDays > 0) && (
                   <span>• Unpaid: <strong className="text-amber-700">{selectedSlip.unpaidLeaveDays}h</strong></span>
@@ -2950,13 +2978,13 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                 </h4>
                 {selectedSlip.unpaidLeaveDeduction > 0 && (
                   <div className="flex justify-between py-0.5 text-rose-700 font-medium">
-                    <span>Potongan Cuti Unpaid ({selectedSlip.unpaidLeaveDays} Hari):</span>
+                    <span>Potongan Cuti Unpaid ({selectedSlip.unpaidLeaveDays} Hari @ {formatSalaryDisplay(selectedSlip.dailyRate || 0, showPayrollNominal)}):</span>
                     <span className="font-mono-code text-rose-600">-{formatSalaryDisplay(selectedSlip.unpaidLeaveDeduction, showPayrollNominal)}</span>
                   </div>
                 )}
                 {Boolean(selectedSlip.alphaDays && selectedSlip.alphaDays > 0) && (
                   <div className="flex justify-between py-0.5 text-rose-700 font-medium">
-                    <span>Potongan Alpha / Mangkir ({selectedSlip.alphaDays} Hari):</span>
+                    <span>Potongan Alpha / Mangkir ({selectedSlip.alphaDays} Hari @ {formatSalaryDisplay(selectedSlip.dailyRate || 0, showPayrollNominal)}):</span>
                     <span className="font-mono-code text-rose-600">-{formatSalaryDisplay(selectedSlip.alphaDeduction || 0, showPayrollNominal)}</span>
                   </div>
                 )}
@@ -3551,6 +3579,22 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
         </div>,
         document.body
       )}
+
+      {/* Modal Pengaturan Pembagi Gaji Harian (Divisor By Day) & Hari Kerja */}
+      <PayrollDailyDivisorSettingsModal
+        isOpen={isDivisorModalOpen}
+        onClose={() => setIsDivisorModalOpen(false)}
+        salaryRules={salaryRules}
+        currentWorkingDays={customWorkingDays}
+        onSaveSalaryRules={newRules => {
+          if (onUpdateSalaryRules) {
+            onUpdateSalaryRules(newRules);
+          } else {
+            api.saveSalaryRules(newRules).catch(console.error);
+          }
+        }}
+        projects={projects}
+      />
     </div>
   );
 };

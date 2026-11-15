@@ -2021,6 +2021,7 @@ export function App() {
             projects={projects}
             attendances={isStaffUser ? attendances.filter(a => a.employeeId === currentUser.id) : attendances}
             salaryRules={salaryRules}
+            onUpdateSalaryRules={handleUpdateSalaryRules}
             workCalendar={workCalendar}
             selectedProjectId={selectedProjectId}
             onSelectProjectId={setSelectedProjectId}

@@ -531,11 +531,20 @@ export interface ProjectGeofenceRule {
   radiusMeters?: number;
 }
 
+export type SalaryDailyDivisorMode = 'OFFICE_WORKING_DAYS' | 'PROJECT_25' | 'CALENDAR_30' | 'CUSTOM';
+
+export interface ProjectPayrollRule {
+  dailyDivisorMode?: SalaryDailyDivisorMode;
+  customDailyDivisorDays?: number;
+  standardWorkDays?: number;
+}
+
 export interface ProjectCustomRules {
   workSchedule?: ProjectWorkSchedule;
   leavePolicy?: ProjectLeavePolicy;
   allowance?: ProjectAllowanceRule;
   geofence?: ProjectGeofenceRule;
+  payrollRule?: ProjectPayrollRule;
 }
 
 export interface Project {
@@ -603,6 +612,9 @@ export interface PayrollRecord {
   alphaDays?: number;
   alphaDeduction?: number;
   dailyRate?: number;
+  dailyDivisor?: number;
+  dailyDivisorMode?: SalaryDailyDivisorMode;
+  divisorExplanation?: string;
   customLatePenaltyAmount?: number;
   hrValidationStatus: 'PENDING_VALIDATION' | 'VALIDATED_BY_HR' | 'SUBMITTED_TO_FINANCE' | 'PROCESSED_BY_FINANCE';
   validatedBy?: string;
@@ -639,6 +651,12 @@ export interface SalaryRuleConfig {
   lateGracePeriodMinutes: number; // e.g. 15 mins
   latePenaltyPerBlock: number; // IDR per 15 min if unapproved
   officeLatePenaltyPerHour?: number; // Rp 50.000 / jam (khusus Office / Kantor Pusat)
+  // --- Pengaturan Pembagian Gaji Harian (Divisor By Day) & Potongan Harian ---
+  officeDailyDivisorMode?: SalaryDailyDivisorMode; // default: 'OFFICE_WORKING_DAYS' (mengikuti hari kerja kalender HRD)
+  officeDailyDivisorDays?: number; // nilai kustom jika mode 'CUSTOM'
+  projectDailyDivisorMode?: SalaryDailyDivisorMode; // default: 'CALENDAR_30' (standar 30 hari kalender proyek/smelter)
+  projectDailyDivisorDays?: number; // nilai kustom jika mode 'CUSTOM'
+  projectStandardWorkDaysPerMonth?: number; // hari kerja standar proyek (default: 25 atau 30)
   overtimeFormula: {
     firstHourRateMultiplier: number; // e.g. 1.5
     subsequentHourRateMultiplier: number; // e.g. 2.0

@@ -7,6 +7,12 @@ export const INITIAL_SALARY_RULES: SalaryRuleConfig = {
   cutoffTime: "08:15",
   lateGracePeriodMinutes: 15,
   latePenaltyPerBlock: 25000, // Rp 25.000 / 15 menit jika tidak diapprove
+  officeLatePenaltyPerHour: 50000,
+  officeDailyDivisorMode: 'OFFICE_WORKING_DAYS', // Mengikuti hari kerja yang di-set oleh HRD untuk bagian office
+  officeDailyDivisorDays: 22,
+  projectDailyDivisorMode: 'CALENDAR_30', // Standar 30 hari kalender proyek/smelter (atau 25 hari kerja)
+  projectDailyDivisorDays: 30,
+  projectStandardWorkDaysPerMonth: 25,
   overtimeFormula: {
     firstHourRateMultiplier: 1.5,
     subsequentHourRateMultiplier: 2.0,
