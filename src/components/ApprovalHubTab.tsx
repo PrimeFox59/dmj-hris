@@ -1293,6 +1293,12 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                               </span>
                             )}
 
+                            {item.isEarlyReturnClosed && (
+                              <span className="inline-block text-[9.5px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-300 font-mono-code" title={`Ditutup lebih awal per ${item.earlyReturnDate}. Sisa ${item.forfeitedDays || 0} hari cuti hangus.`}>
+                                ⚠️ Selesai Awal (Sisa {item.forfeitedDays || 0}H Hangus)
+                              </span>
+                            )}
+
                             {item.proofAttachment && (
                               <a
                                 href={item.proofAttachment}
@@ -2208,15 +2214,15 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                       </span>
                     </div>
                     <div className="p-2 bg-white rounded-xl border border-purple-100 shadow-2xs">
-                      <span className="text-[9.5px] text-slate-400 block font-bold uppercase">+ Akumulasi HR</span>
-                      <span className="font-black text-amber-700 font-mono-code text-sm">
-                        +{rosterAccumulatedDays} Hari
+                      <span className="text-[9.5px] text-slate-400 block font-bold uppercase">Terpakai</span>
+                      <span className="font-black text-slate-700 font-mono-code text-sm">
+                        {rosterUsed} Hari
                       </span>
                     </div>
                     <div className="p-2 bg-white rounded-xl border border-purple-100 shadow-2xs">
-                      <span className="text-[9.5px] text-slate-400 block font-bold uppercase">Total Sah</span>
-                      <span className="font-black text-purple-950 font-mono-code text-sm">
-                        {rosterEffectiveQuota} Hari
+                      <span className="text-[9.5px] text-slate-400 block font-bold uppercase">Hangus</span>
+                      <span className="font-black text-rose-600 font-mono-code text-sm">
+                        {currentUser.nonLokalLeaveConfig?.forfeitedLeaveDays || 0} Hari
                       </span>
                     </div>
                     <div className="p-2 bg-purple-100/70 rounded-xl border border-purple-200 shadow-2xs">
@@ -2224,6 +2230,17 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                       <span className="font-black text-purple-900 font-mono-code text-sm">
                         {rosterRemaining} Hari
                       </span>
+                    </div>
+                  </div>
+
+                  {/* Kebijakan Cuti Roster Non-Lokal (9 Hari) */}
+                  <div className="p-3 rounded-xl bg-purple-100/70 border border-purple-200 text-purple-950 text-xs flex items-start gap-2">
+                    <Info className="w-4 h-4 text-purple-700 shrink-0 mt-0.5" />
+                    <div className="space-y-0.5">
+                      <b className="text-purple-900 text-[11px] uppercase tracking-wide">Kebijakan Cuti Roster Non-Lokal (9 Hari):</b>
+                      <p className="text-[10.5px] text-purple-900/90 leading-relaxed">
+                        Hak cuti 9 hari wajib dihabiskan pada periode roster berjalan dan <b>TIDAK DIAKUMULASIKAN</b> ke periode berikutnya (hangus jika tidak diambil). Jika kembali aktif bekerja / absen sebelum 9 hari selesai, tiket cuti ditutup otomatis dan sisa hari <b>otomatis HANGUS</b>.
+                      </p>
                     </div>
                   </div>
 
@@ -2670,6 +2687,19 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                 STATUS: {detailModalItem.status}
               </span>
             </div>
+
+            {/* Early Return / Forfeiture Banner */}
+            {detailModalItem.isEarlyReturnClosed && (
+              <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-300 text-amber-950 space-y-1">
+                <div className="flex items-center gap-1.5 font-bold text-xs text-amber-900">
+                  <AlertTriangle className="w-4 h-4 text-amber-600" />
+                  <span>Tiket Cuti Ditutup Otomatis Lebih Awal</span>
+                </div>
+                <p className="text-xs text-amber-800 leading-relaxed">
+                  Karyawan melakukan presensi kerja kembali pada <b>{detailModalItem.earlyReturnDate}</b>. Durasi cuti disesuaikan menjadi <b>{detailModalItem.actualUsedDays} hari</b>. Sisa <b>{detailModalItem.forfeitedDays} hari cuti HANGUS</b> dan tidak diakumulasikan ke periode cuti berikutnya sesuai kebijakan Cuti Roster Non-Lokal.
+                </p>
+              </div>
+            )}
 
             {/* Description & Subject */}
             <div className="space-y-1.5">

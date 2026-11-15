@@ -113,7 +113,7 @@ interface PresensiCameraTabProps {
   employees?: Employee[];
   salaryRules: SalaryRuleConfig;
   attendanceHistory: AttendanceRecord[];
-  onSubmitAttendance: (record: AttendanceRecord) => void;
+  onSubmitAttendance: (record: AttendanceRecord) => Promise<any> | any;
   onNavigateToTab?: (tabId: string) => void;
   realDetectedIp?: string;
   realDetectedIsp?: string;
@@ -459,6 +459,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
   const [successToast, setSuccessToast] = useState<string | null>(null);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [submittedRecord, setSubmittedRecord] = useState<AttendanceRecord | null>(null);
+  const [earlyReturnNotice, setEarlyReturnNotice] = useState<{ forfeitedDays: number; actualUsedDays: number; returnDate: string } | null>(null);
 
   // Unified Multi-Location Geofence Settings State (Kantor Pusat & Seluruh Proyek Terkait)
   const [isGeofenceModalOpen, setIsGeofenceModalOpen] = useState(false);
@@ -1670,7 +1671,16 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
       checkOutBiometric: !isCheckIn ? (currentBioObj || undefined) : existingToday?.checkOutBiometric
     };
 
-    onSubmitAttendance(newRecord);
+    try {
+      const attRes = await Promise.resolve(onSubmitAttendance(newRecord));
+      if (attRes && attRes.earlyReturnInfo && attRes.earlyReturnInfo.detected) {
+        setEarlyReturnNotice(attRes.earlyReturnInfo);
+      } else {
+        setEarlyReturnNotice(null);
+      }
+    } catch (_) {
+      setEarlyReturnNotice(null);
+    }
     playSuccessChime();
     setSubmittedRecord(newRecord);
     setIsSuccessModalOpen(true);
@@ -2983,6 +2993,19 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                   : 'Data kehadiran dan foto selfie resmi telah dicatat ke dalam database DMJ HRIS Enterprise.'}
               </p>
             </div>
+
+            {/* Early Return Notice Card */}
+            {earlyReturnNotice && (
+              <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-300 text-amber-950 space-y-1.5 text-left animate-in fade-in">
+                <div className="flex items-center gap-2 font-bold text-xs text-amber-900">
+                  <span className="text-sm">✈️</span>
+                  <span>Perhatian: Cuti Roster Ditutup Lebih Awal</span>
+                </div>
+                <p className="text-[11px] text-amber-800 leading-relaxed">
+                  Anda melakukan presensi kerja sebelum cuti 9 hari selesai. Tiket cuti ditutup otomatis per <b>{earlyReturnNotice.returnDate}</b> ({earlyReturnNotice.actualUsedDays} hari riil terpakai), dan sisa <b>{earlyReturnNotice.forfeitedDays} hari cuti otomatis HANGUS</b> (tidak diakumulasikan ke periode berikutnya).
+                </p>
+              </div>
+            )}
 
             {/* Photo Preview with Watermark */}
             <div className="relative aspect-4/3 rounded-2xl overflow-hidden border border-slate-200 shadow-md">

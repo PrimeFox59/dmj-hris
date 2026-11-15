@@ -926,6 +926,11 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
                                 📅 DI LUAR JADWAL
                               </span>
                             )}
+                            {item.isEarlyReturnClosed && (
+                              <span className="px-2 py-0.5 rounded-full text-[9.5px] font-mono-code font-bold uppercase bg-amber-100 text-amber-900 border border-amber-300">
+                                ⚠️ SELESAI AWAL (SISA {item.forfeitedDays || 0}H HANGUS)
+                              </span>
+                            )}
                             {(item.type === 'ATTENDANCE_CORRECTION' || item.type === 'OUT_OF_GEOFENCE' || item.type === 'EARLY_CHECKOUT') && item.targetApproverRole === 'PM' && (
                               <span className="px-1.5 py-0.5 rounded text-[9px] font-mono-code font-bold bg-blue-50 text-blue-700 border border-blue-200">
                                 PM APPROVAL
@@ -947,6 +952,11 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
                           {item.offScheduleReason && (
                             <div className="mt-1.5 p-2 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900">
                               <b>Alasan di Luar Jadwal:</b> {item.offScheduleReason}
+                            </div>
+                          )}
+                          {item.isEarlyReturnClosed && (
+                            <div className="mt-1.5 p-2 rounded-xl bg-amber-50 border border-amber-300 text-[11px] text-amber-900 space-y-0.5">
+                              <b>⚠️ Ditutup Otomatis Lebih Awal:</b> Karyawan kembali aktif presensi pada {item.earlyReturnDate}. Durasi cuti disesuaikan menjadi {item.actualUsedDays} hari. Sisa <b>{item.forfeitedDays || 0} hari cuti HANGUS</b> dan tidak diakumulasikan ke periode cuti berikutnya sesuai kebijakan Cuti Roster Non-Lokal.
                             </div>
                           )}
                         </div>
@@ -1353,15 +1363,15 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
                       </span>
                     </div>
                     <div className="p-2 bg-white rounded-xl border border-purple-100 shadow-2xs">
-                      <span className="text-[9.5px] text-slate-400 block font-bold uppercase">+ Akumulasi HR</span>
-                      <span className="font-black text-amber-700 font-mono-code text-sm">
-                        +{rosterAccumulatedDays} Hari
+                      <span className="text-[9.5px] text-slate-400 block font-bold uppercase">Terpakai</span>
+                      <span className="font-black text-slate-700 font-mono-code text-sm">
+                        {rosterUsed} Hari
                       </span>
                     </div>
                     <div className="p-2 bg-white rounded-xl border border-purple-100 shadow-2xs">
-                      <span className="text-[9.5px] text-slate-400 block font-bold uppercase">Total Sah</span>
-                      <span className="font-black text-purple-950 font-mono-code text-sm">
-                        {rosterEffectiveQuota} Hari
+                      <span className="text-[9.5px] text-slate-400 block font-bold uppercase">Hangus</span>
+                      <span className="font-black text-rose-600 font-mono-code text-sm">
+                        {currentUser.nonLokalLeaveConfig?.forfeitedLeaveDays || 0} Hari
                       </span>
                     </div>
                     <div className="p-2 bg-purple-100/70 rounded-xl border border-purple-200 shadow-2xs">
@@ -1369,6 +1379,17 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
                       <span className="font-black text-purple-900 font-mono-code text-sm">
                         {rosterRemaining} Hari
                       </span>
+                    </div>
+                  </div>
+
+                  {/* Kebijakan Cuti Roster Non-Lokal (9 Hari) */}
+                  <div className="p-3 rounded-xl bg-purple-100/70 border border-purple-200 text-purple-950 text-xs flex items-start gap-2">
+                    <Info className="w-4 h-4 text-purple-700 shrink-0 mt-0.5" />
+                    <div className="space-y-0.5">
+                      <b className="text-purple-900 text-[11px] uppercase tracking-wide">Kebijakan Cuti Roster Non-Lokal (9 Hari):</b>
+                      <p className="text-[10.5px] text-purple-900/90 leading-relaxed">
+                        Hak cuti 9 hari wajib dihabiskan pada periode roster berjalan dan <b>TIDAK DIAKUMULASIKAN</b> ke periode berikutnya (hangus jika tidak diambil). Jika kembali aktif bekerja / absen sebelum 9 hari selesai, tiket cuti ditutup otomatis dan sisa hari <b>otomatis HANGUS</b>.
+                      </p>
                     </div>
                   </div>
 

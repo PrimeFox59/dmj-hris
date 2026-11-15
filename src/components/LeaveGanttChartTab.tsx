@@ -27,7 +27,8 @@ import {
   ChevronDown,
   UserCheck,
   Download,
-  FileSpreadsheet
+  FileSpreadsheet,
+  AlertTriangle
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Employee, Project, ApprovalItem, WorkLocationType, NonLokalLeaveConfig } from '../types';
@@ -69,6 +70,8 @@ export interface LeaveSpan {
   isConflict?: boolean;
   conflictDetails?: string[];
   deviationDays?: number;
+  isEarlyReturnClosed?: boolean;
+  forfeitedDays?: number;
 }
 
 // Helper: Indonesian Month Names
@@ -258,6 +261,8 @@ export const LeaveGanttChartTab: React.FC<LeaveGanttChartTabProps> = ({
             category,
             approvalStatus: isPast ? 'APPROVED' : 'SCHEDULED',
             source: 'ROSTER_CONFIG',
+            isEarlyReturnClosed: Boolean(item.forfeitedDays),
+            forfeitedDays: item.forfeitedDays,
             notes: `Roster Rotasi Cuti ${emp.nonLokalLeaveConfig?.rosterCycleMonths || 3} Bulan (Jatah ${emp.nonLokalLeaveConfig?.leaveQuotaPerPeriod || 9} Hari)`
           });
         });
@@ -352,6 +357,10 @@ export const LeaveGanttChartTab: React.FC<LeaveGanttChartTabProps> = ({
           spans[dupIdx].approvalStatus = appr.status;
           spans[dupIdx].notes = appr.description || spans[dupIdx].notes;
           spans[dupIdx].category = category;
+          spans[dupIdx].endDate = end;
+          spans[dupIdx].daysCount = days;
+          spans[dupIdx].isEarlyReturnClosed = appr.isEarlyReturnClosed;
+          spans[dupIdx].forfeitedDays = appr.forfeitedDays;
         } else {
           spans.push({
             id: appr.id,
@@ -370,6 +379,8 @@ export const LeaveGanttChartTab: React.FC<LeaveGanttChartTabProps> = ({
             category,
             approvalStatus: appr.status,
             source: 'APPROVAL',
+            isEarlyReturnClosed: appr.isEarlyReturnClosed,
+            forfeitedDays: appr.forfeitedDays,
             notes: appr.description || appr.title
           });
         }
@@ -1548,6 +1559,19 @@ export const LeaveGanttChartTab: React.FC<LeaveGanttChartTabProps> = ({
                 <span className="text-xs font-bold text-slate-800 truncate block">{selectedSpan.projectName || 'Head Office'}</span>
               </div>
             </div>
+
+            {/* Early Return Alert Banner */}
+            {selectedSpan.isEarlyReturnClosed && (
+              <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-300 text-amber-950 space-y-1">
+                <div className="flex items-center gap-1.5 font-bold text-xs text-amber-900">
+                  <AlertTriangle className="w-4 h-4 text-amber-600" />
+                  <span>Cuti Ditutup Otomatis Lebih Awal</span>
+                </div>
+                <p className="text-xs text-amber-800 leading-relaxed">
+                  Karyawan kembali aktif bekerja sebelum masa cuti 9 hari berakhir. Durasi efektif cuti disesuaikan menjadi <b>{selectedSpan.daysCount} hari</b> (s.d. {selectedSpan.endDate}). Sisa <b>{selectedSpan.forfeitedDays || 0} hari cuti HANGUS</b> dan tidak diakumulasikan ke periode roster berikutnya sesuai kebijakan Cuti Roster Non-Lokal.
+                </p>
+              </div>
+            )}
 
             {/* Notes & Description */}
             <div className="p-3 rounded-2xl bg-slate-50 border border-slate-100 text-xs text-slate-600 space-y-1">

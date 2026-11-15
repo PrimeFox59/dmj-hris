@@ -249,6 +249,17 @@ export const api = {
     record: AttendanceRecord;
     approvalItem?: ApprovalItem | null;
     removedApprovalIds?: string[];
+    updatedLeaveApproval?: ApprovalItem;
+    updatedEmployee?: Employee;
+    earlyReturnInfo?: {
+      detected: boolean;
+      approvalId: string;
+      forfeitedDays: number;
+      actualUsedDays: number;
+      returnDate: string;
+      leaveStartDate: string;
+      newEndDate: string;
+    };
   }> {
     const res = await fetch('/api/attendance', {
       method: 'POST',

@@ -1137,6 +1137,36 @@ export function App() {
           return [newItem, ...prev];
         });
       }
+
+      // Reconcile Early Return & Forfeited Leave updates
+      if (res && res.updatedLeaveApproval) {
+        const updatedAppr = res.updatedLeaveApproval;
+        setApprovals(prev => prev.map(a => a.id === updatedAppr.id ? { ...a, ...updatedAppr } : a));
+      }
+
+      if (res && res.updatedEmployee) {
+        const updatedEmp = res.updatedEmployee;
+        setEmployees(prev => prev.map(e => e.id === updatedEmp.id ? { ...e, ...updatedEmp } : e));
+        if (currentUser && (currentUser.id === updatedEmp.id || (currentUser.nik && currentUser.nik === updatedEmp.nik))) {
+          setCurrentUser(prev => prev ? { ...prev, ...updatedEmp } : prev);
+        }
+      }
+
+      if (res && res.earlyReturnInfo && res.earlyReturnInfo.detected) {
+        const { forfeitedDays, actualUsedDays, returnDate } = res.earlyReturnInfo;
+        showLiveToast(
+          `✈️ Cuti Roster Ditutup Lebih Awal: Presensi aktif per ${returnDate} (${actualUsedDays} hari cuti riil). Sisa ${forfeitedDays} hari cuti HANGUS (tidak terakumulasi ke periode berikutnya).`,
+          'warn'
+        );
+
+        showSystemNotification('✈️ Cuti Roster Ditutup Lebih Awal', {
+          body: `Presensi diterima. Cuti ditutup per ${returnDate}. Sisa ${forfeitedDays} hari HANGUS dan tidak diakumulasikan ke periode cuti berikutnya.`,
+          tag: `early-return-${res.earlyReturnInfo.approvalId}`,
+          url: '/?tab=approvals'
+        });
+      }
+
+      return res;
     } catch (err) {
       console.error('Failed to save attendance to SQLite', err);
     }

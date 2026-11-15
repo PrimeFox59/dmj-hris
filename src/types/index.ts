@@ -274,12 +274,13 @@ export type WorkLocationType = 'LOKAL' | 'NON_LOKAL';
 
 export interface NonLokalLeaveConfig {
   rosterCycleMonths: number; // e.g. 3 bulan
-  leaveQuotaPerPeriod: number; // e.g. 8 - 12 hari per periode
+  leaveQuotaPerPeriod: number; // e.g. 8 - 12 hari per periode (default: 9 hari)
   usedPeriodLeave: number;
   lastLeaveDate?: string; // YYYY-MM-DD
   nextEligibleLeaveDate?: string; // YYYY-MM-DD
   allowEarlyLeave?: boolean; // default true
-  allowAccumulation?: boolean; // Fleksibel akumulasi ke roster berikutnya
+  allowAccumulation?: boolean; // Kebijakan akumulasi cuti: false = hangus / tidak diakumulasikan ke periode berikutnya
+  forfeitedLeaveDays?: number; // Akumulasi hari cuti yang hangus akibat kembali bekerja sebelum cuti habis
   accumulatedLeaveDays?: number; // Hari akumulasi yang disetujui HR Manager
   accumulationApprovedBy?: string; // e.g. "HR Manager"
   accumulationApprovalDate?: string; // YYYY-MM-DD
@@ -290,6 +291,8 @@ export interface NonLokalLeaveConfig {
     endDate: string;
     days: number;
     status?: string;
+    forfeitedDays?: number;
+    closedReason?: string;
   }[];
 }
 
@@ -463,6 +466,11 @@ export interface ApprovalItem {
   requiresHrApproval?: boolean;
   isAccumulationRequest?: boolean;
   accumulationDaysRequested?: number;
+  // Early Return from Leave (Interupsi Masuk Kerja & Hangus Cuti Non-Lokal)
+  isEarlyReturnClosed?: boolean;
+  forfeitedDays?: number;
+  actualUsedDays?: number;
+  earlyReturnDate?: string;
   // Metadata Koreksi Absensi Mandiri & Penugasan Proyek
   targetCheckInTime?: string;
   targetCheckOutTime?: string;

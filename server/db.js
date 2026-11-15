@@ -1067,6 +1067,187 @@ export function resolveEmployeeProjectAndPm(employeeId) {
   };
 }
 
+export function handleEarlyReturnFromLeave(db, employeeId, attendanceDate, employeeName) {
+  if (!employeeId || !attendanceDate) return { detected: false };
+
+  // 1. Cari tiket permohonan cuti (LEAVE) berstatus APPROVED untuk karyawan ini
+  // yang mencakup tanggal presensi saat ini (startDate <= attendanceDate)
+  const leaveRows = db.prepare(`
+    SELECT id, startDate, endDate, daysCount, data_json, status, type
+    FROM approvals
+    WHERE (employeeId = ? OR employeeNik = ?) 
+      AND type = 'LEAVE'
+      AND status = 'APPROVED'
+      AND startDate <= ?
+    ORDER BY startDate ASC;
+  `).all(employeeId, employeeId, attendanceDate);
+
+  let targetLeave = null;
+  let targetLeaveData = null;
+
+  for (const row of leaveRows) {
+    let parsed = {};
+    try { parsed = JSON.parse(row.data_json); } catch (e) {}
+    if (parsed.isEarlyReturnClosed) continue; // Skip jika sudah ditutup sebelumnya
+
+    let effEndDate = row.endDate;
+    if (!effEndDate && row.startDate && row.daysCount) {
+      const d = new Date(row.startDate + 'T00:00:00Z');
+      d.setUTCDate(d.getUTCDate() + (Number(row.daysCount) || 1) - 1);
+      effEndDate = d.toISOString().split('T')[0];
+    }
+
+    if (effEndDate && attendanceDate <= effEndDate) {
+      targetLeave = row;
+      targetLeaveData = parsed;
+      break;
+    }
+  }
+
+  if (!targetLeave || !targetLeaveData) {
+    return { detected: false };
+  }
+
+  // 2. Hitung hari cuti riil yang terpakai vs hari yang hangus
+  const originalDays = Number(targetLeave.daysCount) || Number(targetLeaveData.daysCount) || 1;
+  let actualUsedDays = 0;
+  let newEndDate = targetLeave.startDate;
+
+  if (attendanceDate > targetLeave.startDate) {
+    const dAtt = new Date(attendanceDate + 'T00:00:00Z');
+    dAtt.setUTCDate(dAtt.getUTCDate() - 1);
+    newEndDate = dAtt.toISOString().split('T')[0];
+
+    const dStart = new Date(targetLeave.startDate + 'T00:00:00Z');
+    actualUsedDays = Math.max(0, Math.round((dAtt.getTime() - dStart.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+  } else {
+    // Hadir tepat pada / sebelum tanggal awal cuti -> 0 hari terpakai
+    actualUsedDays = 0;
+    newEndDate = targetLeave.startDate;
+  }
+
+  const forfeitedDays = Math.max(0, originalDays - actualUsedDays);
+
+  // 3. Update profil karyawan di SQLite (non-lokal vs lokal)
+  let updatedEmployee = null;
+  const empRow = db.prepare('SELECT data_json FROM employees WHERE id = ? OR nik = ?;').get(employeeId, employeeId);
+  const isNonLokal = targetLeaveData.leaveType === 'CUTI_ROSTER_NON_LOKAL' || (empRow && (() => {
+    try {
+      const e = JSON.parse(empRow.data_json);
+      return e.workLocationType === 'NON_LOKAL' || Boolean(e.nonLokalLeaveConfig);
+    } catch (_) { return false; }
+  })());
+
+  if (empRow) {
+    try {
+      const emp = JSON.parse(empRow.data_json);
+      if (isNonLokal) {
+        if (!emp.nonLokalLeaveConfig) {
+          emp.nonLokalLeaveConfig = {
+            rosterCycleMonths: 3,
+            leaveQuotaPerPeriod: 9,
+            usedPeriodLeave: 9,
+            allowAccumulation: false,
+            forfeitedLeaveDays: forfeitedDays,
+            accumulatedLeaveDays: 0
+          };
+        } else {
+          const cfg = emp.nonLokalLeaveConfig;
+          const quota = typeof cfg.leaveQuotaPerPeriod === 'number' ? cfg.leaveQuotaPerPeriod : 9;
+          // Kebijakan Cuti Roster Non-Lokal (9 Hari):
+          // Kuota periode berjalan diset penuh ke kuota (habis) sehingga sisa periode ini = 0
+          // Sisa hari yang belum dipakai HANGUS (forfeited) dan TIDAK DIAKUMULASIKAN ke periode berikutnya
+          cfg.usedPeriodLeave = quota;
+          cfg.forfeitedLeaveDays = (cfg.forfeitedLeaveDays || 0) + forfeitedDays;
+          cfg.allowAccumulation = false; // Hangus / Tidak terakumulasi ke periode berikutnya
+          cfg.accumulatedLeaveDays = 0;   // Mutlak 0 akumulasi
+
+          // Update scheduledLeaveHistory bila ada
+          if (Array.isArray(cfg.scheduledLeaveHistory)) {
+            cfg.scheduledLeaveHistory = cfg.scheduledLeaveHistory.map(sch => {
+              if (sch.startDate === targetLeave.startDate) {
+                return {
+                  ...sch,
+                  endDate: newEndDate,
+                  days: actualUsedDays,
+                  forfeitedDays,
+                  status: 'CLOSED_EARLY_FORFEITED',
+                  closedReason: `Kembali aktif presensi kerja pada ${attendanceDate}. Sisa ${forfeitedDays} hari hangus.`
+                };
+              }
+              return sch;
+            });
+          }
+        }
+      } else {
+        // Cuti Tahunan biasa (Lokal): kembalikan sisa hari ke jatah tahunan
+        if (typeof emp.usedLeave === 'number') {
+          emp.usedLeave = Math.max(0, emp.usedLeave - forfeitedDays);
+        }
+      }
+
+      db.prepare('UPDATE employees SET data_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?;').run(
+        JSON.stringify(emp),
+        emp.id || employeeId
+      );
+      updatedEmployee = emp;
+    } catch (err) {
+      console.warn('[SQLite] Failed updating employee leave record on early return:', err);
+    }
+  }
+
+  // 4. Update data tiket approval di tabel approvals
+  targetLeaveData.isEarlyReturnClosed = true;
+  targetLeaveData.forfeitedDays = forfeitedDays;
+  targetLeaveData.actualUsedDays = actualUsedDays;
+  targetLeaveData.earlyReturnDate = attendanceDate;
+  targetLeaveData.endDate = newEndDate;
+  targetLeaveData.daysCount = actualUsedDays;
+  targetLeaveData.status = 'APPROVED';
+
+  const closureNote = `[Ditutup Otomatis per ${attendanceDate}]: Karyawan kembali aktif presensi kerja sebelum cuti selesai. Durasi riil cuti: ${actualUsedDays} hari (s.d. ${newEndDate}). Sisa ${forfeitedDays} hari cuti HANGUS dan TIDAK DIAKUMULASIKAN ke periode berikutnya sesuai kebijakan Cuti Roster Non-Lokal.`;
+  targetLeaveData.reviewNote = targetLeaveData.reviewNote ? `${targetLeaveData.reviewNote} | ${closureNote}` : closureNote;
+  if (!targetLeaveData.title.includes('Ditutup Lebih Awal')) {
+    targetLeaveData.title = `${targetLeaveData.title} (Ditutup Lebih Awal: Sisa ${forfeitedDays} Hari Hangus)`;
+  }
+
+  db.prepare(`
+    UPDATE approvals 
+    SET endDate = ?, daysCount = ?, reviewNote = ?, data_json = ?, updated_at = CURRENT_TIMESTAMP 
+    WHERE id = ?;
+  `).run(
+    newEndDate,
+    actualUsedDays,
+    targetLeaveData.reviewNote,
+    JSON.stringify(targetLeaveData),
+    targetLeave.id
+  );
+
+  // 5. Audit Log Sistem
+  addAuditLog({
+    action: 'LEAVE_EARLY_RETURN_FORFEITED',
+    entity: 'approvals',
+    entityId: targetLeave.id,
+    userName: employeeName,
+    userRole: 'staff',
+    module: 'LEAVE_MANAGEMENT',
+    status: 'WARNING',
+    details: `Karyawan ${employeeName} (${employeeId}) kembali bekerja pada ${attendanceDate} saat cuti aktif. Tiket cuti dipotong menjadi ${actualUsedDays} hari (s.d. ${newEndDate}). Sisa ${forfeitedDays} hari cuti HANGUS (tidak diakumulasikan ke periode berikutnya).`
+  });
+
+  return {
+    detected: true,
+    approvalId: targetLeave.id,
+    updatedLeaveApproval: targetLeaveData,
+    updatedEmployee,
+    forfeitedDays,
+    actualUsedDays,
+    returnDate: attendanceDate,
+    leaveStartDate: targetLeave.startDate,
+    newEndDate
+  };
+}
+
 export function saveAttendance(record) {
   const db = getDatabase();
 
@@ -1646,7 +1827,20 @@ export function saveAttendance(record) {
     }
   });
 
-  return { success: true, record, approvalItem, removedApprovalIds };
+  // Early Return from Leave Interruption Handler
+  // Jika karyawan kembali aktif presensi sebelum cuti 9 hari selesai, tiket cuti ditutup otomatis
+  // dan sisa hari cuti non-lokal HANGUS (tidak terakumulasi ke periode berikutnya).
+  const earlyReturnRes = handleEarlyReturnFromLeave(db, record.employeeId, record.date, record.employeeName);
+
+  return {
+    success: true,
+    record,
+    approvalItem,
+    removedApprovalIds,
+    updatedLeaveApproval: earlyReturnRes.detected ? earlyReturnRes.updatedLeaveApproval : undefined,
+    updatedEmployee: earlyReturnRes.detected ? earlyReturnRes.updatedEmployee : undefined,
+    earlyReturnInfo: earlyReturnRes.detected ? earlyReturnRes : undefined
+  };
 }
 
 export function deleteAttendance(id, operatorUser = null) {

@@ -1130,6 +1130,20 @@ const server = http.createServer(async (req, res) => {
             triggerApprovalSubmitEmailNotification(result.approvalItem).catch(err => console.error('[Email Trigger Approval Submit Error]', err));
           }
 
+          // Broadcast Early Return & Forfeited Leave updates if employee attended during leave
+          if (result.updatedLeaveApproval) {
+            broadcastRealtimeEvent('APPROVAL_UPDATED', {
+              id: result.updatedLeaveApproval.id,
+              status: result.updatedLeaveApproval.status,
+              reviewNote: result.updatedLeaveApproval.reviewNote,
+              reviewedBy: 'Sistem Otomatis (Early Return)',
+              item: result.updatedLeaveApproval
+            });
+          }
+          if (result.updatedEmployee) {
+            broadcastRealtimeEvent('EMPLOYEE_UPDATED', result.updatedEmployee);
+          }
+
           broadcastRealtimeEvent('ATTENDANCE_SAVED', savedRecord);
           triggerAttendanceWaNotification(savedRecord).catch(err => console.error('[WA Trigger Attendance Error]', err));
           triggerAttendanceEmailNotification(savedRecord).catch(err => console.error('[Email Trigger Attendance Error]', err));
@@ -1194,6 +1208,20 @@ const server = http.createServer(async (req, res) => {
           broadcastRealtimeEvent('APPROVAL_SUBMITTED', result.approvalItem);
           triggerApprovalSubmitWaNotification(result.approvalItem).catch(err => console.error('[WA Trigger Approval Submit Error]', err));
           triggerApprovalSubmitEmailNotification(result.approvalItem).catch(err => console.error('[Email Trigger Approval Submit Error]', err));
+        }
+
+        // Broadcast Early Return & Forfeited Leave updates if employee attended during leave (Kiosk)
+        if (result.updatedLeaveApproval) {
+          broadcastRealtimeEvent('APPROVAL_UPDATED', {
+            id: result.updatedLeaveApproval.id,
+            status: result.updatedLeaveApproval.status,
+            reviewNote: result.updatedLeaveApproval.reviewNote,
+            reviewedBy: 'Sistem Otomatis (Early Return Kiosk)',
+            item: result.updatedLeaveApproval
+          });
+        }
+        if (result.updatedEmployee) {
+          broadcastRealtimeEvent('EMPLOYEE_UPDATED', result.updatedEmployee);
         }
 
         broadcastRealtimeEvent('ATTENDANCE_SAVED', savedRecord);
