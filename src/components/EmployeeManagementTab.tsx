@@ -319,7 +319,7 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
     setRole('Employee');
     setSystemRole('staff');
     setEmploymentType('TETAP');
-    setAssignedProjectId(projects[0]?.id || 'PRIME-ENG-01');
+    setAssignedProjectId(projects[0]?.id || 'DMJ-ENG-01');
     setBaseSalary(10000000);
     setFixedAllowance(2000000);
     setDailyAllowance(50000);

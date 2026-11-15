@@ -34,7 +34,8 @@ import {
   Unlock,
   Bell,
   FileText,
-  SlidersHorizontal
+  SlidersHorizontal,
+  CalendarDays
 } from 'lucide-react';
 import { Employee, PayrollRecord, Project, SalaryRuleConfig, AttendanceRecord, SystemRole, getEffectiveSystemRole, AnnualWorkCalendarConfig, WorkPeriodItem, getEmployeeAssignedProjects, KasbonRecord, KasbonRepaymentType, KasbonStatus, KasbonInstallmentSchedule, ApprovalItem, SalaryDailyDivisorMode } from '../types';
 import { api } from '../services/api';
@@ -982,7 +983,7 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `Payroll_PRIME_${currentProjectFilter}_${selectedPeriod.replace(/\s+/g, '_')}.csv`);
+    link.setAttribute('download', `Payroll_DMJ_${currentProjectFilter}_${selectedPeriod.replace(/\s+/g, '_')}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -1005,7 +1006,6 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
               <span className="bg-[#FF6B00] text-white text-[10px] font-black px-2.5 py-0.5 tracking-wider uppercase font-mono-code rounded">
                 {isStaff ? 'SLIP GAJI PERSONAL' : 'PAYROLL & COST ACCOUNTING'}
               </span>
-              <span className="text-xs font-bold text-slate-500">PRIME ENTERPRISE</span>
               <div className="relative inline-flex items-center">
                 <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 hover:bg-slate-200 border border-slate-200/90 text-slate-800 text-xs font-mono-code font-bold transition-all shadow-2xs">
                   <Calendar className="w-3.5 h-3.5 text-[#FF6B00]" />
@@ -1232,83 +1232,88 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
         {/* Bottom Row: Direct Monthly Work Calendar Selector & Cutoff Range */}
         {canManagePayroll && (
           <div className="pt-3 border-t border-slate-100 space-y-2.5 text-xs">
-            {/* Pilihan Langsung 12 Bulan / Periode Sesuai Kalender Kerja Resmi */}
-            <div className="flex items-center gap-1 overflow-x-auto pb-1 no-scrollbar">
-              <span className="text-[10px] text-slate-400 font-mono-code uppercase font-bold shrink-0 mr-1 flex items-center gap-1">
-                <Calendar className="w-3 h-3 text-[#FF6B00]" />
-                Periode:
-              </span>
+            {/* Pilihan Langsung 12 Bulan / Periode Sesuai Kalender Kerja Resmi - Compact No Scroll */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full">
+              <div className="flex items-center gap-1 shrink-0">
+                <span className="text-[10px] text-slate-400 font-mono-code uppercase font-bold shrink-0 mr-0.5 flex items-center gap-1">
+                  <Calendar className="w-3 h-3 text-[#FF6B00]" />
+                  Periode:
+                </span>
 
-              {/* Year Selector Stepper */}
-              <div className="flex items-center gap-0.5 bg-slate-100 border border-slate-200 rounded-lg p-0.5 shrink-0 mr-1.5 shadow-2xs">
-                <button
-                  type="button"
-                  onClick={() => setSelectedPayrollYear((prev) => Math.max(2020, prev - 1))}
-                  className="w-5 h-5 rounded flex items-center justify-center hover:bg-slate-200 text-slate-600 transition cursor-pointer"
-                  title="Tahun Sebelumnya"
-                >
-                  <ChevronLeft className="w-3 h-3" />
-                </button>
-                <select
-                  value={selectedPayrollYear}
-                  onChange={(e) => setSelectedPayrollYear(Number(e.target.value))}
-                  className="bg-transparent text-[11px] font-bold text-slate-800 focus:outline-none cursor-pointer px-1 py-0.5 font-mono-code"
-                >
-                  {payrollAvailableYears.map((yr) => (
-                    <option key={yr} value={yr}>
-                      {yr}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={() => setSelectedPayrollYear((prev) => prev + 1)}
-                  className="w-5 h-5 rounded flex items-center justify-center hover:bg-slate-200 text-slate-600 transition cursor-pointer"
-                  title="Tahun Berikutnya"
-                >
-                  <ChevronRight className="w-3 h-3" />
-                </button>
-              </div>
-              {(calendarPeriods.length > 0 ? calendarPeriods : Array.from({ length: 12 }, (_, i) => ({
-                periodId: `PER-${selectedPayrollYear}-${String(i + 1).padStart(2, '0')}`,
-                monthIndex: i,
-                periodName: `Periode ${['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'][i]} ${selectedPayrollYear}`,
-                startDate: i === 0 ? `${selectedPayrollYear - 1}-12-21` : `${selectedPayrollYear}-${String(i).padStart(2, '0')}-21`,
-                endDate: `${selectedPayrollYear}-${String(i + 1).padStart(2, '0')}-20`,
-                paydayDate: `${selectedPayrollYear}-${String(i + 1).padStart(2, '0')}-25`,
-                attendanceOpen: i === 9,
-                payrollStatus: i < 9 ? 'CUTOFF_LOCKED' : (i === 9 ? 'OPEN' : 'DRAFT'),
-                effectiveWorkDays: i === 9 ? 25 : 22,
-                totalCalendarDays: 30,
-                weeklyOffDaysCount: 4,
-                holidaysCount: 1
-              }))).map((p: any) => {
-                const isSelected = p.periodName === selectedPeriod || currentPeriodObj?.periodId === p.periodId || (currentPeriodObj?.monthIndex === p.monthIndex && selectedPeriod.includes(p.periodName.replace('Periode ', '')));
-                const isOpen = p.attendanceOpen;
-                const isLocked = p.payrollStatus === 'CUTOFF_LOCKED' || (!isOpen && p.monthIndex < (currentPeriodObj?.monthIndex ?? 9));
-                const monthShort = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'][p.monthIndex];
-
-                return (
+                {/* Year Selector Stepper */}
+                <div className="flex items-center gap-0.5 bg-slate-100 border border-slate-200 rounded-lg p-0.5 shrink-0 shadow-2xs">
                   <button
-                    key={p.periodId || p.monthIndex}
                     type="button"
-                    onClick={() => handleSelectPeriod(p)}
-                    className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shrink-0 ${
-                      isSelected
-                        ? 'bg-slate-900 text-white shadow-sm ring-2 ring-[#FF6B00]'
-                        : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
-                    }`}
-                    title={`${p.periodName}: ${p.startDate} s/d ${p.endDate} (${p.effectiveWorkDays} Hari Kerja) • Status: ${isOpen ? 'DIBUKA (OPEN)' : (isLocked ? 'CUTOFF DITUTUP' : 'DRAF')}`}
+                    onClick={() => setSelectedPayrollYear((prev) => Math.max(2020, prev - 1))}
+                    className="w-5 h-5 rounded flex items-center justify-center hover:bg-slate-200 text-slate-600 transition cursor-pointer"
+                    title="Tahun Sebelumnya"
                   >
-                    <span className="font-mono-code font-bold">{monthShort}</span>
-                    <span className={`w-2 h-2 rounded-full ${isOpen ? 'bg-emerald-500 ring-2 ring-emerald-200' : (isLocked ? 'bg-slate-400' : 'bg-amber-400')}`} />
-                    <span className={`text-[10px] font-mono-code ${isSelected ? 'text-orange-300' : 'text-slate-400'}`}>
-                      {p.effectiveWorkDays}HK
-                    </span>
-                    {isLocked && <Lock className="w-2.5 h-2.5 text-slate-400" />}
+                    <ChevronLeft className="w-3 h-3" />
                   </button>
-                );
-              })}
+                  <select
+                    value={selectedPayrollYear}
+                    onChange={(e) => setSelectedPayrollYear(Number(e.target.value))}
+                    className="bg-transparent text-[11px] font-bold text-slate-800 focus:outline-none cursor-pointer px-1 py-0.5 font-mono-code"
+                  >
+                    {payrollAvailableYears.map((yr) => (
+                      <option key={yr} value={yr}>
+                        {yr}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedPayrollYear((prev) => prev + 1)}
+                    className="w-5 h-5 rounded flex items-center justify-center hover:bg-slate-200 text-slate-600 transition cursor-pointer"
+                    title="Tahun Berikutnya"
+                  >
+                    <ChevronRight className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+
+              {/* 12 Bulan Grid - Sederhana, rapi, pas di satu baris tanpa scroll kanan-kiri */}
+              <div className="grid grid-cols-6 sm:grid-cols-12 gap-1 flex-1 w-full">
+                {(calendarPeriods.length > 0 ? calendarPeriods : Array.from({ length: 12 }, (_, i) => ({
+                  periodId: `PER-${selectedPayrollYear}-${String(i + 1).padStart(2, '0')}`,
+                  monthIndex: i,
+                  periodName: `Periode ${['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'][i]} ${selectedPayrollYear}`,
+                  startDate: i === 0 ? `${selectedPayrollYear - 1}-12-21` : `${selectedPayrollYear}-${String(i).padStart(2, '0')}-21`,
+                  endDate: `${selectedPayrollYear}-${String(i + 1).padStart(2, '0')}-20`,
+                  paydayDate: `${selectedPayrollYear}-${String(i + 1).padStart(2, '0')}-25`,
+                  attendanceOpen: i === 9,
+                  payrollStatus: i < 9 ? 'CUTOFF_LOCKED' : (i === 9 ? 'OPEN' : 'DRAFT'),
+                  effectiveWorkDays: i === 9 ? 25 : 22,
+                  totalCalendarDays: 30,
+                  weeklyOffDaysCount: 4,
+                  holidaysCount: 1
+                }))).map((p: any) => {
+                  const isSelected = p.periodName === selectedPeriod || currentPeriodObj?.periodId === p.periodId || (currentPeriodObj?.monthIndex === p.monthIndex && selectedPeriod.includes(p.periodName.replace('Periode ', '')));
+                  const isOpen = p.attendanceOpen;
+                  const isLocked = p.payrollStatus === 'CUTOFF_LOCKED' || (!isOpen && p.monthIndex < (currentPeriodObj?.monthIndex ?? 9));
+                  const monthShort = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'][p.monthIndex];
+
+                  return (
+                    <button
+                      key={p.periodId || p.monthIndex}
+                      type="button"
+                      onClick={() => handleSelectPeriod(p)}
+                      className={`py-1 px-1 rounded-lg text-center transition-all cursor-pointer flex flex-col items-center justify-center ${
+                        isSelected
+                          ? 'bg-slate-900 text-white shadow-xs ring-2 ring-[#FF6B00]'
+                          : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200/90'
+                      }`}
+                      title={`${p.periodName}: ${p.startDate} s/d ${p.endDate} • ${p.effectiveWorkDays} Hari Kerja • Status: ${isOpen ? 'DIBUKA (OPEN)' : (isLocked ? 'CUTOFF DITUTUP' : 'DRAF')}`}
+                    >
+                      <span className="font-mono-code font-bold text-[10.5px] leading-tight">{monthShort}</span>
+                      <div className="flex items-center gap-0.5 mt-0.5">
+                        <span className={`w-1.5 h-1.5 rounded-full ${isOpen ? 'bg-emerald-500' : (isLocked ? 'bg-slate-400' : 'bg-amber-400')}`} />
+                        {isLocked && <Lock className="w-2 h-2 text-slate-400" />}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             {/* Cutoff Controls & Active Status Banner */}
@@ -1360,39 +1365,35 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                 )}
               </div>
 
-              {/* Quick Actions */}
-              <div className="flex items-center gap-1.5 flex-wrap">
+              {/* Quick Actions (Button Icon Saja Tanpa Teks - Compact & Rapi) */}
+              <div className="flex items-center gap-1.5 shrink-0">
                 {currentPeriodObj && (
                   <button
                     type="button"
                     onClick={handleSyncFromCalendar}
-                    className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 transition-all cursor-pointer flex items-center gap-1"
-                    title="Sinkronkan dengan Kalender Kerja Tahunan"
+                    className="w-8 h-8 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center justify-center transition-all cursor-pointer active:scale-95 shadow-2xs"
+                    title={`Reset Kalender (${currentPeriodObj.effectiveWorkDays} HK Resmi Sesuai Master Kalender Kerja)`}
                   >
-                    <RotateCcw className="w-3 h-3" />
-                    Reset Kalender ({currentPeriodObj.effectiveWorkDays} HK)
+                    <RotateCcw className="w-3.5 h-3.5" />
                   </button>
                 )}
                 <button
                   type="button"
                   onClick={() => handleSetPresetCutoff('FULL_MONTH')}
-                  className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all cursor-pointer"
+                  className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 flex items-center justify-center transition-all cursor-pointer active:scale-95 shadow-2xs"
+                  title="Preset Cutoff: Bulan Penuh (Tanggal 1 s/d Akhir Bulan)"
                 >
-                  Bulan Penuh (1-30)
+                  <CalendarDays className="w-3.5 h-3.5" />
                 </button>
 
-                {/* Tombol Atur Pembagi Gaji Harian (Divisor By Day) */}
+                {/* Tombol Atur Pembagi Gaji Harian (Divisor By Day) - Icon Only */}
                 <button
                   type="button"
                   onClick={() => setIsDivisorModalOpen(true)}
-                  className="px-3 py-1 rounded-xl text-[11px] font-black bg-gradient-to-r from-orange-500 to-[#FF6B00] hover:from-orange-600 hover:to-[#e56000] text-white shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
-                  title="Atur Rumus Pembagi Gaji Harian & Potongan (Office vs Proyek)"
+                  className="w-8 h-8 rounded-xl bg-gradient-to-r from-orange-500 to-[#FF6B00] hover:from-orange-600 text-white flex items-center justify-center shadow-xs transition-all cursor-pointer active:scale-95"
+                  title={`Atur Pembagi Gaji Harian (Divisor by Day) • Office: ${salaryRules.officeDailyDivisorMode === 'OFFICE_WORKING_DAYS' ? `${customWorkingDays || salaryRules.standardWorkDaysPerMonth || 22}HK` : salaryRules.officeDailyDivisorMode === 'PROJECT_25' ? '25HK' : salaryRules.officeDailyDivisorMode === 'CALENDAR_30' ? '30HK' : `${salaryRules.officeDailyDivisorDays || 22}HK`} • Proyek: ${salaryRules.projectDailyDivisorMode === 'PROJECT_25' ? '25H' : salaryRules.projectDailyDivisorMode === 'OFFICE_WORKING_DAYS' ? `${customWorkingDays}H` : '30H'}`}
                 >
                   <SlidersHorizontal className="w-3.5 h-3.5" />
-                  <span>Atur Pembagi Gaji</span>
-                  <span className="px-1.5 py-0.5 rounded-md bg-white/20 text-[10px] font-mono-code font-bold">
-                    🏢 {salaryRules.officeDailyDivisorMode === 'OFFICE_WORKING_DAYS' ? `${customWorkingDays || salaryRules.standardWorkDaysPerMonth || 22}HK` : salaryRules.officeDailyDivisorMode === 'PROJECT_25' ? '25HK' : salaryRules.officeDailyDivisorMode === 'CALENDAR_30' ? '30HK' : `${salaryRules.officeDailyDivisorDays || 22}HK`} • 🏗️ {salaryRules.projectDailyDivisorMode === 'PROJECT_25' ? '25H' : salaryRules.projectDailyDivisorMode === 'OFFICE_WORKING_DAYS' ? `${customWorkingDays}H` : '30H'}
-                  </span>
                 </button>
               </div>
             </div>
@@ -1877,7 +1878,7 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                 Alokasi Biaya Tenaga Kerja Antar-Proyek (Cost Accounting)
               </h2>
               <p className="text-xs text-slate-500">
-                Rincian jam kerja operasional dan pembagian proporsi gaji yang dibebankan langsung ke anggaran proyek PRIME Enterprise.
+                Rincian jam kerja operasional dan pembagian proporsi gaji yang dibebankan langsung ke anggaran proyek DMJ HRIS Enterprise.
               </p>
             </div>
 
@@ -3058,14 +3059,14 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                 </div>
                 <div>
                   <span className="text-[9px] font-bold text-slate-400 font-mono-code block">DIGITAL VERIFICATION CODE</span>
-                  <span className="text-[10px] font-mono-code font-bold text-slate-700">PRIME-VERIFIED-2026-PAYROLL</span>
+                  <span className="text-[10px] font-mono-code font-bold text-slate-700">DMJ-VERIFIED-2026-PAYROLL</span>
                   <p className="text-[9px] text-slate-500 mt-0.5">Sistem Dokumen Sah DMJ HRIS Enterprise</p>
                 </div>
               </div>
 
               <div className="text-right">
                 <p className="text-[10px] text-slate-400 font-mono-code">Surabaya, {selectedSlip.paymentDate || `25 ${selectedSlip.period}`}</p>
-                <p className="text-xs font-bold text-slate-800 mt-4">Direksi & Finance PT Prime Infinity Systems</p>
+                <p className="text-xs font-bold text-slate-800 mt-4">Direksi & Finance PT Dwi Martha Jaya</p>
                 <span className="text-[9px] text-emerald-600 font-semibold font-mono-code">✓ Digitally Signed & Stamped</span>
               </div>
             </div>

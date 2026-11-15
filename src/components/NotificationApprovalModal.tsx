@@ -530,7 +530,7 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
 
     list.push({
       id: 'notif-sys-policy',
-      title: 'Sistem Kebijakan Absensi & Shift On-Site PRIME Enterprise',
+      title: 'Sistem Kebijakan Absensi & Shift On-Site DMJ HRIS Enterprise',
       desc: 'Batas masuk shift normal pukul 08:00 WIB dengan toleransi keterlambatan 15 menit.',
       time: 'Kemarin, 16:30 WIB',
       type: 'info',
@@ -566,7 +566,7 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
                   Pusat Notifikasi & Approval
                 </h2>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase font-mono-code bg-orange-100 text-[#FF6B00]">
-                  PRIME Enterprise
+                  DMJ HRIS Enterprise
                 </span>
               </div>
               <p className="text-xs text-slate-500">
@@ -1144,7 +1144,7 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
               <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 flex items-center gap-2.5">
                 <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
                 <span>
-                  Pengajuan yang dibuat akan langsung masuk ke antrean persetujuan HRD dan Direksi PRIME Enterprise.
+                  Pengajuan yang dibuat akan langsung masuk ke antrean persetujuan HRD dan Direksi DMJ HRIS Enterprise.
                 </span>
               </div>
 
@@ -1719,7 +1719,7 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
 
         {/* Modal Footer */}
         <div className="px-5 sm:px-6 py-3 bg-slate-50 border-t border-slate-200/80 flex items-center justify-between text-[11px] text-slate-500 font-mono-code shrink-0">
-          <span>PRIME Enterprise  Workflow Engine</span>
+          <span>DMJ HRIS Enterprise • Workflow Engine</span>
           <button
             type="button"
             onClick={onClose}

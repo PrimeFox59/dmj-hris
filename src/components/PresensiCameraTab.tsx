@@ -465,7 +465,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
   const [isGeofenceModalOpen, setIsGeofenceModalOpen] = useState(false);
   const [geofenceTargetType, setGeofenceTargetType] = useState<'OFFICE' | 'PROJECT'>('OFFICE');
   const [selectedGeoProjectId, setSelectedGeoProjectId] = useState<string>(projects[0]?.id || '');
-  const [tempOfficeName, setTempOfficeName] = useState(salaryRules.officeGeofence?.name || 'PRIME Enterprise - Kantor Pusat & Innovation Hub');
+  const [tempOfficeName, setTempOfficeName] = useState(salaryRules.officeGeofence?.name || 'DMJ HRIS - Kantor Pusat');
   const [tempOfficeLat, setTempOfficeLat] = useState<number | string>(salaryRules.officeGeofence?.lat ?? -7.293144);
   const [tempOfficeLng, setTempOfficeLng] = useState<number | string>(salaryRules.officeGeofence?.lng ?? 112.775337);
   const [tempOfficeRadius, setTempOfficeRadius] = useState<number>(salaryRules.officeGeofence?.radiusMeters || 350);
@@ -487,7 +487,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
 
   const loadOfficeTarget = () => {
     setGeofenceTargetType('OFFICE');
-    setTempOfficeName(salaryRules.officeGeofence?.name || 'PRIME Enterprise - Kantor Pusat & Innovation Hub');
+    setTempOfficeName(salaryRules.officeGeofence?.name || 'DMJ HRIS - Kantor Pusat');
     setTempOfficeLat(salaryRules.officeGeofence?.lat ?? -7.293144);
     setTempOfficeLng(salaryRules.officeGeofence?.lng ?? 112.775337);
     setTempOfficeRadius(salaryRules.officeGeofence?.radiusMeters || 350);
@@ -703,11 +703,11 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
     try {
       if (geofenceTargetType === 'OFFICE') {
         const updatedGeofence = {
-          name: tempOfficeName.trim() || 'PRIME Enterprise - Kantor Pusat & Innovation Hub',
+          name: tempOfficeName.trim() || 'DMJ HRIS - Kantor Pusat',
           lat: Number(numLat.toFixed(6)),
           lng: Number(numLng.toFixed(6)),
           radiusMeters: numRadius,
-          address: tempOfficeAddress.trim() || 'Kawasan Kantor Pusat & Tech Hub PRIME'
+          address: tempOfficeAddress.trim() || 'Kawasan Kantor Pusat & Workshop PT Dwi Martha Jaya'
         };
 
         const updatedSalaryRules: SalaryRuleConfig = {
@@ -3277,7 +3277,7 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                   type="text"
                   value={tempOfficeName}
                   onChange={e => setTempOfficeName(e.target.value)}
-                  placeholder="e.g. PRIME Enterprise - Innovation Hub Surabaya"
+                  placeholder="e.g. DMJ HRIS - Kantor Pusat"
                   className="w-full glass-input rounded-xl px-3 py-2 text-xs text-slate-800"
                   required
                 />

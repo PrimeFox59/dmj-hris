@@ -804,7 +804,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, onOpenKios
       {/* 3. FOOTER                                                                 */}
       {/* ========================================================================= */}
       <footer className="w-full py-3.5 px-4 text-center text-[11.5px] text-slate-400 border-t border-slate-200/60 bg-white/50 tracking-tight font-medium">
-        &copy; 2026 DMJ HRIS ENTERPRISE • PT PRIME INFINITY SYSTEMS • ALL RIGHTS RESERVED
+        &copy; 2026 DMJ HRIS ENTERPRISE • PT DWI MARTHA JAYA • ALL RIGHTS RESERVED
       </footer>
 
       {/* ========================================================================= */}

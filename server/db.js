@@ -3764,8 +3764,8 @@ export function seedRealisticAuditLogs(db) {
     },
     {
       timestamp: '2026-09-07 09:00:15',
-      userName: 'Direksi PT Prime',
-      userNik: 'PRIME-2021-001',
+      userName: 'Direksi PT Dwi Martha Jaya',
+      userNik: 'DMJ-2021-001',
       userRole: 'superuser',
       action: 'AUTH_LOGIN',
       module: 'AUTH',
@@ -3876,8 +3876,8 @@ export function seedRealisticAuditLogs(db) {
     },
     {
       timestamp: '2026-09-09 10:05:18',
-      userName: 'Direksi PT Prime',
-      userNik: 'PRIME-2021-001',
+      userName: 'Direksi PT Dwi Martha Jaya',
+      userNik: 'DMJ-2021-001',
       userRole: 'superuser',
       action: 'GEOFENCE_UPDATE',
       module: 'HR_RULES',
@@ -3981,7 +3981,7 @@ export function seedRealisticAuditLogs(db) {
       module: 'ATTENDANCE',
       entity: 'attendances',
       entityId: 'ATT-20260910-001',
-      details: 'Presensi On-Site WFO berhasil divalidasi melalui Gateway Utama PRIME. Koordinat GPS akurat (akurasi 5.2m).',
+      details: 'Presensi On-Site WFO berhasil divalidasi melalui Gateway Utama DMJ. Koordinat GPS akurat (akurasi 5.2m).',
       ipAddress: '103.31.205.218',
       status: 'SUCCESS',
       metadata: JSON.stringify({ distanceMeters: 15, geofenceStatus: 'VALID', auditHash: '#901233' })
@@ -4044,14 +4044,14 @@ export function seedRealisticAuditLogs(db) {
     },
     {
       timestamp: '2026-09-10 10:30:15',
-      userName: 'Direksi PT Prime',
-      userNik: 'PRIME-2021-001',
+      userName: 'Direksi PT Dwi Martha Jaya',
+      userNik: 'DMJ-2021-001',
       userRole: 'superuser',
       action: 'UPDATE_SALARY_RULES',
       module: 'HR_RULES',
       entity: 'salary_rules',
       entityId: 'default',
-      details: 'Pembaruan toleransi keterlambatan 15 menit dan verifikasi subnet Gateway Utama PRIME (103.31.205.0/24).',
+      details: 'Pembaruan toleransi keterlambatan 15 menit dan verifikasi subnet Gateway Utama DMJ (103.31.205.0/24).',
       ipAddress: '103.31.205.218',
       status: 'SUCCESS',
       metadata: JSON.stringify({ gracePeriod: 15, subnet: '103.31.205.0/24' })

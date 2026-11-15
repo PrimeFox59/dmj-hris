@@ -806,7 +806,7 @@ export const SalaryRulesTab: React.FC<SalaryRulesTabProps> = ({
                         </span>
                       </h2>
                       <p className="text-[11px] text-slate-500 font-mono-code">
-                        Port 9008 • prime-wa • Sesi Mandiri <span className="font-bold text-slate-700">.prime_wa_auth</span>
+                        Port 9008 • dmj-wa • Sesi Mandiri <span className="font-bold text-slate-700">.dmj_wa_auth</span>
                       </p>
                     </div>
                   </div>

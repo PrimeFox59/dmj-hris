@@ -804,7 +804,7 @@ export const UserPerformanceTab: React.FC<UserPerformanceTabProps> = ({
                 </div>
                 <div className="flex justify-between text-[11px] text-slate-500">
                   <span>Alokasi Beban Proyek:</span>
-                  <span className="font-mono-code text-orange-700 font-bold">{assignedProject?.code || 'PRIME-ENG-01'}</span>
+                  <span className="font-mono-code text-orange-700 font-bold">{assignedProject?.code || 'DMJ-ENG-01'}</span>
                 </div>
                 {!slipAccess.isAllowed && (
                   <div className="pt-2 border-t border-orange-200/60 text-right">

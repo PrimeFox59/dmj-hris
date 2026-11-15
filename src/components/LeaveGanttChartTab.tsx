@@ -549,7 +549,7 @@ export const LeaveGanttChartTab: React.FC<LeaveGanttChartTabProps> = ({
       const ganttAoa: any[][] = [];
 
       // Row 1: Document Header Title
-      ganttAoa.push(['PRIME ENTERPRISE HRIS — VISUAL GANTT CHART JADWAL CUTI & ROSTER (PLAN VS AKTUAL)']);
+      ganttAoa.push(['DMJ HRIS ENTERPRISE — VISUAL GANTT CHART JADWAL CUTI & ROSTER (PLAN VS AKTUAL)']);
       // Row 2: Sub-info
       ganttAoa.push([
         `Rentang Timeline: ${startDateRange} s/d ${endDateRange} • Diexport pada: ${todayStr} • Oleh: ${currentUser?.name || 'Administrator'} • Total Karyawan: ${filteredEmployees.length}`

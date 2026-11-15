@@ -1090,7 +1090,7 @@ export const ProjectManagementTab: React.FC<ProjectManagementTabProps> = ({
                         type="text"
                         value={editingProject.code}
                         onChange={e => setEditingProject({ ...editingProject, code: e.target.value })}
-                        placeholder="Contoh: PRIME-ENG-01"
+                        placeholder="Contoh: DMJ-ENG-01"
                         className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm focus:ring-2 focus:ring-orange-500 font-semibold uppercase"
                       />
                     </div>

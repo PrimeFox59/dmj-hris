@@ -271,7 +271,7 @@ export const ProjectDashboardTab: React.FC<ProjectDashboardTabProps> = ({
             </h1>
 
             <p className="text-xs text-slate-300 flex items-center gap-2 flex-wrap">
-              <span className="font-semibold text-white">{project.client || 'PT Prime Infinity Systems'}</span>
+              <span className="font-semibold text-white">{project.client || 'PT Dwi Martha Jaya'}</span>
               <span>•</span>
               <span className="text-emerald-400 font-bold">{assignedEmployees.length} Personel Bertugas</span>
               <span>•</span>

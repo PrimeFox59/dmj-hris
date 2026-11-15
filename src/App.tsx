@@ -278,8 +278,8 @@ export function App() {
 
     // Check against authorized office IP networks
     const networks = salaryRules?.authorizedIpNetworks || [
-      { ipOrSubnet: '103.31.205.218', label: 'Gateway Utama PRIME', isp: 'Biznet', isRegisteredOffice: true },
-      { ipOrSubnet: '103.31.205.0/24', label: 'Subnet Enterprise PRIME', isp: 'Biznet', isRegisteredOffice: true },
+      { ipOrSubnet: '103.31.205.218', label: 'Gateway Utama DMJ', isp: 'Biznet', isRegisteredOffice: true },
+      { ipOrSubnet: '103.31.205.0/24', label: 'Subnet Enterprise DMJ', isp: 'Biznet', isRegisteredOffice: true },
       { ipOrSubnet: '180.252.0.0/16', label: 'Telkom Astinet Dedicated Site Manyar', isp: 'PT Telkom Indonesia', isRegisteredOffice: true },
       { ipOrSubnet: '192.168.10.0/24', label: 'Local Intranet Subnet Workshop & Engineering', isp: 'LAN DHCP Subnet', isRegisteredOffice: true }
     ];
@@ -2150,7 +2150,7 @@ export function App() {
           DMJ HRIS Enterprise  Production-Grade Human Resource Information System
         </p>
         <p className="text-[10px] text-slate-400 mt-1 flex items-center justify-center gap-3">
-          <span>Developed by PT Prime Infinity Systems (Prime ProjectX)</span>
+          <span>PT Dwi Martha Jaya • Enterprise HRIS Platform</span>
           <span></span>
           <button
             onClick={() => handleNavigateToTab('proposal')}

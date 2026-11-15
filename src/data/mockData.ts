@@ -50,7 +50,7 @@ export const INITIAL_SALARY_RULES: SalaryRuleConfig = {
     }
   ],
   officeGeofence: {
-    name: "PRIME Enterprise - Kantor Pusat & Innovation Hub",
+    name: "DMJ HRIS - Kantor Pusat",
     lat: -7.293144,
     lng: 112.775337,
     radiusMeters: 350,

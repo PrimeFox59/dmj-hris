@@ -52,7 +52,7 @@ export const TOUR_STEPS: TourStep[] = [
     badge: 'Platform Enterprise • Overview',
     module: 'Navigasi',
     icon: Sparkles,
-    text: 'Selamat datang di DMJ HRIS Enterprise — sistem manajemen kepegawaian dan penggajian terintegrasi rancangan PT Prime Infinity Systems. Sistem ini mengintegrasikan presensi kamera pintar ber-watermark digital, verifikasi biometrik pengenalan wajah 4-pose, satelit GPS Geofence anti-fraud, pusat approval SDM, database master personil terenkripsi, penggajian otomatis formula Depnaker, hingga simulasi proyeksi payroll real-time. Mari kita jelajahi seluruh kapabilitasnya!'
+    text: 'Selamat datang di DMJ HRIS Enterprise — sistem manajemen kepegawaian dan penggajian terintegrasi standar enterprise PT Dwi Martha Jaya. Sistem ini mengintegrasikan presensi kamera pintar ber-watermark digital, verifikasi biometrik pengenalan wajah 4-pose, satelit GPS Geofence anti-fraud, pusat approval SDM, database master personil terenkripsi, penggajian otomatis formula Depnaker, hingga simulasi proyeksi payroll real-time. Mari kita jelajahi seluruh kapabilitasnya!'
   },
   {
     id: 'rbac-switcher',
@@ -346,7 +346,7 @@ export const TOUR_STEPS: TourStep[] = [
     badge: 'Tour Selesai • Next Step',
     module: 'Proposal',
     icon: Send,
-    text: 'Tour demo interaktif seluruh modul telah selesai! Dokumen proposal ini siap diekspor ke PDF resmi lengkap dengan nomor surat dan stempel digital. Klik tombol WhatsApp di samping untuk konsultasi langsung dengan tim PT Prime Infinity Systems mengenai kick-off implementasi!'
+    text: 'Tour demo interaktif seluruh modul telah selesai! Dokumen proposal ini siap diekspor ke PDF resmi lengkap dengan nomor surat dan stempel digital. Klik tombol WhatsApp di samping untuk konsultasi langsung dengan tim DMJ HRIS mengenai kick-off implementasi!'
   }
 ];
 
