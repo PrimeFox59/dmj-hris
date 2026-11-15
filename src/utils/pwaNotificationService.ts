@@ -139,6 +139,7 @@ export function evaluateAttendanceReminder(
 
   // Evaluate Project / Office Shift
   const schedule = assignedProject?.customRules?.workSchedule;
+  const isFlexible = Boolean(schedule?.allowFlexibleHours);
   const shiftCheckInStr = schedule?.checkInTime || '08:00';
   const shiftCheckOutStr = schedule?.checkOutTime || '17:00';
 
@@ -149,14 +150,18 @@ export function evaluateAttendanceReminder(
   const shiftOutMinutes = (isNaN(outHour) ? 17 : outHour) * 60 + (isNaN(outMin) ? 0 : outMin);
 
   // 1. PENGINGAT ABSEN MASUK (CHECK-IN)
-  // Window: 30 menit sebelum shift hingga 15 menit setelah shift (misal 07:30 - 08:15)
+  // Window: 30 menit sebelum shift hingga 45 menit setelah shift (atau 07:00 - 10:00 untuk fleksibel)
   if (!todayAttendance || !todayAttendance.checkInTime) {
-    const isWithinMorningWindow = currentTimeVal >= (shiftInMinutes - 30) && currentTimeVal <= (shiftInMinutes + 45);
+    const isWithinMorningWindow = isFlexible
+      ? (currentTimeVal >= 420 && currentTimeVal <= 600) // 07:00 - 10:00 WIB
+      : (currentTimeVal >= (shiftInMinutes - 30) && currentTimeVal <= (shiftInMinutes + 45));
     const alreadyRemindedIn = localStorage.getItem(checkInKey);
 
     if (isWithinMorningWindow && !alreadyRemindedIn) {
       showSystemNotification('⏰ Pengingat Absensi Masuk (DMJ HRIS)', {
-        body: `Halo ${currentUser.name}, jangan lupa lakukan presensi masuk hari ini (${assignedProject?.name || 'Kantor'}). Shift dimulai pukul ${shiftCheckInStr} WIB.`,
+        body: isFlexible
+          ? `Halo ${currentUser.name}, jangan lupa lakukan presensi masuk hari ini (${assignedProject?.name || 'Site Proyek'}). Mode jam kerja fleksibel aktif.`
+          : `Halo ${currentUser.name}, jangan lupa lakukan presensi masuk hari ini (${assignedProject?.name || 'Kantor'}). Shift dimulai pukul ${shiftCheckInStr} WIB.`,
         tag: 'attendance-checkin-reminder',
         url: '/?tab=attendance',
         vibrate: [300, 150, 300]
@@ -166,14 +171,18 @@ export function evaluateAttendanceReminder(
   }
 
   // 2. PENGINGAT ABSEN PULANG (CHECK-OUT)
-  // Window: Saat jam pulang hingga 1.5 jam setelah jam pulang (misal 16:55 - 18:30)
+  // Window: Saat jam pulang hingga 1.5 jam setelah jam pulang (atau setelah 8 jam kerja untuk fleksibel)
   if (todayAttendance && todayAttendance.checkInTime && !todayAttendance.checkOutTime) {
-    const isWithinEveningWindow = currentTimeVal >= (shiftOutMinutes - 10) && currentTimeVal <= (shiftOutMinutes + 90);
+    const isWithinEveningWindow = isFlexible
+      ? (currentTimeVal >= 960 && currentTimeVal <= 1260) // 16:00 - 21:00 WIB
+      : (currentTimeVal >= (shiftOutMinutes - 10) && currentTimeVal <= (shiftOutMinutes + 90));
     const alreadyRemindedOut = localStorage.getItem(checkOutKey);
 
     if (isWithinEveningWindow && !alreadyRemindedOut) {
       showSystemNotification('🏢 Pengingat Absensi Pulang (DMJ HRIS)', {
-        body: `Halo ${currentUser.name}, jam kerja hari ini telah berakhir (${shiftCheckOutStr} WIB). Jangan lupa lakukan presensi pulang sebelum meninggalkan site.`,
+        body: isFlexible
+          ? `Halo ${currentUser.name}, jangan lupa tap Absen Pulang setelah menyelesaikan aktivitas di site (${assignedProject?.name || 'Site Proyek'}).`
+          : `Halo ${currentUser.name}, jam kerja hari ini telah berakhir (${shiftCheckOutStr} WIB). Jangan lupa lakukan presensi pulang sebelum meninggalkan site.`,
         tag: 'attendance-checkout-reminder',
         url: '/?tab=attendance',
         vibrate: [300, 150, 300]
