@@ -339,6 +339,27 @@ export const Navbar: React.FC<NavbarProps> = ({
                     </div>
                     <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-purple-600 group-hover:translate-x-0.5 transition-all" />
                   </button>
+
+                  {/* Option 5: Notifikasi PWA & Pengingat */}
+                  <button
+                    onClick={() => openProfileModal('notifications')}
+                    className="w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-200/80 transition-all text-left cursor-pointer group"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-orange-50 border border-orange-200/70 text-[#FF6B00] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                        <Bell className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-slate-800 group-hover:text-[#FF6B00] transition-colors leading-tight">
+                          Notifikasi PWA & Alarm Presensi
+                        </p>
+                        <p className="text-[10px] text-slate-500">
+                          H-30 masuk, peringatan telat, &gt;1 jam pulang & approval
+                        </p>
+                      </div>
+                    </div>
+                    <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-[#FF6B00] group-hover:translate-x-0.5 transition-all" />
+                  </button>
                 </div>
 
                 {/* Persona Switcher / Impersonation Hub: ONLY visible to Superuser or during active Impersonation */}
@@ -498,6 +519,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         realDetectedIsp={realDetectedIsp}
         realDetectedCity={realDetectedCity}
         isOfficeNetwork={isOfficeNetwork}
+        projects={projects}
         onLogout={onLogout}
       />
     </header>

@@ -165,6 +165,32 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
                 </button>
               )}
 
+              {/* PWA Notification Settings Shortcut */}
+              {onOpenProfileModal && (
+                <button
+                  onClick={() => {
+                    setIsDrawerOpen(false);
+                    onOpenProfileModal('notifications');
+                  }}
+                  className="w-full flex items-center justify-between p-3 rounded-2xl bg-white hover:bg-slate-50 border border-slate-200/90 text-slate-800 transition-all cursor-pointer shadow-2xs text-left"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-xl bg-slate-900 text-[#FF6B00] flex items-center justify-center shadow-xs">
+                      <Bell className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-black text-slate-900 leading-tight">
+                        Pengaturan Notifikasi PWA & Presensi
+                      </p>
+                      <p className="text-[10.5px] text-slate-500">
+                        Atur pengingat H-30 masuk, telat & alert approval
+                      </p>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-slate-400" />
+                </button>
+              )}
+
               {/* SECTION: MODULES GRID */}
               <div>
                 <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider font-mono-code block mb-2">

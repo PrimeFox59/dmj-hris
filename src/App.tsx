@@ -32,7 +32,8 @@ import {
   showSystemNotification, 
   evaluateAttendanceReminder, 
   requestNotificationPermission, 
-  getNotificationPermission 
+  getNotificationPermission,
+  getUserNotificationSettings 
 } from './utils/pwaNotificationService';
 
 import {
@@ -675,20 +676,24 @@ export function App() {
         // PWA System Notification Bar (Alert on mobile phone status bar / lockscreen)
         const activeUser = currentUserRef.current;
         if (activeUser && (item?.employeeId === activeUser.id || (activeUser.nik && item?.employeeNik === activeUser.nik))) {
-          const isApproved = status === 'APPROVED';
-          const isKasbon = item?.type === 'KASBON' || (item?.title && item.title.includes('Kasbon'));
-          const notifTitle = isKasbon
-            ? (isApproved ? '💳 Kasbon Pribadi Dicairkan!' : '❌ Pengajuan Kasbon Ditolak')
-            : (isApproved ? '✅ Pengajuan Disetujui' : status === 'REJECTED' ? '❌ Pengajuan Ditolak' : '⚠️ Revisi Pengajuan Diminta');
-          const notifBody = isKasbon && item?.kasbonData?.amount
-            ? `Kasbon Rp ${item.kasbonData.amount.toLocaleString('id-ID')} telah ${isApproved ? 'disetujui & dicairkan oleh Finance' : 'ditolak'}. ${reviewNote ? `Catatan: ${reviewNote}` : ''}`
-            : `${item?.title || 'Pengajuan'} telah ${status.toLowerCase()} oleh ${reviewedBy || 'Atasan'}. ${reviewNote ? `Catatan: ${reviewNote}` : ''}`;
+          const userSettings = getUserNotificationSettings(activeUser.id);
+          if (userSettings.enabled && userSettings.personalStatusAlerts) {
+            const isApproved = status === 'APPROVED';
+            const isKasbon = item?.type === 'KASBON' || (item?.title && item.title.includes('Kasbon'));
+            const notifTitle = isKasbon
+              ? (isApproved ? '💳 Kasbon Pribadi Dicairkan!' : '❌ Pengajuan Kasbon Ditolak')
+              : (isApproved ? '✅ Pengajuan Disetujui' : status === 'REJECTED' ? '❌ Pengajuan Ditolak' : '⚠️ Revisi Pengajuan Diminta');
+            const notifBody = isKasbon && item?.kasbonData?.amount
+              ? `Kasbon Rp ${item.kasbonData.amount.toLocaleString('id-ID')} telah ${isApproved ? 'disetujui & dicairkan oleh Finance' : 'ditolak'}. ${reviewNote ? `Catatan: ${reviewNote}` : ''}`
+              : `${item?.title || 'Pengajuan'} telah ${status.toLowerCase()} oleh ${reviewedBy || 'Atasan'}. ${reviewNote ? `Catatan: ${reviewNote}` : ''}`;
 
-          showSystemNotification(notifTitle, {
-            body: notifBody,
-            tag: `approval-update-${id}`,
-            url: '/?tab=approvals'
-          });
+            showSystemNotification(notifTitle, {
+              body: notifBody,
+              tag: `approval-update-${id}`,
+              url: '/?tab=approvals',
+              vibrate: userSettings.vibration ? [200, 100, 200] : undefined
+            });
+          }
         }
       } else if (packet.type === 'APPROVAL_SUBMITTED') {
         const newItem: ApprovalItem = packet.payload;
@@ -707,20 +712,24 @@ export function App() {
           // PWA System Notification Bar (Alert to approvers on phone status bar)
           const activeUser = currentUserRef.current;
           if (activeUser && activeUser.id !== newItem.employeeId) {
-            const isFinItem = newItem.type === 'KASBON' || newItem.type === 'SLIP_ACCESS';
-            const isFinUser = isFinanceEmployee(activeUser);
-            const isHrUser = isHrEmployee(activeUser);
-            const sysRole = getEffectiveSystemRole(activeUser);
-            const isSuperOrAdmin = sysRole === 'superuser' || sysRole === 'admin';
-            const isPmOfItem = Boolean(activeUser.id === newItem.projectManagerId);
-            const shouldAlert = (isFinItem && isFinUser) || (!isFinItem && (isHrUser || isSuperOrAdmin || isPmOfItem));
+            const userSettings = getUserNotificationSettings(activeUser.id);
+            if (userSettings.enabled && userSettings.roleApprovalAlerts) {
+              const isFinItem = newItem.type === 'KASBON' || newItem.type === 'SLIP_ACCESS';
+              const isFinUser = isFinanceEmployee(activeUser);
+              const isHrUser = isHrEmployee(activeUser);
+              const sysRole = getEffectiveSystemRole(activeUser);
+              const isSuperOrAdmin = sysRole === 'superuser' || sysRole === 'admin';
+              const isPmOfItem = Boolean(activeUser.id === newItem.projectManagerId);
+              const shouldAlert = (isFinItem && isFinUser) || (!isFinItem && (isHrUser || isSuperOrAdmin || isPmOfItem));
 
-            if (shouldAlert) {
-              showSystemNotification(`🔔 Pengajuan Baru: ${newItem.employeeName}`, {
-                body: `${newItem.title} (${newItem.department || 'Operasional'}). Buka untuk review & persetujuan.`,
-                tag: `approval-new-${newItem.id}`,
-                url: '/?tab=approvals'
-              });
+              if (shouldAlert) {
+                showSystemNotification(`🔔 Pengajuan Baru: ${newItem.employeeName}`, {
+                  body: `${newItem.title} (${newItem.department || 'Operasional'}). Buka untuk review & persetujuan.`,
+                  tag: `approval-new-${newItem.id}`,
+                  url: '/?tab=approvals',
+                  vibrate: userSettings.vibration ? [300, 150, 300] : undefined
+                });
+              }
             }
           }
         }

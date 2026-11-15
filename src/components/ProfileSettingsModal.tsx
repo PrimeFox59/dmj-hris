@@ -30,14 +30,16 @@ import {
   Receipt,
   BadgePercent,
   FileText,
-  Users
+  Users,
+  Bell
 } from 'lucide-react';
-import { Employee, getEffectiveSystemRole, AuthUser, BiometricProfile } from '../types';
+import { Employee, getEffectiveSystemRole, AuthUser, BiometricProfile, Project } from '../types';
 import { api } from '../services/api';
 import { BiometricEnrollmentModal } from './BiometricEnrollmentModal';
 import { normalizeMaritalStatus, resolvePtkpStatus, getPtkpDetails, PTKP_OPTIONS } from '../utils/taxHelper';
+import { PwaNotificationSettingsPanel } from './PwaNotificationSettingsPanel';
 
-export type ProfileTabId = 'profile' | 'photo' | 'password' | 'security';
+export type ProfileTabId = 'profile' | 'photo' | 'password' | 'security' | 'notifications';
 
 interface ProfileSettingsModalProps {
   isOpen: boolean;
@@ -50,6 +52,7 @@ interface ProfileSettingsModalProps {
   realDetectedIsp?: string;
   realDetectedCity?: string;
   isOfficeNetwork?: boolean;
+  projects?: Project[];
   onLogout?: () => void;
 }
 
@@ -101,6 +104,7 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
   realDetectedIsp,
   realDetectedCity,
   isOfficeNetwork = true,
+  projects = [],
   onLogout
 }) => {
   const [activeTab, setActiveTab] = useState<ProfileTabId>(initialTab);
@@ -455,6 +459,18 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
           >
             <ShieldCheck className="w-4 h-4" />
             <span>Sesi & Keamanan</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('notifications')}
+            className={`flex items-center gap-2 py-3 px-3.5 border-b-2 text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+              activeTab === 'notifications'
+                ? 'border-[#FF6B00] text-[#FF6B00]'
+                : 'border-transparent text-slate-600 hover:text-slate-900 hover:border-slate-300'
+            }`}
+          >
+            <Bell className="w-4 h-4" />
+            <span>Notifikasi PWA</span>
           </button>
         </div>
 
@@ -1145,6 +1161,16 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
                   </button>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* TAB 5: NOTIFIKASI PWA (DEVICE PUSH NOTIFICATIONS & REMINDERS) */}
+          {activeTab === 'notifications' && (
+            <div className="py-1">
+              <PwaNotificationSettingsPanel
+                currentUser={currentUser}
+                projects={projects}
+              />
             </div>
           )}
 

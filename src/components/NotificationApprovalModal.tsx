@@ -29,7 +29,8 @@ import {
   Zap,
   Crown,
   Building2,
-  MapPin
+  MapPin,
+  Sliders
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Employee, ApprovalItem, LeaveType, SystemRole, getEffectiveSystemRole, Project } from '../types';
@@ -42,6 +43,7 @@ import {
   getNotificationPermission, 
   requestNotificationPermission 
 } from '../utils/pwaNotificationService';
+import { PwaNotificationSettingsPanel } from './PwaNotificationSettingsPanel';
 
 interface NotificationApprovalModalProps {
   isOpen: boolean;
@@ -134,8 +136,8 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
     return false;
   }, [currentUser.id, currentRole, isHrManager, projects, employees]);
 
-  // Modal active tab: 'reviews' | 'notifications' | 'new_request'
-  const [activeTab, setActiveTab] = useState<'reviews' | 'notifications' | 'new_request'>('reviews');
+  // Modal active tab: 'reviews' | 'notifications' | 'new_request' | 'settings'
+  const [activeTab, setActiveTab] = useState<'reviews' | 'notifications' | 'new_request' | 'settings'>('reviews');
   const [filterType, setFilterType] = useState<string>('ALL');
   const [notificationPerm, setNotificationPerm] = useState<NotificationPermission | 'unsupported'>(() => getNotificationPermission());
 
@@ -658,6 +660,18 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
             >
               <Plus className="w-3.5 h-3.5" />
               <span>+ Ajukan Cuti / Izin</span>
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('settings'); setActiveReviewAction(null); }}
+              className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                activeTab === 'settings'
+                  ? 'bg-slate-900 text-white shadow-xs'
+                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+              }`}
+            >
+              <Sliders className="w-3.5 h-3.5 text-[#FF6B00]" />
+              <span>Pengaturan Notif PWA</span>
             </button>
           </div>
 
@@ -1668,6 +1682,16 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
                 </button>
               </div>
             </form>
+          )}
+
+          {/* TAB 4: PENGATURAN NOTIFIKASI PWA (DEVICE NOTIFICATIONS) */}
+          {activeTab === 'settings' && (
+            <div className="py-1">
+              <PwaNotificationSettingsPanel
+                currentUser={currentUser}
+                projects={projects}
+              />
+            </div>
           )}
 
         </div>
