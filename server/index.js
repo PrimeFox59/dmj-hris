@@ -101,9 +101,14 @@ const MIME_TYPES = {
   '.webmanifest': 'application/manifest+json',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
+  '.webp': 'image/webp',
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
+  '.woff': 'font/woff',
   '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
+  '.wasm': 'application/wasm',
+  '.map': 'application/json',
   '.mp4': 'video/mp4',
   '.webm': 'video/webm'
 };
@@ -891,7 +896,7 @@ const server = http.createServer(async (req, res) => {
         }
         const body = await readBody();
         const match = cleanUrl.match(/^\/api\/employees\/([^\/]+)\/reset-password$/);
-        const employeeId = match ? match[1] : body.employeeId;
+        const employeeId = match ? decodeURIComponent(match[1]) : body.employeeId;
         const newPassword = body.newPassword || 'zzz';
         const clientIp = getClientIp(req);
         const result = resetEmployeePassword(employeeId, newPassword, { ...user, clientIp }, clientIp);
@@ -902,7 +907,7 @@ const server = http.createServer(async (req, res) => {
         const token = getAuthToken();
         const user = getCurrentUserFromToken(token);
         const match = cleanUrl.match(/^\/api\/employees\/([^\/]+)\/biometric$/);
-        const employeeId = match ? match[1] : null;
+        const employeeId = match ? decodeURIComponent(match[1]) : null;
 
         const isSelf = user && (user.employeeId === employeeId || user.id === employeeId);
         const isPrivileged = user && (user.systemRole === 'admin' || user.systemRole === 'superuser');
@@ -938,7 +943,7 @@ const server = http.createServer(async (req, res) => {
         const token = getAuthToken();
         const user = getCurrentUserFromToken(token);
         const match = cleanUrl.match(/^\/api\/employees\/([^\/]+)\/biometric$/);
-        const employeeId = match ? match[1] : null;
+        const employeeId = match ? decodeURIComponent(match[1]) : null;
 
         const isSelf = user && (user.employeeId === employeeId || user.id === employeeId);
         const isPrivileged = user && (user.systemRole === 'admin' || user.systemRole === 'superuser');
@@ -1628,7 +1633,7 @@ const server = http.createServer(async (req, res) => {
 
       if (cleanUrl.match(/^\/api\/work-calendar\/period\/([^\/]+)\/toggle$/) && (method === 'PUT' || method === 'POST')) {
         const match = cleanUrl.match(/^\/api\/work-calendar\/period\/([^\/]+)\/toggle$/);
-        const periodId = match ? match[1] : null;
+        const periodId = match ? decodeURIComponent(match[1]) : null;
         const token = getAuthToken();
         const user = getCurrentUserFromToken(token);
         if (!user || !['admin', 'superuser', 'hr'].includes(user.systemRole)) {

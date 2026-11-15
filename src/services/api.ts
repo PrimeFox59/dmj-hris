@@ -178,7 +178,7 @@ export const api = {
   },
 
   async resetEmployeePassword(employeeId: string, newPassword: string = 'zzz'): Promise<{ success: boolean; message: string; loginId: string; defaultPassword?: string }> {
-    const res = await fetch(`/api/employees/${employeeId}/reset-password`, {
+    const res = await fetch(`/api/employees/${encodeURIComponent(employeeId)}/reset-password`, {
       method: 'POST',
       headers: api.getAuthHeaders(),
       body: JSON.stringify({ employeeId, newPassword })
@@ -191,7 +191,7 @@ export const api = {
   },
 
   async saveBiometricProfile(employeeId: string, biometric: BiometricProfile, updateAvatarAsWell: boolean = false): Promise<{ success: boolean; message: string; employee: Employee }> {
-    const res = await fetch(`/api/employees/${employeeId}/biometric`, {
+    const res = await fetch(`/api/employees/${encodeURIComponent(employeeId)}/biometric`, {
       method: 'POST',
       headers: api.getAuthHeaders(),
       body: JSON.stringify({ biometric, updateAvatarAsWell })
@@ -204,7 +204,7 @@ export const api = {
   },
 
   async deleteBiometricProfile(employeeId: string): Promise<{ success: boolean; message: string }> {
-    const res = await fetch(`/api/employees/${employeeId}/biometric`, {
+    const res = await fetch(`/api/employees/${encodeURIComponent(employeeId)}/biometric`, {
       method: 'DELETE',
       headers: api.getAuthHeaders()
     });
