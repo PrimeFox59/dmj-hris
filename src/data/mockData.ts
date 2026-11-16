@@ -21,8 +21,23 @@ export const INITIAL_SALARY_RULES: SalaryRuleConfig = {
   },
   bpjsKetenagakerjaanRate: 0.03, // 3%
   bpjsKesehatanRate: 0.01, // 1%
+  pph21Enabled: true,
   defaultDailyAllowance: 50000,
   remoteProjectAllowance: 1500000,
+  slipVisibility: {
+    showFixedAllowance: true,
+    showDailyAllowance: true,
+    showProjectAllowance: true,
+    showOvertimePay: true,
+    showBpjsKetenagakerjaan: true,
+    showBpjsKesehatan: true,
+    showPph21: true,
+    showLateDeduction: true,
+    showUnpaidLeaveDeduction: true,
+    showAlphaDeduction: true,
+    showKasbonDeduction: true,
+    hideZeroValues: true // Default: Otomatis sembunyikan baris Rp 0 agar slip bersih
+  },
   authorizedIpNetworks: [
     {
       ipOrSubnet: "103.31.205.218",

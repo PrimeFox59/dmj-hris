@@ -44,6 +44,7 @@ import { formatSalaryDisplay, calculateEmployeePayroll, EmployeeAuditOverride, i
 import { getPtkpDetails, resolvePtkpStatus } from '../utils/taxHelper';
 import { EmployeeTimesheetDetailModal } from './EmployeeTimesheetDetailModal';
 import { PayrollDailyDivisorSettingsModal } from './PayrollDailyDivisorSettingsModal';
+import { PayrollRulesAndVisibilityModal } from './PayrollRulesAndVisibilityModal';
 
 interface PayrollTabProps {
   currentUser?: Employee;
@@ -350,6 +351,7 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
   const [auditingEmployee, setAuditingEmployee] = useState<{ employee: Employee; record: PayrollRecord } | null>(null);
   const [viewingTimesheetEmp, setViewingTimesheetEmp] = useState<Employee | null>(null);
   const [isDivisorModalOpen, setIsDivisorModalOpen] = useState<boolean>(false);
+  const [isPayrollRulesModalOpen, setIsPayrollRulesModalOpen] = useState<boolean>(false);
 
   // Slip Access 10-Minute Window State (Finance Approval System)
   const canViewSlipFreely = isFinanceOrSuper;
@@ -522,6 +524,7 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
   const [salaryFormBase, setSalaryFormBase] = useState<number>(0);
   const [salaryFormFixed, setSalaryFormFixed] = useState<number>(0);
   const [salaryFormDaily, setSalaryFormDaily] = useState<number>(0);
+  const [salaryFormProjectAllowance, setSalaryFormProjectAllowance] = useState<number>(0);
   const [salaryFormBankName, setSalaryFormBankName] = useState<string>('');
   const [salaryFormBankAcc, setSalaryFormBankAcc] = useState<string>('');
   const [salaryFormBankHolder, setSalaryFormBankHolder] = useState<string>('');
@@ -797,6 +800,7 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
     setSalaryFormBase(emp.baseSalary || 0);
     setSalaryFormFixed(emp.fixedAllowance || 0);
     setSalaryFormDaily(emp.dailyAllowance || 0);
+    setSalaryFormProjectAllowance(emp.projectAllowance || 0);
     setSalaryFormBankName(emp.bankAccount?.bankName || 'BCA');
     setSalaryFormBankAcc(emp.bankAccount?.accountNumber || '');
     setSalaryFormBankHolder(emp.bankAccount?.accountHolder || emp.name);
@@ -810,6 +814,7 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
       baseSalary: Number(salaryFormBase) || 0,
       fixedAllowance: Number(salaryFormFixed) || 0,
       dailyAllowance: Number(salaryFormDaily) || 0,
+      projectAllowance: Number(salaryFormProjectAllowance) > 0 ? Number(salaryFormProjectAllowance) : undefined,
       employmentType: salaryFormEmpType,
       bankAccount: {
         bankName: salaryFormBankName,
@@ -918,6 +923,13 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
   const visiblePayrollRecords = useMemo(() => {
     return filteredRecords.slice(0, payrollDisplayLimit);
   }, [filteredRecords, payrollDisplayLimit]);
+
+  // Synchronized active slip: real-time updates when salary rules, rates, or visibility changes
+  const activeSlip = useMemo(() => {
+    if (!selectedSlip) return null;
+    const current = filteredRecords.find(p => p.id === selectedSlip.id || p.employeeId === selectedSlip.employeeId);
+    return current || selectedSlip;
+  }, [selectedSlip, filteredRecords]);
   const hasMorePayroll = payrollDisplayLimit < filteredRecords.length;
 
   useEffect(() => {
@@ -1079,6 +1091,18 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
             >
               <Printer className="w-4 h-4" />
             </button>
+
+            {/* Master Payroll Rules & Visibility Config Button */}
+            {canManagePayroll && (
+              <button
+                type="button"
+                onClick={() => setIsPayrollRulesModalOpen(true)}
+                className="w-9 h-9 rounded-xl bg-white hover:bg-slate-100 text-slate-600 hover:text-slate-900 border border-slate-200 shadow-2xs flex items-center justify-center transition-all cursor-pointer active:scale-95"
+                title="Atur Fleksibilitas Persentase Potongan, Tunjangan & Visibilitas Slip Gaji"
+              >
+                <SlidersHorizontal className="w-4 h-4 text-[#FF6B00]" />
+              </button>
+            )}
 
             {/* Workflow CTA Buttons (Icon Only) */}
             {canManagePayroll && batchStatus === 'DRAFT_HR' && (
@@ -2399,6 +2423,30 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                 </span>
               </div>
 
+              {/* Tunjangan Penugasan Proyek Kustom per Karyawan */}
+              <div>
+                <label className="block text-slate-700 font-bold mb-1">
+                  Tunjangan Penugasan Proyek (Kustom per Karyawan) / Bulan:
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-slate-400 font-bold font-mono-code text-xs">Rp</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={100000}
+                    value={salaryFormProjectAllowance}
+                    onChange={e => setSalaryFormProjectAllowance(Number(e.target.value))}
+                    placeholder={`Default Proyek: Rp ${(salaryRules.remoteProjectAllowance || 1500000).toLocaleString('id-ID')}`}
+                    className="w-full bg-slate-50 focus:bg-white border border-slate-200 focus:border-[#FF6B00] rounded-xl pl-9 pr-3 py-2 font-mono-code font-bold text-slate-900 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF6B00]/20"
+                  />
+                </div>
+                <span className="text-[10px] text-slate-400 font-mono-code mt-0.5 block">
+                  {salaryFormProjectAllowance > 0
+                    ? `Khusus Karyawan Ini: ${formatSalaryDisplay(salaryFormProjectAllowance, showPayrollNominal)} / bulan`
+                    : `Mengikuti Standar Proyek: ${formatSalaryDisplay(salaryRules.remoteProjectAllowance || 1500000, showPayrollNominal)} / bulan`}
+                </span>
+              </div>
+
               {/* Tipe Kepegawaian */}
               <div>
                 <label className="block text-slate-700 font-bold mb-1">
@@ -2757,8 +2805,9 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
             onClick={e => e.stopPropagation()}
           >
             {(() => {
-              const cleanPeriod = (selectedSlip.period || '').replace(/^Periode\s+/i, '').trim() || 'Desember 2026';
-              const cleanDivisorExp = (selectedSlip.divisorExplanation || `${selectedSlip.dailyDivisor || selectedSlip.workingDays} HK`)
+              const curSlip = activeSlip || selectedSlip;
+              const cleanPeriod = (curSlip.period || '').replace(/^Periode\s+/i, '').trim() || 'Desember 2026';
+              const cleanDivisorExp = (curSlip.divisorExplanation || `${curSlip.dailyDivisor || curSlip.workingDays} HK`)
                 .replace(/^\((.*)\)$/, '$1')
                 .trim();
               
@@ -2794,9 +2843,9 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                 return p ? `25 ${p}` : '25 Desember 2026';
               };
 
-              const emp = employees.find(e => e.id === selectedSlip.employeeId);
-              const loginId = emp?.loginId || (selectedSlip.employeeId === 'EMP-001' ? 'admin' : selectedSlip.employeeId);
-              const nikVal = selectedSlip.nik || emp?.nik || emp?.ktpNumber || '-';
+              const emp = employees.find(e => e.id === curSlip.employeeId);
+              const loginId = emp?.loginId || (curSlip.employeeId === 'EMP-001' ? 'admin' : curSlip.employeeId);
+              const nikVal = curSlip.nik || emp?.nik || emp?.ktpNumber || '-';
               const rawBankName = emp?.bankAccount?.bankName || 'Bank';
               const shortBankName = rawBankName
                 .replace(/Bank Central Asia/i, 'BCA')
@@ -2813,8 +2862,30 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                 : 'Payroll Resmi DMJ';
               const empType = emp?.employmentType || 'TETAP';
               const locType = emp?.workLocationType === 'NON_LOKAL' ? 'Non-Lokal (Roster)' : 'Lokal';
-              const empPtkp = selectedSlip.ptkpStatus || emp?.ptkpStatus || resolvePtkpStatus(emp?.maritalStatus, emp?.dependents);
+              const empPtkp = curSlip.ptkpStatus || emp?.ptkpStatus || resolvePtkpStatus(emp?.maritalStatus, emp?.dependents);
               const empPtkpDetails = getPtkpDetails(empPtkp);
+
+              // Visibility Toggles & Dynamic Percentage Labels (Configured by Finance)
+              const vis = salaryRules.slipVisibility || {};
+              const hideZero = vis.hideZeroValues !== false;
+
+              // A. Penerimaan:
+              const showFixed = vis.showFixedAllowance !== false && (!hideZero || curSlip.fixedAllowance > 0);
+              const showDaily = vis.showDailyAllowance !== false && (!hideZero || curSlip.dailyAllowanceTotal > 0);
+              const showProject = vis.showProjectAllowance !== false && (!hideZero || curSlip.projectAllowance > 0);
+              const showOvertime = vis.showOvertimePay !== false && (!hideZero || ((curSlip.overtimePay || 0) > 0 || (curSlip.overtimeHours || 0) > 0));
+
+              // B. Potongan:
+              const showUnpaid = vis.showUnpaidLeaveDeduction !== false && Boolean(curSlip.unpaidLeaveDays && curSlip.unpaidLeaveDays > 0 && curSlip.unpaidLeaveDeduction > 0);
+              const showAlpha = vis.showAlphaDeduction !== false && Boolean(curSlip.alphaDays && curSlip.alphaDays > 0 && (curSlip.alphaDeduction || 0) > 0);
+              const showBpjsTk = vis.showBpjsKetenagakerjaan !== false && (!hideZero || curSlip.bpjsKetenagakerjaan > 0);
+              const showBpjsKes = vis.showBpjsKesehatan !== false && (!hideZero || curSlip.bpjsKesehatan > 0);
+              const showPph = vis.showPph21 !== false && (!hideZero || curSlip.pph21 > 0);
+              const showLate = vis.showLateDeduction !== false && (!hideZero || curSlip.unapprovedLateDeduction > 0);
+              const showKasbon = vis.showKasbonDeduction !== false && (!hideZero || ((curSlip.kasbonDeduction || 0) > 0));
+
+              const bpjsTkLabelPct = Math.round((salaryRules.bpjsKetenagakerjaanRate ?? 0.03) * 100 * 10) / 10;
+              const bpjsKesLabelPct = Math.round((salaryRules.bpjsKesehatanRate ?? 0.01) * 100 * 10) / 10;
 
               return (
                 <>
@@ -2831,6 +2902,18 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                     </div>
 
                     <div className="flex items-center gap-2">
+                      {(canManagePayroll || isFinanceOrSuper) && (
+                        <button
+                          type="button"
+                          onClick={() => setIsPayrollRulesModalOpen(true)}
+                          className="px-2.5 py-1 rounded-lg border border-orange-200 bg-orange-50 hover:bg-orange-100 text-[#FF6B00] text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+                          title="Atur Visibilitas Komponen Slip, Persentase Potongan & Tunjangan"
+                        >
+                          <SlidersHorizontal className="w-3.5 h-3.5 text-[#FF6B00]" />
+                          <span className="hidden sm:inline">Atur Komponen & Tarif</span>
+                        </button>
+                      )}
+
                       <button
                         onClick={() => setShowPayrollNominal(prev => !prev)}
                         className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
@@ -2878,7 +2961,7 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                       <div className="text-right shrink-0">
                         <span className="text-[9.5px] uppercase font-bold text-emerald-700 block">Sisa Waktu Sesi</span>
                         <span className="text-sm font-black font-mono-code text-emerald-900 bg-white px-2.5 py-0.5 rounded-lg border border-emerald-300 shadow-2xs inline-block">
-                          ⏱️ {formatCountdown(getEmployeeSlipAccess(selectedSlip.employeeId, selectedSlip.period).remainingSeconds)}
+                          ⏱️ {formatCountdown(getEmployeeSlipAccess(curSlip.employeeId, curSlip.period).remainingSeconds)}
                         </span>
                       </div>
                     </div>
@@ -2913,7 +2996,7 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                           {cleanPeriod}
                         </span>
                         <span className="text-[9.5px] font-mono-code text-slate-400">
-                          ID: {selectedSlip.id}
+                          ID: {curSlip.id}
                         </span>
                       </div>
                     </div>
@@ -2924,7 +3007,7 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                       <div>
                         <span className="text-[10px] text-slate-400 font-mono-code uppercase block">Nama Karyawan</span>
-                        <span className="font-bold text-slate-900">{selectedSlip.employeeName}</span>
+                        <span className="font-bold text-slate-900">{curSlip.employeeName}</span>
                       </div>
                       <div>
                         <span className="text-[10px] text-slate-400 font-mono-code uppercase block">NIK / Identitas</span>
@@ -2936,14 +3019,14 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                       </div>
                       <div>
                         <span className="text-[10px] text-slate-400 font-mono-code uppercase block">Departemen</span>
-                        <span className="font-semibold text-slate-700">{selectedSlip.department}</span>
+                        <span className="font-semibold text-slate-700">{curSlip.department}</span>
                       </div>
                     </div>
 
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2.5 border-t border-slate-200/60">
                       <div>
                         <span className="text-[10px] text-slate-400 font-mono-code uppercase block">Jabatan / Posisi</span>
-                        <span className="font-semibold text-slate-700">{selectedSlip.position}</span>
+                        <span className="font-semibold text-slate-700">{curSlip.position}</span>
                       </div>
                       <div>
                         <span className="text-[10px] text-slate-400 font-mono-code uppercase block">Status Kerja</span>
@@ -2961,18 +3044,18 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                       </div>
                     </div>
 
-                    {selectedSlip.projectAllocations && selectedSlip.projectAllocations.length > 1 && (
+                    {curSlip.projectAllocations && curSlip.projectAllocations.length > 1 && (
                       <div className="p-2.5 rounded-xl bg-purple-50/80 border border-purple-200 mt-1">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="px-1.5 py-0.5 rounded bg-purple-600 text-white font-mono-code font-black text-[9.5px]">
-                            ⚡ MULTI-PROYEK ({selectedSlip.projectAllocations.length} PROYEK)
+                            ⚡ MULTI-PROYEK ({curSlip.projectAllocations.length} PROYEK)
                           </span>
                           <span className="text-[10.5px] font-bold text-purple-950">
-                            Beban Penggajian Terbagi Rata (1/{selectedSlip.projectAllocations.length})
+                            Beban Penggajian Terbagi Rata (1/{curSlip.projectAllocations.length})
                           </span>
                         </div>
                         <div className="mt-1.5 flex flex-wrap gap-1.5">
-                          {selectedSlip.projectAllocations.map(a => (
+                          {curSlip.projectAllocations.map(a => (
                             <span key={a.projectId} className="px-2 py-0.5 rounded-md bg-white border border-purple-200/90 text-[10px] font-mono-code">
                               <strong className="text-purple-900">[{a.projectCode}]</strong> {a.projectName}: <span className="font-bold text-slate-700">{a.percentage}%</span>
                             </span>
@@ -2985,31 +3068,31 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                   {/* Attendance & Audit Info Box */}
                   <div className="p-3 rounded-2xl bg-orange-50/70 border border-orange-200/80 mb-4 flex flex-wrap items-center justify-between text-xs gap-2">
                     <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-slate-700 text-[11.5px]">
-                      <span>Presensi: <strong>{selectedSlip.presentDays}</strong> Hadir / <strong>{selectedSlip.workingDays}</strong> Hari Kerja</span>
+                      <span>Presensi: <strong>{curSlip.presentDays}</strong> Hadir / <strong>{curSlip.workingDays}</strong> Hari Kerja</span>
                       {cleanDivisorExp && (
                         <span className="text-slate-500">• {cleanDivisorExp}</span>
                       )}
-                      <span>• Upah Harian: <strong className="font-mono-code">{formatSalaryDisplay(selectedSlip.dailyRate || 0, showPayrollNominal)}</strong>/hari</span>
-                      <span>• Cuti: <strong>{selectedSlip.leaveDays || 0}</strong>h</span>
-                      {Boolean(selectedSlip.unpaidLeaveDays && selectedSlip.unpaidLeaveDays > 0) && (
-                        <span>• Unpaid: <strong className="text-amber-700">{selectedSlip.unpaidLeaveDays}h</strong></span>
+                      <span>• Upah Harian: <strong className="font-mono-code">{formatSalaryDisplay(curSlip.dailyRate || 0, showPayrollNominal)}</strong>/hari</span>
+                      <span>• Cuti: <strong>{curSlip.leaveDays || 0}</strong>h</span>
+                      {Boolean(curSlip.unpaidLeaveDays && curSlip.unpaidLeaveDays > 0) && (
+                        <span>• Unpaid: <strong className="text-amber-700">{curSlip.unpaidLeaveDays}h</strong></span>
                       )}
-                      {Boolean(selectedSlip.alphaDays && selectedSlip.alphaDays > 0) && (
-                        <span>• Alpha: <strong className="text-rose-600 font-bold">{selectedSlip.alphaDays}h</strong></span>
+                      {Boolean(curSlip.alphaDays && curSlip.alphaDays > 0) && (
+                        <span>• Alpha: <strong className="text-rose-600 font-bold">{curSlip.alphaDays}h</strong></span>
                       )}
-                      {Boolean((selectedSlip.overtimeHours && selectedSlip.overtimeHours > 0) || (selectedSlip.overtimePay && selectedSlip.overtimePay > 0)) && (
-                        <span>• Lembur: <strong className="text-emerald-700">{selectedSlip.overtimeHours || 0} Jam</strong></span>
+                      {Boolean((curSlip.overtimeHours && curSlip.overtimeHours > 0) || (curSlip.overtimePay && curSlip.overtimePay > 0)) && (
+                        <span>• Lembur: <strong className="text-emerald-700">{curSlip.overtimeHours || 0} Jam</strong></span>
                       )}
-                      {Boolean((selectedSlip.lateHours && selectedSlip.lateHours > 0) || (selectedSlip.lateMinutes && selectedSlip.lateMinutes > 0)) && (
-                        <span>• Terlambat: <strong className="text-rose-600">{selectedSlip.lateHours || Math.ceil((selectedSlip.lateMinutes || 0) / 60)} Jam ({selectedSlip.lateMinutes || 0} mnt)</strong></span>
+                      {Boolean((curSlip.lateHours && curSlip.lateHours > 0) || (curSlip.lateMinutes && curSlip.lateMinutes > 0)) && (
+                        <span>• Terlambat: <strong className="text-rose-600">{curSlip.lateHours || Math.ceil((curSlip.lateMinutes || 0) / 60)} Jam ({curSlip.lateMinutes || 0} mnt)</strong></span>
                       )}
                     </div>
                     <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold font-mono-code shrink-0 ${
-                      selectedSlip.hrValidationStatus === 'VALIDATED_BY_HR'
+                      curSlip.hrValidationStatus === 'VALIDATED_BY_HR'
                         ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                         : 'bg-amber-100 text-amber-800 border border-amber-300'
                     }`}>
-                      {selectedSlip.hrValidationStatus === 'VALIDATED_BY_HR' ? '✓ DIVERIFIKASI HR MANAGER' : '⏳ DRAF AUDIT'}
+                      {curSlip.hrValidationStatus === 'VALIDATED_BY_HR' ? '✓ DIVERIFIKASI HR MANAGER' : '⏳ DRAF AUDIT'}
                     </span>
                   </div>
 
@@ -3025,32 +3108,38 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                           <div className="flex items-baseline justify-between py-0.5 gap-2 border-b border-slate-100/80">
                             <span className="text-slate-600 text-xs">Gaji Pokok:</span>
                             <span className="font-mono-code font-semibold text-xs text-right shrink-0 min-w-[110px] whitespace-nowrap text-slate-800">
-                              {formatSalaryDisplay(selectedSlip.baseSalary, showPayrollNominal)}
+                              {formatSalaryDisplay(curSlip.baseSalary, showPayrollNominal)}
                             </span>
                           </div>
-                          <div className="flex items-baseline justify-between py-0.5 gap-2 border-b border-slate-100/80">
-                            <span className="text-slate-600 text-xs">Tunjangan Tetap / Jabatan:</span>
-                            <span className="font-mono-code font-semibold text-xs text-right shrink-0 min-w-[110px] whitespace-nowrap text-slate-800">
-                              {formatSalaryDisplay(selectedSlip.fixedAllowance, showPayrollNominal)}
-                            </span>
-                          </div>
-                          <div className="flex items-baseline justify-between py-0.5 gap-2 border-b border-slate-100/80">
-                            <span className="text-slate-600 text-xs">Uang Makan / Harian ({selectedSlip.presentDays} Hari):</span>
-                            <span className="font-mono-code font-semibold text-xs text-right shrink-0 min-w-[110px] whitespace-nowrap text-slate-800">
-                              {formatSalaryDisplay(selectedSlip.dailyAllowanceTotal, showPayrollNominal)}
-                            </span>
-                          </div>
-                          <div className="flex items-baseline justify-between py-0.5 gap-2 border-b border-slate-100/80">
-                            <span className="text-slate-600 text-xs">Tunjangan Penugasan Proyek:</span>
-                            <span className="font-mono-code font-semibold text-xs text-right shrink-0 min-w-[110px] whitespace-nowrap text-slate-800">
-                              {formatSalaryDisplay(selectedSlip.projectAllowance, showPayrollNominal)}
-                            </span>
-                          </div>
-                          {Boolean((selectedSlip.overtimePay && selectedSlip.overtimePay > 0) || (selectedSlip.overtimeHours && selectedSlip.overtimeHours > 0)) && (
+                          {showFixed && (
                             <div className="flex items-baseline justify-between py-0.5 gap-2 border-b border-slate-100/80">
-                              <span className="text-emerald-700 text-xs font-medium">Upah Lembur ({selectedSlip.overtimeHours || 0} Jam):</span>
+                              <span className="text-slate-600 text-xs">Tunjangan Tetap / Jabatan:</span>
+                              <span className="font-mono-code font-semibold text-xs text-right shrink-0 min-w-[110px] whitespace-nowrap text-slate-800">
+                                {formatSalaryDisplay(curSlip.fixedAllowance, showPayrollNominal)}
+                              </span>
+                            </div>
+                          )}
+                          {showDaily && (
+                            <div className="flex items-baseline justify-between py-0.5 gap-2 border-b border-slate-100/80">
+                              <span className="text-slate-600 text-xs">Uang Makan / Harian ({curSlip.presentDays} Hari):</span>
+                              <span className="font-mono-code font-semibold text-xs text-right shrink-0 min-w-[110px] whitespace-nowrap text-slate-800">
+                                {formatSalaryDisplay(curSlip.dailyAllowanceTotal, showPayrollNominal)}
+                              </span>
+                            </div>
+                          )}
+                          {showProject && (
+                            <div className="flex items-baseline justify-between py-0.5 gap-2 border-b border-slate-100/80">
+                              <span className="text-slate-600 text-xs">Tunjangan Penugasan Proyek:</span>
+                              <span className="font-mono-code font-semibold text-xs text-right shrink-0 min-w-[110px] whitespace-nowrap text-slate-800">
+                                {formatSalaryDisplay(curSlip.projectAllowance, showPayrollNominal)}
+                              </span>
+                            </div>
+                          )}
+                          {showOvertime && Boolean((curSlip.overtimePay && curSlip.overtimePay > 0) || (curSlip.overtimeHours && curSlip.overtimeHours > 0)) && (
+                            <div className="flex items-baseline justify-between py-0.5 gap-2 border-b border-slate-100/80">
+                              <span className="text-emerald-700 text-xs font-medium">Upah Lembur ({curSlip.overtimeHours || 0} Jam):</span>
                               <span className="font-mono-code font-semibold text-xs text-right shrink-0 min-w-[110px] whitespace-nowrap text-emerald-700">
-                                {formatSalaryDisplay(selectedSlip.overtimePay || 0, showPayrollNominal)}
+                                {formatSalaryDisplay(curSlip.overtimePay || 0, showPayrollNominal)}
                               </span>
                             </div>
                           )}
@@ -3060,7 +3149,7 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                       <div className="flex items-baseline justify-between pt-2.5 mt-3 border-t-2 border-slate-200/90 font-bold text-slate-900">
                         <span className="text-xs uppercase font-mono-code">Total Bruto:</span>
                         <span className="font-mono-code text-sm text-right shrink-0 min-w-[110px] whitespace-nowrap text-slate-950">
-                          {formatSalaryDisplay(selectedSlip.grossSalary, showPayrollNominal)}
+                          {formatSalaryDisplay(curSlip.grossSalary, showPayrollNominal)}
                         </span>
                       </div>
                     </div>
@@ -3072,68 +3161,76 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                           B. POTONGAN / DEDUCTIONS
                         </h4>
                         <div className="space-y-1.5">
-                          {Boolean(selectedSlip.unpaidLeaveDays && selectedSlip.unpaidLeaveDays > 0 && selectedSlip.unpaidLeaveDeduction > 0) && (
+                          {showUnpaid && (
                             <div className="flex items-baseline justify-between py-0.5 gap-2 border-b border-slate-100/80">
                               <span className="text-rose-700 text-xs leading-snug font-medium">
-                                Potongan Cuti Unpaid ({selectedSlip.unpaidLeaveDays} Hari @ {formatSalaryDisplay(selectedSlip.dailyRate || 0, showPayrollNominal)}):
+                                Potongan Cuti Unpaid ({curSlip.unpaidLeaveDays} Hari @ {formatSalaryDisplay(curSlip.dailyRate || 0, showPayrollNominal)}):
                               </span>
                               <span className="font-mono-code font-semibold text-xs text-rose-600 text-right shrink-0 min-w-[110px] whitespace-nowrap">
-                                - {formatSalaryDisplay(selectedSlip.unpaidLeaveDeduction, showPayrollNominal)}
+                                - {formatSalaryDisplay(curSlip.unpaidLeaveDeduction, showPayrollNominal)}
                               </span>
                             </div>
                           )}
-                          {Boolean(selectedSlip.alphaDays && selectedSlip.alphaDays > 0 && (selectedSlip.alphaDeduction || 0) > 0) && (
+                          {showAlpha && (
                             <div className="flex items-baseline justify-between py-0.5 gap-2 border-b border-slate-100/80">
                               <span className="text-rose-700 text-xs leading-snug font-medium">
-                                Potongan Alpha / Mangkir ({selectedSlip.alphaDays} Hari @ {formatSalaryDisplay(selectedSlip.dailyRate || 0, showPayrollNominal)}):
+                                Potongan Alpha / Mangkir ({curSlip.alphaDays} Hari @ {formatSalaryDisplay(curSlip.dailyRate || 0, showPayrollNominal)}):
                               </span>
                               <span className="font-mono-code font-semibold text-xs text-rose-600 text-right shrink-0 min-w-[110px] whitespace-nowrap">
-                                - {formatSalaryDisplay(selectedSlip.alphaDeduction || 0, showPayrollNominal)}
+                                - {formatSalaryDisplay(curSlip.alphaDeduction || 0, showPayrollNominal)}
                               </span>
                             </div>
                           )}
-                          <div className="flex items-baseline justify-between py-0.5 gap-2 border-b border-slate-100/80">
-                            <span className="text-slate-600 text-xs">BPJS Ketenagakerjaan (3%):</span>
-                            <span className="font-mono-code font-semibold text-xs text-rose-600 text-right shrink-0 min-w-[110px] whitespace-nowrap">
-                              - {formatSalaryDisplay(selectedSlip.bpjsKetenagakerjaan, showPayrollNominal)}
-                            </span>
-                          </div>
-                          <div className="flex items-baseline justify-between py-0.5 gap-2 border-b border-slate-100/80">
-                            <span className="text-slate-600 text-xs">BPJS Kesehatan (1%):</span>
-                            <span className="font-mono-code font-semibold text-xs text-rose-600 text-right shrink-0 min-w-[110px] whitespace-nowrap">
-                              - {formatSalaryDisplay(selectedSlip.bpjsKesehatan, showPayrollNominal)}
-                            </span>
-                          </div>
-                          <div className="flex items-baseline justify-between py-0.5 gap-2 border-b border-slate-100/80">
-                            <span className="text-slate-600 text-xs" title="Pajak Penghasilan Pasal 21 dihitung proporsional dari penghasilan kena pajak setelah batas PTKP">
-                              Estimasi Pajak PPh 21 ({empPtkpDetails.code}):
-                            </span>
-                            <span className="font-mono-code font-semibold text-xs text-rose-600 text-right shrink-0 min-w-[110px] whitespace-nowrap">
-                              - {formatSalaryDisplay(selectedSlip.pph21, showPayrollNominal)}
-                            </span>
-                          </div>
+                          {showBpjsTk && (
+                            <div className="flex items-baseline justify-between py-0.5 gap-2 border-b border-slate-100/80">
+                              <span className="text-slate-600 text-xs">BPJS Ketenagakerjaan ({bpjsTkLabelPct}%):</span>
+                              <span className="font-mono-code font-semibold text-xs text-rose-600 text-right shrink-0 min-w-[110px] whitespace-nowrap">
+                                - {formatSalaryDisplay(curSlip.bpjsKetenagakerjaan, showPayrollNominal)}
+                              </span>
+                            </div>
+                          )}
+                          {showBpjsKes && (
+                            <div className="flex items-baseline justify-between py-0.5 gap-2 border-b border-slate-100/80">
+                              <span className="text-slate-600 text-xs">BPJS Kesehatan ({bpjsKesLabelPct}%):</span>
+                              <span className="font-mono-code font-semibold text-xs text-rose-600 text-right shrink-0 min-w-[110px] whitespace-nowrap">
+                                - {formatSalaryDisplay(curSlip.bpjsKesehatan, showPayrollNominal)}
+                              </span>
+                            </div>
+                          )}
+                          {showPph && (
+                            <div className="flex items-baseline justify-between py-0.5 gap-2 border-b border-slate-100/80">
+                              <span className="text-slate-600 text-xs" title="Pajak Penghasilan Pasal 21 dihitung proporsional dari penghasilan kena pajak setelah batas PTKP">
+                                Estimasi Pajak PPh 21 ({empPtkpDetails.code}):
+                              </span>
+                              <span className="font-mono-code font-semibold text-xs text-rose-600 text-right shrink-0 min-w-[110px] whitespace-nowrap">
+                                - {formatSalaryDisplay(curSlip.pph21, showPayrollNominal)}
+                              </span>
+                            </div>
+                          )}
 
                           {/* Potongan Keterlambatan */}
-                          <div className="flex items-baseline justify-between py-0.5 gap-2 border-b border-slate-100/80">
-                            <span className="text-slate-600 text-xs">
-                              {selectedSlip.unapprovedLateDeduction > 0 
-                                ? `Potongan Keterlambatan (${selectedSlip.lateHours || Math.ceil((selectedSlip.lateMinutes || 0) / 60)} Jam @ Rp ${(selectedSlip.lateDeductionRate || 50000).toLocaleString('id-ID')}/jam):`
-                                : 'Potongan Keterlambatan:'
-                              }
-                            </span>
-                            <span className={`font-mono-code font-semibold text-xs text-right shrink-0 min-w-[110px] whitespace-nowrap ${selectedSlip.unapprovedLateDeduction > 0 ? 'text-rose-600 font-bold' : 'text-slate-400'}`}>
-                              {selectedSlip.unapprovedLateDeduction > 0 ? `- ${formatSalaryDisplay(selectedSlip.unapprovedLateDeduction, showPayrollNominal)}` : 'Rp 0'}
-                            </span>
-                          </div>
+                          {showLate && (
+                            <div className="flex items-baseline justify-between py-0.5 gap-2 border-b border-slate-100/80">
+                              <span className="text-slate-600 text-xs">
+                                {curSlip.unapprovedLateDeduction > 0 
+                                  ? `Potongan Keterlambatan (${curSlip.lateHours || Math.ceil((curSlip.lateMinutes || 0) / 60)} Jam @ Rp ${(curSlip.lateDeductionRate || 50000).toLocaleString('id-ID')}/jam):`
+                                  : 'Potongan Keterlambatan:'
+                                }
+                              </span>
+                              <span className={`font-mono-code font-semibold text-xs text-right shrink-0 min-w-[110px] whitespace-nowrap ${curSlip.unapprovedLateDeduction > 0 ? 'text-rose-600 font-bold' : 'text-slate-400'}`}>
+                                {curSlip.unapprovedLateDeduction > 0 ? `- ${formatSalaryDisplay(curSlip.unapprovedLateDeduction, showPayrollNominal)}` : 'Rp 0'}
+                              </span>
+                            </div>
+                          )}
 
                           {/* Potongan Kasbon Pribadi */}
-                          {Boolean(selectedSlip.kasbonDeduction && selectedSlip.kasbonDeduction > 0) && (
+                          {showKasbon && Boolean(curSlip.kasbonDeduction && curSlip.kasbonDeduction > 0) && (
                             <div className="flex items-baseline justify-between py-0.5 gap-2 border-b border-slate-100/80">
-                              <span className="text-rose-700 text-xs leading-snug font-medium" title={selectedSlip.kasbonDeductionNote || 'Potongan Cicilan Kasbon Pribadi'}>
-                                Potongan Kasbon Pribadi {selectedSlip.kasbonRemainingBalance !== undefined ? `(Sisa: ${formatSalaryDisplay(selectedSlip.kasbonRemainingBalance, showPayrollNominal)})` : ''}:
+                              <span className="text-rose-700 text-xs leading-snug font-medium" title={curSlip.kasbonDeductionNote || 'Potongan Cicilan Kasbon Pribadi'}>
+                                Potongan Kasbon Pribadi {curSlip.kasbonRemainingBalance !== undefined ? `(Sisa: ${formatSalaryDisplay(curSlip.kasbonRemainingBalance, showPayrollNominal)})` : ''}:
                               </span>
                               <span className="font-mono-code font-bold text-xs text-rose-600 text-right shrink-0 min-w-[110px] whitespace-nowrap">
-                                - {formatSalaryDisplay(selectedSlip.kasbonDeduction || 0, showPayrollNominal)}
+                                - {formatSalaryDisplay(curSlip.kasbonDeduction || 0, showPayrollNominal)}
                               </span>
                             </div>
                           )}
@@ -3143,7 +3240,7 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                       <div className="flex items-baseline justify-between pt-2.5 mt-3 border-t-2 border-slate-200/90 font-bold text-slate-900">
                         <span className="text-xs uppercase font-mono-code">Total Potongan:</span>
                         <span className="font-mono-code text-sm text-right shrink-0 min-w-[110px] whitespace-nowrap text-rose-600">
-                          - {formatSalaryDisplay(selectedSlip.totalDeductions, showPayrollNominal)}
+                          - {formatSalaryDisplay(curSlip.totalDeductions, showPayrollNominal)}
                         </span>
                       </div>
                     </div>
@@ -3166,10 +3263,10 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                     </div>
                     <div className="text-left sm:text-right sm:shrink-0 w-full sm:w-auto">
                       <span className="text-2xl sm:text-3xl font-black text-emerald-900 font-mono-code tracking-tight block">
-                        {formatSalaryDisplay(selectedSlip.netSalary, showPayrollNominal)}
+                        {formatSalaryDisplay(curSlip.netSalary, showPayrollNominal)}
                       </span>
                       <span className="text-[10px] text-emerald-700 font-mono-code">
-                        (Bruto {formatSalaryDisplay(selectedSlip.grossSalary, showPayrollNominal)} - Potongan {formatSalaryDisplay(selectedSlip.totalDeductions, showPayrollNominal)})
+                        (Bruto {formatSalaryDisplay(curSlip.grossSalary, showPayrollNominal)} - Potongan {formatSalaryDisplay(curSlip.totalDeductions, showPayrollNominal)})
                       </span>
                     </div>
                   </div>
@@ -3195,7 +3292,7 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
 
                     <div className="text-right">
                       <p className="text-[10.5px] text-slate-500 font-medium">
-                        Surabaya, {formatSlipDate(selectedSlip.paymentDate, selectedSlip.period)}
+                        Surabaya, {formatSlipDate(curSlip.paymentDate, curSlip.period)}
                       </p>
                       <p className="text-xs font-bold text-slate-800 mt-3">Direksi & Finance PT Dwi Martha Jaya</p>
                       <span className="text-[9.5px] text-emerald-700 font-semibold font-mono-code inline-flex items-center gap-1 mt-0.5">
@@ -3731,6 +3828,20 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
           }
         }}
         projects={projects}
+      />
+
+      {/* Modal Fleksibilitas Tarif Potongan, Tunjangan & Visibilitas Slip Gaji */}
+      <PayrollRulesAndVisibilityModal
+        isOpen={isPayrollRulesModalOpen}
+        onClose={() => setIsPayrollRulesModalOpen(false)}
+        salaryRules={salaryRules}
+        onSaveSalaryRules={newRules => {
+          if (onUpdateSalaryRules) {
+            onUpdateSalaryRules(newRules);
+          } else {
+            api.saveSalaryRules(newRules).catch(console.error);
+          }
+        }}
       />
     </div>
   );

@@ -322,21 +322,35 @@ export function calculateEmployeePayroll(
   );
 
   // Allowances (Daily allowance strictly paid for actual days present!)
-  const dailyAllowanceTotal = presentDays * (employee.dailyAllowance || rules.defaultDailyAllowance);
-  const isRemoteSite = employee.assignedProjectId !== 'PRJ-HQ-04' && employee.workLocationType === 'NON_LOKAL';
-  const projectAllowance = isRemoteSite ? rules.remoteProjectAllowance : 0;
-  const grossSalary = employee.baseSalary + employee.fixedAllowance + dailyAllowanceTotal + projectAllowance + overtimePay;
+  const dailyAllowanceRate = (employee.dailyAllowance !== undefined && employee.dailyAllowance !== null)
+    ? employee.dailyAllowance
+    : (rules.defaultDailyAllowance ?? 50000);
+  const dailyAllowanceTotal = presentDays * dailyAllowanceRate;
 
-  // Deductions
-  const bpjsKetenagakerjaan = Math.round(employee.baseSalary * rules.bpjsKetenagakerjaanRate);
-  const bpjsKesehatan = Math.round(employee.baseSalary * rules.bpjsKesehatanRate);
+  const isRemoteSite = employee.assignedProjectId !== 'PRJ-HQ-04' && employee.workLocationType === 'NON_LOKAL';
+  const defaultProjectAllowance = rules.remoteProjectAllowance ?? 1500000;
+  const projectAllowance = (employee.projectAllowance !== undefined && employee.projectAllowance !== null)
+    ? employee.projectAllowance
+    : (isRemoteSite ? defaultProjectAllowance : 0);
+
+  const grossSalary = employee.baseSalary + (employee.fixedAllowance || 0) + dailyAllowanceTotal + projectAllowance + overtimePay;
+
+  // Deductions (Flexible BPJS rates configured by Finance)
+  const bpjsTkRate = rules.bpjsKetenagakerjaanRate !== undefined ? rules.bpjsKetenagakerjaanRate : 0.03;
+  const bpjsKesRate = rules.bpjsKesehatanRate !== undefined ? rules.bpjsKesehatanRate : 0.01;
+  const bpjsKetenagakerjaan = Math.round(employee.baseSalary * bpjsTkRate);
+  const bpjsKesehatan = Math.round(employee.baseSalary * bpjsKesRate);
   
-  // Tax PPh 21 estimation (progressive basic tier 5% on taxable income after PTKP sesuai status perkawinan & tanggungan)
+  // Tax PPh 21 estimation (progressive basic tier 5% on taxable income after PTKP or customizable rate)
   const ptkpInfo = getPtkpDetails(employee.ptkpStatus || (employee.maritalStatus ? resolvePtkpStatus(employee.maritalStatus, employee.dependents) : 'TK/0'));
-  const annualGross = grossSalary * 12;
-  const ptkp = ptkpInfo.annualAmount;
-  const taxableAnnual = Math.max(0, annualGross - ptkp - (bpjsKetenagakerjaan * 12));
-  const pph21 = Math.round((taxableAnnual * 0.05) / 12);
+  let pph21 = 0;
+  if (rules.pph21Enabled !== false) {
+    const annualGross = grossSalary * 12;
+    const ptkp = ptkpInfo.annualAmount;
+    const taxableAnnual = Math.max(0, annualGross - ptkp - (bpjsKetenagakerjaan * 12));
+    const effectivePphRate = rules.pph21CustomRate !== undefined ? rules.pph21CustomRate : 0.05;
+    pph21 = Math.round((taxableAnnual * effectivePphRate) / 12);
+  }
 
   // Kasbon Pribadi & Cicilan Pinjaman Karyawan
   let kasbonDeduction = 0;

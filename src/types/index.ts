@@ -249,6 +249,7 @@ export interface Employee {
   baseSalary: number;
   fixedAllowance: number;
   dailyAllowance: number;
+  projectAllowance?: number; // Override kustom tunjangan penugasan proyek per karyawan
   leaveQuota: number;
   usedLeave: number;
   bankAccount: {
@@ -652,6 +653,21 @@ export interface PayrollRecord {
   paymentDate?: string;
 }
 
+export interface SlipVisibilityConfig {
+  showFixedAllowance?: boolean; // Tunjangan Tetap / Jabatan
+  showDailyAllowance?: boolean; // Uang Makan / Harian
+  showProjectAllowance?: boolean; // Tunjangan Penugasan Proyek
+  showOvertimePay?: boolean; // Upah Lembur
+  showBpjsKetenagakerjaan?: boolean; // BPJS Ketenagakerjaan
+  showBpjsKesehatan?: boolean; // BPJS Kesehatan
+  showPph21?: boolean; // Estimasi Pajak PPh 21
+  showLateDeduction?: boolean; // Potongan Keterlambatan
+  showUnpaidLeaveDeduction?: boolean; // Potongan Cuti Unpaid
+  showAlphaDeduction?: boolean; // Potongan Alpha / Mangkir
+  showKasbonDeduction?: boolean; // Potongan Kasbon Pribadi
+  hideZeroValues?: boolean; // Sembunyikan otomatis komponen dengan nominal Rp 0 (default: true)
+}
+
 export interface SalaryRuleConfig {
   standardWorkDaysPerMonth: number;
   standardHoursPerDay: number;
@@ -671,10 +687,13 @@ export interface SalaryRuleConfig {
     holidayRateMultiplier: number; // e.g. 2.0 - 3.0
     hourlyRateDivisor: number; // 173 as per Depnaker
   };
-  bpjsKetenagakerjaanRate: number; // 3%
-  bpjsKesehatanRate: number; // 1%
+  bpjsKetenagakerjaanRate: number; // e.g. 0.03 (3%)
+  bpjsKesehatanRate: number; // e.g. 0.01 (1%)
+  pph21Enabled?: boolean; // Opsi pemotongan PPh 21 (default: true)
+  pph21CustomRate?: number; // Tarif persentase kustom PPh 21 (default undefined: progresif PTKP 5%)
   defaultDailyAllowance: number; // IDR 50,000 / day
   remoteProjectAllowance: number; // IDR 1,500,000 / month
+  slipVisibility?: SlipVisibilityConfig; // Konfigurasi Show/Hide komponen slip gaji
   authorizedIpNetworks?: Array<{
     ipOrSubnet: string;
     label: string;
