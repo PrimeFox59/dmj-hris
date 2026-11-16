@@ -659,7 +659,7 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
               }`}
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>+ Ajukan Cuti / Izin</span>
+              <span>+ Buat Pengajuan (Cuti / Izin / Kasbon)</span>
             </button>
 
             <button

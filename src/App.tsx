@@ -70,7 +70,7 @@ export function App() {
   });
 
   // Auto-invalidation build ID (Membersihkan cache lama saat versi baru dirilis)
-  const APP_BUILD_ID = '20261112_v6_database_tab_rbac_guard';
+  const APP_BUILD_ID = '20261116_v1_uniform_buttons_and_kasbon';
   if (typeof window !== 'undefined') {
     try {
       const savedBuild = localStorage.getItem('prime_hris_build_id');

@@ -295,6 +295,26 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
     }
   };
 
+  // Handler seragam untuk membuka modal sesuai tombol aksi yang diklik
+  const openNewRequestModal = (type: 'LEAVE' | 'PERMIT' | 'ATTENDANCE_CORRECTION' | 'KASBON') => {
+    setNewRequestType(type);
+    if (type === 'KASBON') {
+      const count = kasbonRepaymentType === 'TOTAL_BULANAN' ? 1 : kasbonInstallments;
+      setNewTitle(`Pengajuan Kasbon Pribadi: Rp ${kasbonAmount.toLocaleString('id-ID')} (${kasbonRepaymentType === 'TOTAL_BULANAN' ? 'Lunas 1 Bln' : `Cicilan ${count}x`})`);
+      setNewDescription('Pengajuan Kasbon Pribadi Karyawan');
+    } else if (type === 'ATTENDANCE_CORRECTION') {
+      setNewTitle(`Koreksi Absensi: ${formatIndonesianDateDisplay(correctionDate)}`);
+      setNewDescription('');
+    } else if (type === 'LEAVE') {
+      setNewTitle(newLeaveType === 'CUTI_ROSTER_NON_LOKAL' ? 'Permohonan Cuti Roster' : 'Permohonan Cuti Tahunan');
+      setNewDescription('Keperluan cuti kerja tahunan / roster.');
+    } else {
+      setNewTitle('Permohonan Izin Resmi');
+      setNewDescription('Izin resmi / keperluan penting.');
+    }
+    setShowNewRequestModal(true);
+  };
+
   // Validation States
   const selectedCalendarYear = newStartDate ? new Date(newStartDate + 'T00:00:00').getFullYear() : 2026;
   const isAnnualLeave = newRequestType === 'LEAVE' && newLeaveType === 'CUTI_TAHUNAN';
@@ -761,19 +781,54 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end">
-          <div className="px-4 py-2 rounded-2xl bg-orange-50 border border-orange-200 text-right">
-            <p className="text-[10px] uppercase font-bold text-orange-600">{isStaff ? 'Pengajuan Aktif' : 'Menunggu Persetujuan'}</p>
-            <p className="text-xl font-black text-[#FF6B00] font-mono-code">{pendingCount} Pengajuan</p>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full md:w-auto justify-end">
+          <div className="px-3.5 py-2 rounded-2xl bg-orange-50 border border-orange-200 text-right shrink-0">
+            <p className="text-[10px] uppercase font-bold text-orange-600 leading-tight">{isStaff ? 'Pengajuan Aktif' : 'Menunggu Persetujuan'}</p>
+            <p className="text-lg font-black text-[#FF6B00] font-mono-code leading-tight mt-0.5">{pendingCount} Pengajuan</p>
           </div>
 
-          <button
-            onClick={() => setShowNewRequestModal(true)}
-            className="px-5 py-2.5 rounded-2xl btn-orange font-bold text-xs flex items-center gap-2 shadow-md cursor-pointer active:scale-95"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Ajukan Cuti / Izin / Koreksi</span>
-          </button>
+          {/* 4 Action Buttons Pengajuan Berukuran Seragam, Rapi & Ringkas */}
+          <div className="grid grid-cols-2 sm:flex sm:flex-wrap md:flex-nowrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => openNewRequestModal('LEAVE')}
+              className="h-10 px-3.5 rounded-2xl bg-[#FF6B00] hover:bg-[#E05E00] text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+              title="Ajukan Permohonan Cuti Kerja (Tahunan & Roster Non-Lokal)"
+            >
+              <Calendar className="w-3.5 h-3.5 shrink-0" />
+              <span>+ Cuti Kerja</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => openNewRequestModal('PERMIT')}
+              className="h-10 px-3.5 rounded-2xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+              title="Ajukan Izin Resmi, Cuti Sakit, atau Keperluan Pribadi"
+            >
+              <FileText className="w-3.5 h-3.5 shrink-0" />
+              <span>+ Izin / Sakit</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => openNewRequestModal('ATTENDANCE_CORRECTION')}
+              className="h-10 px-3.5 rounded-2xl bg-[#0D9488] hover:bg-[#0F766E] text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+              title="Ajukan Koreksi Absensi Mandiri (Lupa / Kendala Jaringan di Site)"
+            >
+              <Clock className="w-3.5 h-3.5 shrink-0" />
+              <span>+ Koreksi Absen</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => openNewRequestModal('KASBON')}
+              className="h-10 px-3.5 rounded-2xl bg-[#7C3AED] hover:bg-[#6D28D9] text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-all active:scale-95 cursor-pointer whitespace-nowrap"
+              title="Ajukan Pinjaman / Kasbon Pribadi Potong Payroll (Otorisasi Finance)"
+            >
+              <CreditCard className="w-3.5 h-3.5 shrink-0" />
+              <span>+ Kasbon Pribadi</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1644,7 +1699,15 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
           >
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
-                <h3 className="font-bold text-slate-900 text-base">Formulir Permohonan Cuti / Izin</h3>
+                <h3 className="font-bold text-slate-900 text-base">
+                  {newRequestType === 'KASBON'
+                    ? 'Formulir Permohonan Kasbon Pribadi'
+                    : newRequestType === 'ATTENDANCE_CORRECTION'
+                    ? 'Formulir Koreksi Absensi Mandiri'
+                    : newRequestType === 'PERMIT'
+                    ? 'Formulir Permohonan Izin / Sakit'
+                    : 'Formulir Permohonan Cuti Kerja'}
+                </h3>
                 <p className="text-xs text-slate-500">
                   Pemohon: <span className="font-semibold text-slate-800">{currentUser.name}</span> • <span className="font-mono-code font-bold text-indigo-700 bg-indigo-50 border border-indigo-200/60 px-1.5 py-0.2 rounded text-[11px]">{currentUser.loginId || (currentUser.id === 'EMP-001' ? 'admin' : currentUser.id)}</span>
                   {currentUser.nik && currentUser.nik.trim() && currentUser.nik !== '-' && !currentUser.nik.startsWith('PRIME-') ? (
