@@ -315,6 +315,78 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
     setShowNewRequestModal(true);
   };
 
+  // Floating Pointer-Following Tooltip State untuk Action Buttons
+  interface PointerTooltipState {
+    title: string;
+    subtitle?: string;
+    color: string;
+    x: number;
+    y: number;
+  }
+  const [pointerTooltip, setPointerTooltip] = useState<PointerTooltipState | null>(null);
+
+  const handlePointerEnter = (
+    e: React.MouseEvent,
+    data: { title: string; subtitle?: string; color: string }
+  ) => {
+    setPointerTooltip({
+      ...data,
+      x: e.clientX,
+      y: e.clientY
+    });
+  };
+
+  const handlePointerMove = (e: React.MouseEvent) => {
+    setPointerTooltip(prev => (prev ? { ...prev, x: e.clientX, y: e.clientY } : null));
+  };
+
+  const handlePointerLeave = () => {
+    setPointerTooltip(null);
+  };
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (pointerTooltip) setPointerTooltip(null);
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [pointerTooltip]);
+
+  const SUBMISSION_ACTIONS = [
+    {
+      type: 'LEAVE' as const,
+      icon: Calendar,
+      bgClass: 'bg-[#FF6B00] hover:bg-[#E05E00]',
+      color: '#FF6B00',
+      title: 'Ajukan Cuti Kerja',
+      subtitle: 'Cuti Tahunan & Roster Non-Lokal'
+    },
+    {
+      type: 'PERMIT' as const,
+      icon: FileText,
+      bgClass: 'bg-[#2563EB] hover:bg-[#1D4ED8]',
+      color: '#2563EB',
+      title: 'Ajukan Izin / Sakit',
+      subtitle: 'Izin Resmi, Dispensasi & Cuti Sakit'
+    },
+    {
+      type: 'ATTENDANCE_CORRECTION' as const,
+      icon: Clock,
+      bgClass: 'bg-[#0D9488] hover:bg-[#0F766E]',
+      color: '#0D9488',
+      title: 'Ajukan Koreksi Absen',
+      subtitle: 'Kendala Jaringan / Lupa Clock In-Out'
+    },
+    {
+      type: 'KASBON' as const,
+      icon: CreditCard,
+      bgClass: 'bg-[#7C3AED] hover:bg-[#6D28D9]',
+      color: '#7C3AED',
+      title: 'Ajukan Kasbon Pribadi',
+      subtitle: 'Pinjaman & Potongan Payroll Finance'
+    }
+  ];
+
   // Validation States
   const selectedCalendarYear = newStartDate ? new Date(newStartDate + 'T00:00:00').getFullYear() : 2026;
   const isAnnualLeave = newRequestType === 'LEAVE' && newLeaveType === 'CUTI_TAHUNAN';
@@ -781,53 +853,38 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
           </p>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full md:w-auto justify-end">
+        <div className="flex flex-row items-center justify-between md:justify-end gap-2.5 w-full md:w-auto shrink-0">
           <div className="px-3.5 py-2 rounded-2xl bg-orange-50 border border-orange-200 text-right shrink-0">
             <p className="text-[10px] uppercase font-bold text-orange-600 leading-tight">{isStaff ? 'Pengajuan Aktif' : 'Menunggu Persetujuan'}</p>
             <p className="text-lg font-black text-[#FF6B00] font-mono-code leading-tight mt-0.5">{pendingCount} Pengajuan</p>
           </div>
 
-          {/* 4 Action Buttons Pengajuan Berukuran Seragam, Rapi & Ringkas */}
-          <div className="grid grid-cols-2 sm:flex sm:flex-wrap md:flex-nowrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => openNewRequestModal('LEAVE')}
-              className="h-10 px-3.5 rounded-2xl bg-[#FF6B00] hover:bg-[#E05E00] text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-all active:scale-95 cursor-pointer whitespace-nowrap"
-              title="Ajukan Permohonan Cuti Kerja (Tahunan & Roster Non-Lokal)"
-            >
-              <Calendar className="w-3.5 h-3.5 shrink-0" />
-              <span>+ Cuti Kerja</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => openNewRequestModal('PERMIT')}
-              className="h-10 px-3.5 rounded-2xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-all active:scale-95 cursor-pointer whitespace-nowrap"
-              title="Ajukan Izin Resmi, Cuti Sakit, atau Keperluan Pribadi"
-            >
-              <FileText className="w-3.5 h-3.5 shrink-0" />
-              <span>+ Izin / Sakit</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => openNewRequestModal('ATTENDANCE_CORRECTION')}
-              className="h-10 px-3.5 rounded-2xl bg-[#0D9488] hover:bg-[#0F766E] text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-all active:scale-95 cursor-pointer whitespace-nowrap"
-              title="Ajukan Koreksi Absensi Mandiri (Lupa / Kendala Jaringan di Site)"
-            >
-              <Clock className="w-3.5 h-3.5 shrink-0" />
-              <span>+ Koreksi Absen</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => openNewRequestModal('KASBON')}
-              className="h-10 px-3.5 rounded-2xl bg-[#7C3AED] hover:bg-[#6D28D9] text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-all active:scale-95 cursor-pointer whitespace-nowrap"
-              title="Ajukan Pinjaman / Kasbon Pribadi Potong Payroll (Otorisasi Finance)"
-            >
-              <CreditCard className="w-3.5 h-3.5 shrink-0" />
-              <span>+ Kasbon Pribadi</span>
-            </button>
+          {/* 4 Icon-Only Action Buttons dengan Floating Tooltip Mengikuti Pointer */}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {SUBMISSION_ACTIONS.map(action => {
+              const IconComp = action.icon;
+              return (
+                <button
+                  key={action.type}
+                  type="button"
+                  onClick={() => {
+                    setPointerTooltip(null);
+                    openNewRequestModal(action.type);
+                  }}
+                  onMouseEnter={(e) => handlePointerEnter(e, {
+                    title: action.title,
+                    subtitle: action.subtitle,
+                    color: action.color
+                  })}
+                  onMouseMove={handlePointerMove}
+                  onMouseLeave={handlePointerLeave}
+                  className={`w-10 h-10 rounded-2xl ${action.bgClass} text-white flex items-center justify-center shadow-xs hover:shadow-md transition-all duration-150 hover:scale-105 active:scale-95 cursor-pointer relative group shrink-0`}
+                  aria-label={action.title}
+                >
+                  <IconComp className="w-4 h-4 shrink-0 transition-transform duration-150 group-hover:scale-110" />
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -3102,6 +3159,44 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
         document.body
       )}
 
+
+      {/* Floating Pointer-Following Tooltip untuk Action Buttons (Portal to document.body) */}
+      {pointerTooltip && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed z-[99999] pointer-events-none select-none transition-transform duration-75 ease-out"
+          style={{
+            left: `${pointerTooltip.x}px`,
+            top: `${pointerTooltip.y}px`,
+            transform: `translate(${
+              pointerTooltip.x > (typeof window !== 'undefined' ? window.innerWidth - 240 : 800)
+                ? '-105%'
+                : '14px'
+            }, ${
+              pointerTooltip.y > (typeof window !== 'undefined' ? window.innerHeight - 80 : 600)
+                ? '-110%'
+                : '16px'
+            })`
+          }}
+        >
+          <div className="px-3 py-2 rounded-xl bg-slate-900/95 backdrop-blur-md text-white shadow-2xl border border-slate-700/70 flex items-center gap-2.5 whitespace-nowrap animate-in fade-in zoom-in-95 duration-100">
+            <span
+              className="w-2.5 h-2.5 rounded-full shrink-0 shadow-xs ring-2 ring-white/20"
+              style={{ backgroundColor: pointerTooltip.color }}
+            />
+            <div className="flex flex-col text-left">
+              <span className="font-bold text-white text-[11.5px] leading-tight">
+                {pointerTooltip.title}
+              </span>
+              {pointerTooltip.subtitle && (
+                <span className="text-[10px] text-slate-300 font-medium leading-tight mt-0.5">
+                  {pointerTooltip.subtitle}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
     </div>
   );
