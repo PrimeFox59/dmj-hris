@@ -230,7 +230,7 @@ export function calculateEmployeePayroll(
     : calculatedAlphaDays;
 
   const alphaDeduction = alphaDays * dailyBaseSalary;
-  const unpaidLeaveDeduction = (unpaidLeaveDays * dailyBaseSalary) + alphaDeduction;
+  const unpaidLeaveDeduction = unpaidLeaveDays * dailyBaseSalary;
 
   // Calculate late statistics & deductions
   // Keterlambatan dianggap bebas denda (waived) jika disetujui HR tanpa potongan (deductionWaived === true),
@@ -390,7 +390,7 @@ export function calculateEmployeePayroll(
     });
   }
 
-  const totalDeductions = unapprovedLateDeduction + unpaidLeaveDeduction + bpjsKetenagakerjaan + bpjsKesehatan + pph21 + kasbonDeduction;
+  const totalDeductions = unapprovedLateDeduction + unpaidLeaveDeduction + alphaDeduction + bpjsKetenagakerjaan + bpjsKesehatan + pph21 + kasbonDeduction;
   const netSalary = Math.max(0, grossSalary - totalDeductions);
 
   // Proportional Multi-Project Payroll Allocation

@@ -930,7 +930,7 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
   const totalPayrollBudget = filteredRecords.reduce((acc, p) => acc + p.netSalary, 0);
   const totalOvertimeSpent = filteredRecords.reduce((acc, p) => acc + p.overtimePay, 0);
   const totalLateDeductions = filteredRecords.reduce((acc, p) => acc + p.unapprovedLateDeduction, 0);
-  const totalUnpaidDeductions = filteredRecords.reduce((acc, p) => acc + p.unpaidLeaveDeduction, 0);
+  const totalUnpaidDeductions = filteredRecords.reduce((acc, p) => acc + p.unpaidLeaveDeduction + (p.alphaDeduction || 0), 0);
 
   // Validation statistics
   const totalRecordsCount = allPayrollRecords.length;
@@ -2756,347 +2756,483 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
             className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl border border-slate-200 relative my-auto modal-dialog-animate max-h-[92vh] overflow-y-auto custom-scrollbar"
             onClick={e => e.stopPropagation()}
           >
-            {/* Close Button */}
-            <button
-              onClick={() => setSelectedSlip(null)}
-              className="absolute top-5 right-5 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-all cursor-pointer no-print"
-            >
-              <X className="w-4 h-4" />
-            </button>
-
-            {/* Security & 10-Minute Finance Access Banner */}
-            {!canViewSlipFreely && (
-              <div className="p-3 mb-4 rounded-2xl bg-emerald-50 border border-emerald-300 text-emerald-950 flex items-center justify-between shadow-2xs no-print">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold shrink-0">
-                    <Clock className="w-4 h-4 animate-spin" />
-                  </div>
-                  <div>
-                    <span className="font-bold text-xs text-emerald-950 block leading-tight">
-                      SESI AKSES SLIP RESMI DIAWASI SISTEM
-                    </span>
-                    <span className="text-[10.5px] text-emerald-800">
-                      Diotorisasi oleh Divisi Finance • Dokumen otomatis terkunci kembali saat waktu habis (10 Menit)
-                    </span>
-                  </div>
-                </div>
-                <div className="text-right shrink-0">
-                  <span className="text-[9.5px] uppercase font-bold text-emerald-700 block">Sisa Waktu Sesi</span>
-                  <span className="text-sm font-black font-mono-code text-emerald-900 bg-white px-2.5 py-0.5 rounded-lg border border-emerald-300 shadow-2xs inline-block">
-                    ⏱️ {formatCountdown(getEmployeeSlipAccess(selectedSlip.employeeId, selectedSlip.period).remainingSeconds)}
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {/* Official Letterhead - DMJ HRIS Enterprise */}
-            <div className="border-b-2 border-slate-900 pb-4 mb-4">
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 sm:h-11 px-2 py-0.5 rounded-xl bg-[#233360] border border-[#2e427b] shadow-xs flex items-center justify-center overflow-hidden shrink-0">
-                      <img
-                        src="/dmj-logo.png"
-                        alt="PT Dwi Martha Jaya"
-                        className="h-full w-auto object-contain"
-                      />
-                    </div>
-                    <div>
-                      <h2 className="text-base sm:text-lg font-black tracking-tight text-slate-900 font-mono-code leading-none">
-                        PT DWI MARTHA JAYA
-                      </h2>
-                      <p className="text-[10px] text-slate-500 font-semibold tracking-wider uppercase mt-0.5">
-                        Contractor & Supplier • Sistem Penggajian DMJ HRIS
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                <div className="text-right flex flex-col items-end gap-1">
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setShowPayrollNominal(prev => !prev)}
-                      className="px-2 py-0.5 rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-[10px] font-bold flex items-center gap-1 transition-all no-print cursor-pointer"
-                      title="Buka / Tutup sensor nominal"
-                    >
-                      {showPayrollNominal ? <EyeOff className="w-3 h-3 text-slate-400" /> : <Eye className="w-3 h-3 text-[#FF6B00]" />}
-                      <span>{showPayrollNominal ? 'Sensor Nilai' : 'Buka Nilai'}</span>
-                    </button>
-                    <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-bold uppercase font-mono-code">
-                      SLIP GAJI RESMI
-                    </span>
-                  </div>
-                  <p className="text-[10px] font-mono-code text-slate-500 mt-0.5">Periode: {selectedSlip.period}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Employee Information */}
             {(() => {
+              const cleanPeriod = (selectedSlip.period || '').replace(/^Periode\s+/i, '').trim() || 'Desember 2026';
+              const cleanDivisorExp = (selectedSlip.divisorExplanation || `${selectedSlip.dailyDivisor || selectedSlip.workingDays} HK`)
+                .replace(/^\((.*)\)$/, '$1')
+                .trim();
+              
+              const formatSlipDate = (dateStr?: string, periodStr?: string): string => {
+                if (dateStr) {
+                  const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+                  if (match) {
+                    const year = match[1];
+                    const monthNames = [
+                      'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+                      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+                    ];
+                    const monthIndex = parseInt(match[2], 10) - 1;
+                    const day = parseInt(match[3], 10);
+                    if (monthIndex >= 0 && monthIndex < 12) {
+                      return `${day} ${monthNames[monthIndex]} ${year}`;
+                    }
+                  }
+                  try {
+                    const d = new Date(dateStr);
+                    if (!isNaN(d.getTime())) {
+                      return d.toLocaleDateString('id-ID', {
+                        day: 'numeric',
+                        month: 'long',
+                        year: 'numeric'
+                      });
+                    }
+                  } catch {
+                    // fallback
+                  }
+                }
+                const p = (periodStr || '').replace(/^Periode\s+/i, '').trim();
+                return p ? `25 ${p}` : '25 Desember 2026';
+              };
+
               const emp = employees.find(e => e.id === selectedSlip.employeeId);
               const loginId = emp?.loginId || (selectedSlip.employeeId === 'EMP-001' ? 'admin' : selectedSlip.employeeId);
               const nikVal = selectedSlip.nik || emp?.nik || emp?.ktpNumber || '-';
-              const bankInfo = emp?.bankAccount?.accountNumber 
+              const rawBankName = emp?.bankAccount?.bankName || 'Bank';
+              const shortBankName = rawBankName
+                .replace(/Bank Central Asia/i, 'BCA')
+                .replace(/Bank Rakyat Indonesia/i, 'BRI')
+                .replace(/Bank Mandiri/i, 'Mandiri')
+                .replace(/Bank Negara Indonesia/i, 'BNI')
+                .replace(/\s*\([^)]*\)/g, '')
+                .trim();
+              const fullBankInfo = emp?.bankAccount?.accountNumber 
                 ? `${emp.bankAccount.bankName} - ${emp.bankAccount.accountNumber}`
                 : 'Payroll Resmi Bank DMJ';
+              const bankDisplay = emp?.bankAccount?.accountNumber
+                ? `${shortBankName} • ${emp.bankAccount.accountNumber}`
+                : 'Payroll Resmi DMJ';
               const empType = emp?.employmentType || 'TETAP';
               const locType = emp?.workLocationType === 'NON_LOKAL' ? 'Non-Lokal (Roster)' : 'Lokal';
               const empPtkp = selectedSlip.ptkpStatus || emp?.ptkpStatus || resolvePtkpStatus(emp?.maritalStatus, emp?.dependents);
               const empPtkpDetails = getPtkpDetails(empPtkp);
 
               return (
-                <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 mb-4 text-xs space-y-2.5">
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <div>
-                      <span className="text-[10px] text-slate-400 font-mono-code uppercase block">Nama Karyawan</span>
-                      <span className="font-bold text-slate-900">{selectedSlip.employeeName}</span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-400 font-mono-code uppercase block">NIK / Identitas</span>
-                      <span className="font-bold text-slate-900 font-mono-code">{nikVal}</span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-400 font-mono-code uppercase block">ID Login Akun</span>
-                      <span className="font-bold text-slate-900 font-mono-code">{loginId}</span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-400 font-mono-code uppercase block">Departemen</span>
-                      <span className="font-semibold text-slate-700">{selectedSlip.department}</span>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-slate-200/60">
-                    <div>
-                      <span className="text-[10px] text-slate-400 font-mono-code uppercase block">Jabatan / Posisi</span>
-                      <span className="font-semibold text-slate-700">{selectedSlip.position}</span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-400 font-mono-code uppercase block">Status Kerja</span>
-                      <span className="font-semibold text-slate-700">{empType} • {locType}</span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-400 font-mono-code uppercase block">PTKP / PPh 21</span>
-                      <span className="font-bold text-indigo-700 font-mono-code">
-                        {empPtkpDetails.code} ({empPtkpDetails.terCategory})
+                <>
+                  {/* Top Action Utility Bar (Clean Header - Eliminates Collision & Overlap) */}
+                  <div className="flex items-center justify-between pb-3.5 mb-3.5 border-b border-slate-100 no-print">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900 text-white text-[10.5px] font-mono-code font-bold uppercase tracking-wider shadow-2xs">
+                        <FileText className="w-3.5 h-3.5 text-[#FF6B00]" />
+                        SLIP GAJI RESMI
+                      </span>
+                      <span className="hidden sm:inline-block text-[11px] font-medium text-slate-500 font-mono-code">
+                        Periode: <strong className="text-slate-800">{cleanPeriod}</strong>
                       </span>
                     </div>
-                    <div>
-                      <span className="text-[10px] text-slate-400 font-mono-code uppercase block">Rekening Payroll</span>
-                      <span className="font-semibold text-slate-700 font-mono-code text-[11px] truncate block">{bankInfo}</span>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setShowPayrollNominal(prev => !prev)}
+                        className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+                        title="Buka / Tutup sensor nominal gaji"
+                      >
+                        {showPayrollNominal ? <EyeOff className="w-3.5 h-3.5 text-slate-400" /> : <Eye className="w-3.5 h-3.5 text-[#FF6B00]" />}
+                        <span>{showPayrollNominal ? 'Sensor Nilai' : 'Buka Nilai'}</span>
+                      </button>
+
+                      <button
+                        onClick={handlePrint}
+                        className="px-3 py-1 rounded-lg bg-[#FF6B00] hover:bg-[#e56000] text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+                        title="Cetak Dokumen Slip Gaji"
+                      >
+                        <Printer className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Cetak</span>
+                      </button>
+
+                      <button
+                        onClick={() => setSelectedSlip(null)}
+                        className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 flex items-center justify-center transition-all cursor-pointer ml-1"
+                        title="Tutup Modal"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
 
-                  {selectedSlip.projectAllocations && selectedSlip.projectAllocations.length > 1 && (
-                    <div className="p-2.5 rounded-xl bg-purple-50/80 border border-purple-200 mt-1">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="px-1.5 py-0.5 rounded bg-purple-600 text-white font-mono-code font-black text-[9.5px]">
-                          ⚡ MULTI-PROYEK ({selectedSlip.projectAllocations.length} PROYEK)
-                        </span>
-                        <span className="text-[10.5px] font-bold text-purple-950">
-                          Beban Penggajian Terbagi Rata (1/{selectedSlip.projectAllocations.length})
-                        </span>
-                      </div>
-                      <div className="mt-1.5 flex flex-wrap gap-1.5">
-                        {selectedSlip.projectAllocations.map(a => (
-                          <span key={a.projectId} className="px-2 py-0.5 rounded-md bg-white border border-purple-200/90 text-[10px] font-mono-code">
-                            <strong className="text-purple-900">[{a.projectCode}]</strong> {a.projectName}: <span className="font-bold text-slate-700">{a.percentage}%</span>
+                  {/* Security & 10-Minute Finance Access Banner */}
+                  {!canViewSlipFreely && (
+                    <div className="p-3 mb-4 rounded-2xl bg-emerald-50 border border-emerald-300 text-emerald-950 flex items-center justify-between shadow-2xs no-print">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold shrink-0">
+                          <Clock className="w-4 h-4 animate-spin" />
+                        </div>
+                        <div>
+                          <span className="font-bold text-xs text-emerald-950 block leading-tight">
+                            SESI AKSES SLIP RESMI DIAWASI SISTEM
                           </span>
-                        ))}
+                          <span className="text-[10.5px] text-emerald-800">
+                            Diotorisasi oleh Divisi Finance • Dokumen otomatis terkunci kembali saat waktu habis (10 Menit)
+                          </span>
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="text-[9.5px] uppercase font-bold text-emerald-700 block">Sisa Waktu Sesi</span>
+                        <span className="text-sm font-black font-mono-code text-emerald-900 bg-white px-2.5 py-0.5 rounded-lg border border-emerald-300 shadow-2xs inline-block">
+                          ⏱️ {formatCountdown(getEmployeeSlipAccess(selectedSlip.employeeId, selectedSlip.period).remainingSeconds)}
+                        </span>
                       </div>
                     </div>
                   )}
-                </div>
+
+                  {/* Official Letterhead - DMJ HRIS Enterprise */}
+                  <div className="border-b-2 border-slate-900 pb-3 mb-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="h-11 sm:h-12 px-2.5 py-1 rounded-xl bg-[#233360] border border-[#2e427b] shadow-xs flex items-center justify-center overflow-hidden shrink-0">
+                          <img
+                            src="/dmj-logo.png"
+                            alt="PT Dwi Martha Jaya"
+                            className="h-full w-auto object-contain"
+                          />
+                        </div>
+                        <div>
+                          <h2 className="text-base sm:text-lg font-black tracking-tight text-slate-900 font-mono-code leading-tight">
+                            PT DWI MARTHA JAYA
+                          </h2>
+                          <p className="text-[10px] text-slate-500 font-semibold tracking-wider uppercase mt-0.5">
+                            General Contractor & Supplier • Sistem HRIS Enterprise
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <span className="text-[9px] font-bold text-slate-400 font-mono-code block uppercase tracking-wider">
+                          DOKUMEN GAJI DIGITAL
+                        </span>
+                        <span className="text-xs font-black font-mono-code text-slate-800 block">
+                          {cleanPeriod}
+                        </span>
+                        <span className="text-[9.5px] font-mono-code text-slate-400">
+                          ID: {selectedSlip.id}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Employee Information */}
+                  <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 mb-4 text-xs space-y-2.5">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-mono-code uppercase block">Nama Karyawan</span>
+                        <span className="font-bold text-slate-900">{selectedSlip.employeeName}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-mono-code uppercase block">NIK / Identitas</span>
+                        <span className="font-bold text-slate-900 font-mono-code">{nikVal}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-mono-code uppercase block">ID Login Akun</span>
+                        <span className="font-bold text-slate-900 font-mono-code">{loginId}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-mono-code uppercase block">Departemen</span>
+                        <span className="font-semibold text-slate-700">{selectedSlip.department}</span>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2.5 border-t border-slate-200/60">
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-mono-code uppercase block">Jabatan / Posisi</span>
+                        <span className="font-semibold text-slate-700">{selectedSlip.position}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-mono-code uppercase block">Status Kerja</span>
+                        <span className="font-semibold text-slate-700">{empType} • {locType}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-mono-code uppercase block">PTKP / PPh 21</span>
+                        <span className="font-bold text-indigo-700 font-mono-code">
+                          {empPtkpDetails.code} ({empPtkpDetails.terCategory})
+                        </span>
+                      </div>
+                      <div title={fullBankInfo}>
+                        <span className="text-[10px] text-slate-400 font-mono-code uppercase block">Rekening Payroll</span>
+                        <span className="font-semibold text-slate-800 font-mono-code text-[11px] block">{bankDisplay}</span>
+                      </div>
+                    </div>
+
+                    {selectedSlip.projectAllocations && selectedSlip.projectAllocations.length > 1 && (
+                      <div className="p-2.5 rounded-xl bg-purple-50/80 border border-purple-200 mt-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="px-1.5 py-0.5 rounded bg-purple-600 text-white font-mono-code font-black text-[9.5px]">
+                            ⚡ MULTI-PROYEK ({selectedSlip.projectAllocations.length} PROYEK)
+                          </span>
+                          <span className="text-[10.5px] font-bold text-purple-950">
+                            Beban Penggajian Terbagi Rata (1/{selectedSlip.projectAllocations.length})
+                          </span>
+                        </div>
+                        <div className="mt-1.5 flex flex-wrap gap-1.5">
+                          {selectedSlip.projectAllocations.map(a => (
+                            <span key={a.projectId} className="px-2 py-0.5 rounded-md bg-white border border-purple-200/90 text-[10px] font-mono-code">
+                              <strong className="text-purple-900">[{a.projectCode}]</strong> {a.projectName}: <span className="font-bold text-slate-700">{a.percentage}%</span>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Attendance & Audit Info Box */}
+                  <div className="p-3 rounded-2xl bg-orange-50/70 border border-orange-200/80 mb-4 flex flex-wrap items-center justify-between text-xs gap-2">
+                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-slate-700 text-[11.5px]">
+                      <span>Presensi: <strong>{selectedSlip.presentDays}</strong> Hadir / <strong>{selectedSlip.workingDays}</strong> Hari Kerja</span>
+                      {cleanDivisorExp && (
+                        <span className="text-slate-500">• {cleanDivisorExp}</span>
+                      )}
+                      <span>• Upah Harian: <strong className="font-mono-code">{formatSalaryDisplay(selectedSlip.dailyRate || 0, showPayrollNominal)}</strong>/hari</span>
+                      <span>• Cuti: <strong>{selectedSlip.leaveDays || 0}</strong>h</span>
+                      {Boolean(selectedSlip.unpaidLeaveDays && selectedSlip.unpaidLeaveDays > 0) && (
+                        <span>• Unpaid: <strong className="text-amber-700">{selectedSlip.unpaidLeaveDays}h</strong></span>
+                      )}
+                      {Boolean(selectedSlip.alphaDays && selectedSlip.alphaDays > 0) && (
+                        <span>• Alpha: <strong className="text-rose-600 font-bold">{selectedSlip.alphaDays}h</strong></span>
+                      )}
+                      {Boolean((selectedSlip.overtimeHours && selectedSlip.overtimeHours > 0) || (selectedSlip.overtimePay && selectedSlip.overtimePay > 0)) && (
+                        <span>• Lembur: <strong className="text-emerald-700">{selectedSlip.overtimeHours || 0} Jam</strong></span>
+                      )}
+                      {Boolean((selectedSlip.lateHours && selectedSlip.lateHours > 0) || (selectedSlip.lateMinutes && selectedSlip.lateMinutes > 0)) && (
+                        <span>• Terlambat: <strong className="text-rose-600">{selectedSlip.lateHours || Math.ceil((selectedSlip.lateMinutes || 0) / 60)} Jam ({selectedSlip.lateMinutes || 0} mnt)</strong></span>
+                      )}
+                    </div>
+                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold font-mono-code shrink-0 ${
+                      selectedSlip.hrValidationStatus === 'VALIDATED_BY_HR'
+                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                        : 'bg-amber-100 text-amber-800 border border-amber-300'
+                    }`}>
+                      {selectedSlip.hrValidationStatus === 'VALIDATED_BY_HR' ? '✓ DIVERIFIKASI HR MANAGER' : '⏳ DRAF AUDIT'}
+                    </span>
+                  </div>
+
+                  {/* Earnings and Deductions Table */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4 text-xs">
+                    {/* Penerimaan */}
+                    <div className="p-3.5 sm:p-4 rounded-2xl bg-slate-50/70 border border-slate-200/90 flex flex-col justify-between">
+                      <div>
+                        <h4 className="font-bold text-emerald-800 text-[11px] uppercase tracking-wider font-mono-code border-b border-emerald-200/80 pb-1.5 mb-2">
+                          A. PENERIMAAN / PENGHASILAN
+                        </h4>
+                        <div className="space-y-1.5">
+                          <div className="flex items-baseline justify-between py-0.5 gap-2 border-b border-slate-100/80">
+                            <span className="text-slate-600 text-xs">Gaji Pokok:</span>
+                            <span className="font-mono-code font-semibold text-xs text-right shrink-0 min-w-[110px] whitespace-nowrap text-slate-800">
+                              {formatSalaryDisplay(selectedSlip.baseSalary, showPayrollNominal)}
+                            </span>
+                          </div>
+                          <div className="flex items-baseline justify-between py-0.5 gap-2 border-b border-slate-100/80">
+                            <span className="text-slate-600 text-xs">Tunjangan Tetap / Jabatan:</span>
+                            <span className="font-mono-code font-semibold text-xs text-right shrink-0 min-w-[110px] whitespace-nowrap text-slate-800">
+                              {formatSalaryDisplay(selectedSlip.fixedAllowance, showPayrollNominal)}
+                            </span>
+                          </div>
+                          <div className="flex items-baseline justify-between py-0.5 gap-2 border-b border-slate-100/80">
+                            <span className="text-slate-600 text-xs">Uang Makan / Harian ({selectedSlip.presentDays} Hari):</span>
+                            <span className="font-mono-code font-semibold text-xs text-right shrink-0 min-w-[110px] whitespace-nowrap text-slate-800">
+                              {formatSalaryDisplay(selectedSlip.dailyAllowanceTotal, showPayrollNominal)}
+                            </span>
+                          </div>
+                          <div className="flex items-baseline justify-between py-0.5 gap-2 border-b border-slate-100/80">
+                            <span className="text-slate-600 text-xs">Tunjangan Penugasan Proyek:</span>
+                            <span className="font-mono-code font-semibold text-xs text-right shrink-0 min-w-[110px] whitespace-nowrap text-slate-800">
+                              {formatSalaryDisplay(selectedSlip.projectAllowance, showPayrollNominal)}
+                            </span>
+                          </div>
+                          {Boolean((selectedSlip.overtimePay && selectedSlip.overtimePay > 0) || (selectedSlip.overtimeHours && selectedSlip.overtimeHours > 0)) && (
+                            <div className="flex items-baseline justify-between py-0.5 gap-2 border-b border-slate-100/80">
+                              <span className="text-emerald-700 text-xs font-medium">Upah Lembur ({selectedSlip.overtimeHours || 0} Jam):</span>
+                              <span className="font-mono-code font-semibold text-xs text-right shrink-0 min-w-[110px] whitespace-nowrap text-emerald-700">
+                                {formatSalaryDisplay(selectedSlip.overtimePay || 0, showPayrollNominal)}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-baseline justify-between pt-2.5 mt-3 border-t-2 border-slate-200/90 font-bold text-slate-900">
+                        <span className="text-xs uppercase font-mono-code">Total Bruto:</span>
+                        <span className="font-mono-code text-sm text-right shrink-0 min-w-[110px] whitespace-nowrap text-slate-950">
+                          {formatSalaryDisplay(selectedSlip.grossSalary, showPayrollNominal)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Potongan */}
+                    <div className="p-3.5 sm:p-4 rounded-2xl bg-slate-50/70 border border-slate-200/90 flex flex-col justify-between">
+                      <div>
+                        <h4 className="font-bold text-rose-800 text-[11px] uppercase tracking-wider font-mono-code border-b border-rose-200/80 pb-1.5 mb-2">
+                          B. POTONGAN / DEDUCTIONS
+                        </h4>
+                        <div className="space-y-1.5">
+                          {Boolean(selectedSlip.unpaidLeaveDays && selectedSlip.unpaidLeaveDays > 0 && selectedSlip.unpaidLeaveDeduction > 0) && (
+                            <div className="flex items-baseline justify-between py-0.5 gap-2 border-b border-slate-100/80">
+                              <span className="text-rose-700 text-xs leading-snug font-medium">
+                                Potongan Cuti Unpaid ({selectedSlip.unpaidLeaveDays} Hari @ {formatSalaryDisplay(selectedSlip.dailyRate || 0, showPayrollNominal)}):
+                              </span>
+                              <span className="font-mono-code font-semibold text-xs text-rose-600 text-right shrink-0 min-w-[110px] whitespace-nowrap">
+                                - {formatSalaryDisplay(selectedSlip.unpaidLeaveDeduction, showPayrollNominal)}
+                              </span>
+                            </div>
+                          )}
+                          {Boolean(selectedSlip.alphaDays && selectedSlip.alphaDays > 0 && (selectedSlip.alphaDeduction || 0) > 0) && (
+                            <div className="flex items-baseline justify-between py-0.5 gap-2 border-b border-slate-100/80">
+                              <span className="text-rose-700 text-xs leading-snug font-medium">
+                                Potongan Alpha / Mangkir ({selectedSlip.alphaDays} Hari @ {formatSalaryDisplay(selectedSlip.dailyRate || 0, showPayrollNominal)}):
+                              </span>
+                              <span className="font-mono-code font-semibold text-xs text-rose-600 text-right shrink-0 min-w-[110px] whitespace-nowrap">
+                                - {formatSalaryDisplay(selectedSlip.alphaDeduction || 0, showPayrollNominal)}
+                              </span>
+                            </div>
+                          )}
+                          <div className="flex items-baseline justify-between py-0.5 gap-2 border-b border-slate-100/80">
+                            <span className="text-slate-600 text-xs">BPJS Ketenagakerjaan (3%):</span>
+                            <span className="font-mono-code font-semibold text-xs text-rose-600 text-right shrink-0 min-w-[110px] whitespace-nowrap">
+                              - {formatSalaryDisplay(selectedSlip.bpjsKetenagakerjaan, showPayrollNominal)}
+                            </span>
+                          </div>
+                          <div className="flex items-baseline justify-between py-0.5 gap-2 border-b border-slate-100/80">
+                            <span className="text-slate-600 text-xs">BPJS Kesehatan (1%):</span>
+                            <span className="font-mono-code font-semibold text-xs text-rose-600 text-right shrink-0 min-w-[110px] whitespace-nowrap">
+                              - {formatSalaryDisplay(selectedSlip.bpjsKesehatan, showPayrollNominal)}
+                            </span>
+                          </div>
+                          <div className="flex items-baseline justify-between py-0.5 gap-2 border-b border-slate-100/80">
+                            <span className="text-slate-600 text-xs" title="Pajak Penghasilan Pasal 21 dihitung proporsional dari penghasilan kena pajak setelah batas PTKP">
+                              Estimasi Pajak PPh 21 ({empPtkpDetails.code}):
+                            </span>
+                            <span className="font-mono-code font-semibold text-xs text-rose-600 text-right shrink-0 min-w-[110px] whitespace-nowrap">
+                              - {formatSalaryDisplay(selectedSlip.pph21, showPayrollNominal)}
+                            </span>
+                          </div>
+
+                          {/* Potongan Keterlambatan */}
+                          <div className="flex items-baseline justify-between py-0.5 gap-2 border-b border-slate-100/80">
+                            <span className="text-slate-600 text-xs">
+                              {selectedSlip.unapprovedLateDeduction > 0 
+                                ? `Potongan Keterlambatan (${selectedSlip.lateHours || Math.ceil((selectedSlip.lateMinutes || 0) / 60)} Jam @ Rp ${(selectedSlip.lateDeductionRate || 50000).toLocaleString('id-ID')}/jam):`
+                                : 'Potongan Keterlambatan:'
+                              }
+                            </span>
+                            <span className={`font-mono-code font-semibold text-xs text-right shrink-0 min-w-[110px] whitespace-nowrap ${selectedSlip.unapprovedLateDeduction > 0 ? 'text-rose-600 font-bold' : 'text-slate-400'}`}>
+                              {selectedSlip.unapprovedLateDeduction > 0 ? `- ${formatSalaryDisplay(selectedSlip.unapprovedLateDeduction, showPayrollNominal)}` : 'Rp 0'}
+                            </span>
+                          </div>
+
+                          {/* Potongan Kasbon Pribadi */}
+                          {Boolean(selectedSlip.kasbonDeduction && selectedSlip.kasbonDeduction > 0) && (
+                            <div className="flex items-baseline justify-between py-0.5 gap-2 border-b border-slate-100/80">
+                              <span className="text-rose-700 text-xs leading-snug font-medium" title={selectedSlip.kasbonDeductionNote || 'Potongan Cicilan Kasbon Pribadi'}>
+                                Potongan Kasbon Pribadi {selectedSlip.kasbonRemainingBalance !== undefined ? `(Sisa: ${formatSalaryDisplay(selectedSlip.kasbonRemainingBalance, showPayrollNominal)})` : ''}:
+                              </span>
+                              <span className="font-mono-code font-bold text-xs text-rose-600 text-right shrink-0 min-w-[110px] whitespace-nowrap">
+                                - {formatSalaryDisplay(selectedSlip.kasbonDeduction || 0, showPayrollNominal)}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-baseline justify-between pt-2.5 mt-3 border-t-2 border-slate-200/90 font-bold text-slate-900">
+                        <span className="text-xs uppercase font-mono-code">Total Potongan:</span>
+                        <span className="font-mono-code text-sm text-right shrink-0 min-w-[110px] whitespace-nowrap text-rose-600">
+                          - {formatSalaryDisplay(selectedSlip.totalDeductions, showPayrollNominal)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Net Salary Highlight - Executive Gradient Card */}
+                  <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50/70 to-emerald-50 border-2 border-emerald-300 shadow-xs mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="px-2 py-0.5 rounded-md bg-emerald-600 text-white text-[10px] font-black font-mono-code uppercase tracking-wider shadow-2xs">
+                          TAKE HOME PAY
+                        </span>
+                        <span className="text-[11px] font-bold text-emerald-950 font-mono-code uppercase">
+                          TOTAL GAJI BERSIH DITERIMA
+                        </span>
+                      </div>
+                      <p className="text-xs text-emerald-800">
+                        Ditransfer ke rekening payroll: <strong className="font-mono-code">{bankDisplay}</strong>
+                      </p>
+                    </div>
+                    <div className="text-left sm:text-right sm:shrink-0 w-full sm:w-auto">
+                      <span className="text-2xl sm:text-3xl font-black text-emerald-900 font-mono-code tracking-tight block">
+                        {formatSalaryDisplay(selectedSlip.netSalary, showPayrollNominal)}
+                      </span>
+                      <span className="text-[10px] text-emerald-700 font-mono-code">
+                        (Bruto {formatSalaryDisplay(selectedSlip.grossSalary, showPayrollNominal)} - Potongan {formatSalaryDisplay(selectedSlip.totalDeductions, showPayrollNominal)})
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Footer with QR and Signatures */}
+                  <div className="pt-3 border-t border-slate-200 flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-3">
+                      <div className="w-16 h-16 rounded-xl border border-slate-300 p-1 bg-white flex items-center justify-center shrink-0 shadow-2xs">
+                        <QrCode className="w-12 h-12 text-slate-800" />
+                      </div>
+                      <div>
+                        <span className="text-[9px] font-bold text-slate-400 font-mono-code block tracking-wider">
+                          DIGITAL VERIFICATION CODE
+                        </span>
+                        <span className="text-[10.5px] font-mono-code font-bold text-slate-800 block">
+                          DMJ-VERIFIED-2026-PAYROLL
+                        </span>
+                        <p className="text-[9.5px] text-slate-500 mt-0.5">
+                          Sistem Dokumen Sah DMJ HRIS Enterprise • Anti-Tamper SHA-256
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      <p className="text-[10.5px] text-slate-500 font-medium">
+                        Surabaya, {formatSlipDate(selectedSlip.paymentDate, selectedSlip.period)}
+                      </p>
+                      <p className="text-xs font-bold text-slate-800 mt-3">Direksi & Finance PT Dwi Martha Jaya</p>
+                      <span className="text-[9.5px] text-emerald-700 font-semibold font-mono-code inline-flex items-center gap-1 mt-0.5">
+                        ✓ Digitally Signed & Stamped
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Bottom Modal Actions (No-Print) */}
+                  <div className="mt-5 flex items-center justify-between gap-3 pt-3 border-t border-slate-100 no-print">
+                    <button
+                      onClick={() => setShowPayrollNominal(prev => !prev)}
+                      className="px-3.5 py-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+                    >
+                      {showPayrollNominal ? <EyeOff className="w-3.5 h-3.5 text-slate-400" /> : <Eye className="w-3.5 h-3.5 text-[#FF6B00]" />}
+                      <span>{showPayrollNominal ? 'Sensor Nilai' : 'Buka Nilai'}</span>
+                    </button>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setSelectedSlip(null)}
+                        className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all cursor-pointer"
+                      >
+                        Tutup
+                      </button>
+                      <button
+                        onClick={handlePrint}
+                        className="px-5 py-2 rounded-xl bg-[#FF6B00] hover:bg-[#e56000] text-white text-xs font-bold shadow-md shadow-orange-500/25 flex items-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        <Printer className="w-4 h-4" />
+                        Cetak Slip Sekarang
+                      </button>
+                    </div>
+                  </div>
+                </>
               );
             })()}
-
-            {/* Attendance & Audit Info Box */}
-            <div className="p-2.5 rounded-xl bg-orange-50/60 border border-orange-200/70 mb-4 flex flex-wrap items-center justify-between text-[11px] gap-2">
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-slate-600 font-medium">
-                <span>Presensi: <strong>{selectedSlip.presentDays}</strong> Hadir / <strong>{selectedSlip.workingDays}</strong> Hari Kerja ({selectedSlip.divisorExplanation || `${selectedSlip.dailyDivisor || selectedSlip.workingDays} HK`})</span>
-                <span>• Upah Harian: <strong>{formatSalaryDisplay(selectedSlip.dailyRate || 0, showPayrollNominal)}</strong>/hari</span>
-                <span>• Cuti: <strong>{selectedSlip.leaveDays || 0}</strong>h</span>
-                {Boolean(selectedSlip.unpaidLeaveDays && selectedSlip.unpaidLeaveDays > 0) && (
-                  <span>• Unpaid: <strong className="text-amber-700">{selectedSlip.unpaidLeaveDays}h</strong></span>
-                )}
-                {Boolean(selectedSlip.alphaDays && selectedSlip.alphaDays > 0) && (
-                  <span>• Alpha: <strong className="text-rose-600">{selectedSlip.alphaDays}h</strong></span>
-                )}
-                {Boolean((selectedSlip.overtimeHours && selectedSlip.overtimeHours > 0) || (selectedSlip.overtimePay && selectedSlip.overtimePay > 0)) && (
-                  <span>• Lembur: <strong className="text-emerald-700">{selectedSlip.overtimeHours || 0} Jam</strong></span>
-                )}
-                {Boolean((selectedSlip.lateHours && selectedSlip.lateHours > 0) || (selectedSlip.lateMinutes && selectedSlip.lateMinutes > 0)) && (
-                  <span>• Terlambat: <strong className="text-rose-600">{selectedSlip.lateHours || Math.ceil((selectedSlip.lateMinutes || 0) / 60)} Jam ({selectedSlip.lateMinutes || 0} mnt)</strong></span>
-                )}
-              </div>
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold font-mono-code ${
-                selectedSlip.hrValidationStatus === 'VALIDATED_BY_HR'
-                  ? 'bg-emerald-100 text-emerald-800'
-                  : 'bg-amber-100 text-amber-800'
-              }`}>
-                {selectedSlip.hrValidationStatus === 'VALIDATED_BY_HR' ? '✓ DIVERIFIKASI HR MANAGER' : '⏳ DRAF AUDIT'}
-              </span>
-            </div>
-
-            {/* Earnings and Deductions Table */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4 text-xs">
-              {/* Penerimaan */}
-              <div className="space-y-2">
-                <h4 className="font-bold text-emerald-800 text-[11px] uppercase tracking-wider font-mono-code border-b border-emerald-200 pb-1">
-                  A. PENERIMAAN / PENGHASILAN
-                </h4>
-                <div className="flex justify-between py-0.5">
-                  <span className="text-slate-600">Gaji Pokok:</span>
-                  <span className="font-mono-code font-semibold">{formatSalaryDisplay(selectedSlip.baseSalary, showPayrollNominal)}</span>
-                </div>
-                <div className="flex justify-between py-0.5">
-                  <span className="text-slate-600">Tunjangan Tetap / Jabatan:</span>
-                  <span className="font-mono-code font-semibold">{formatSalaryDisplay(selectedSlip.fixedAllowance, showPayrollNominal)}</span>
-                </div>
-                <div className="flex justify-between py-0.5">
-                  <span className="text-slate-600">Uang Makan / Harian ({selectedSlip.presentDays} Hari):</span>
-                  <span className="font-mono-code font-semibold">{formatSalaryDisplay(selectedSlip.dailyAllowanceTotal, showPayrollNominal)}</span>
-                </div>
-                <div className="flex justify-between py-0.5">
-                  <span className="text-slate-600">Tunjangan Penugasan Proyek:</span>
-                  <span className="font-mono-code font-semibold">{formatSalaryDisplay(selectedSlip.projectAllowance, showPayrollNominal)}</span>
-                </div>
-                {Boolean((selectedSlip.overtimePay && selectedSlip.overtimePay > 0) || (selectedSlip.overtimeHours && selectedSlip.overtimeHours > 0)) && (
-                  <div className="flex justify-between py-0.5 text-emerald-800 font-medium">
-                    <span className="text-slate-600">Upah Lembur ({selectedSlip.overtimeHours || 0} Jam):</span>
-                    <span className="font-mono-code font-semibold">{formatSalaryDisplay(selectedSlip.overtimePay || 0, showPayrollNominal)}</span>
-                  </div>
-                )}
-
-                <div className="flex justify-between pt-1.5 border-t border-slate-200 font-bold text-slate-900">
-                  <span>Total Penghasilan Bruto:</span>
-                  <span className="font-mono-code">{formatSalaryDisplay(selectedSlip.grossSalary, showPayrollNominal)}</span>
-                </div>
-              </div>
-
-              {/* Potongan */}
-              <div className="space-y-2">
-                <h4 className="font-bold text-rose-800 text-[11px] uppercase tracking-wider font-mono-code border-b border-rose-200 pb-1">
-                  B. POTONGAN / DEDUCTIONS
-                </h4>
-                {selectedSlip.unpaidLeaveDeduction > 0 && (
-                  <div className="flex justify-between py-0.5 text-rose-700 font-medium">
-                    <span>Potongan Cuti Unpaid ({selectedSlip.unpaidLeaveDays} Hari @ {formatSalaryDisplay(selectedSlip.dailyRate || 0, showPayrollNominal)}):</span>
-                    <span className="font-mono-code text-rose-600">-{formatSalaryDisplay(selectedSlip.unpaidLeaveDeduction, showPayrollNominal)}</span>
-                  </div>
-                )}
-                {Boolean(selectedSlip.alphaDays && selectedSlip.alphaDays > 0) && (
-                  <div className="flex justify-between py-0.5 text-rose-700 font-medium">
-                    <span>Potongan Alpha / Mangkir ({selectedSlip.alphaDays} Hari @ {formatSalaryDisplay(selectedSlip.dailyRate || 0, showPayrollNominal)}):</span>
-                    <span className="font-mono-code text-rose-600">-{formatSalaryDisplay(selectedSlip.alphaDeduction || 0, showPayrollNominal)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between py-0.5">
-                  <span className="text-slate-600">BPJS Ketenagakerjaan (3%):</span>
-                  <span className="font-mono-code text-rose-600">-{formatSalaryDisplay(selectedSlip.bpjsKetenagakerjaan, showPayrollNominal)}</span>
-                </div>
-                <div className="flex justify-between py-0.5">
-                  <span className="text-slate-600">BPJS Kesehatan (1%):</span>
-                  <span className="font-mono-code text-rose-600">-{formatSalaryDisplay(selectedSlip.bpjsKesehatan, showPayrollNominal)}</span>
-                </div>
-                <div className="flex justify-between py-0.5">
-                  <span className="text-slate-600" title="Pajak Penghasilan Pasal 21 dihitung proporsional dari penghasilan kena pajak setelah batas PTKP">
-                    {(() => {
-                      const emp = employees.find(e => e.id === selectedSlip.employeeId);
-                      const ptkpCode = selectedSlip.ptkpStatus || emp?.ptkpStatus || resolvePtkpStatus(emp?.maritalStatus, emp?.dependents);
-                      return `Estimasi Pajak PPh 21 (${ptkpCode}):`;
-                    })()}
-                  </span>
-                  <span className="font-mono-code text-rose-600">-{formatSalaryDisplay(selectedSlip.pph21, showPayrollNominal)}</span>
-                </div>
-
-                {/* Potongan Keterlambatan - Clean single row without messy sub-box */}
-                <div className="flex justify-between py-0.5">
-                  <span className="text-slate-600">
-                    {selectedSlip.unapprovedLateDeduction > 0 
-                      ? `Potongan Keterlambatan (${selectedSlip.lateHours || Math.ceil((selectedSlip.lateMinutes || 0) / 60)} Jam @ Rp ${(selectedSlip.lateDeductionRate || 50000).toLocaleString('id-ID')}/jam):`
-                      : 'Potongan Keterlambatan:'
-                    }
-                  </span>
-                  <span className={`font-mono-code ${selectedSlip.unapprovedLateDeduction > 0 ? 'text-rose-600 font-bold' : 'text-slate-500'}`}>
-                    {selectedSlip.unapprovedLateDeduction > 0 ? `-${formatSalaryDisplay(selectedSlip.unapprovedLateDeduction, showPayrollNominal)}` : 'Rp 0'}
-                  </span>
-                </div>
-
-                {/* Potongan Kasbon Pribadi */}
-                {Boolean(selectedSlip.kasbonDeduction && selectedSlip.kasbonDeduction > 0) && (
-                  <div className="flex justify-between py-0.5 text-rose-700 font-medium">
-                    <span title={selectedSlip.kasbonDeductionNote || 'Potongan Cicilan Kasbon Pribadi'}>
-                      Potongan Kasbon Pribadi {selectedSlip.kasbonRemainingBalance !== undefined ? `(Sisa: ${formatSalaryDisplay(selectedSlip.kasbonRemainingBalance, showPayrollNominal)})` : ''}:
-                    </span>
-                    <span className="font-mono-code text-rose-600 font-bold">-{formatSalaryDisplay(selectedSlip.kasbonDeduction || 0, showPayrollNominal)}</span>
-                  </div>
-                )}
-
-                <div className="flex justify-between pt-1.5 border-t border-slate-200 font-bold text-slate-900">
-                  <span>Total Potongan:</span>
-                  <span className="font-mono-code text-rose-600">-{formatSalaryDisplay(selectedSlip.totalDeductions, showPayrollNominal)}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Net Salary Highlight */}
-            <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-300 mb-4 flex items-center justify-between">
-              <div>
-                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 font-mono-code">
-                  TOTAL GAJI BERSIH DITERIMA (TAKE HOME PAY)
-                </span>
-                <p className="text-xs text-emerald-700">Ditransfer ke rekening resmi payroll karyawan</p>
-              </div>
-              <span className="text-xl sm:text-2xl font-black text-emerald-800 font-mono-code">
-                {formatSalaryDisplay(selectedSlip.netSalary, showPayrollNominal)}
-              </span>
-            </div>
-
-            {/* Footer with QR and Signatures */}
-            <div className="pt-3 border-t border-slate-200 flex items-center justify-between text-xs">
-              <div className="flex items-center gap-3">
-                <div className="w-16 h-16 rounded-xl border border-slate-300 p-1 bg-white flex items-center justify-center shrink-0">
-                  <QrCode className="w-12 h-12 text-slate-800" />
-                </div>
-                <div>
-                  <span className="text-[9px] font-bold text-slate-400 font-mono-code block">DIGITAL VERIFICATION CODE</span>
-                  <span className="text-[10px] font-mono-code font-bold text-slate-700">DMJ-VERIFIED-2026-PAYROLL</span>
-                  <p className="text-[9px] text-slate-500 mt-0.5">Sistem Dokumen Sah DMJ HRIS Enterprise</p>
-                </div>
-              </div>
-
-              <div className="text-right">
-                <p className="text-[10px] text-slate-400 font-mono-code">Surabaya, {selectedSlip.paymentDate || `25 ${selectedSlip.period}`}</p>
-                <p className="text-xs font-bold text-slate-800 mt-4">Direksi & Finance PT Dwi Martha Jaya</p>
-                <span className="text-[9px] text-emerald-600 font-semibold font-mono-code">✓ Digitally Signed & Stamped</span>
-              </div>
-            </div>
-
-            {/* Print button on modal */}
-            <div className="mt-5 flex items-center justify-between gap-2 no-print">
-              <button
-                onClick={() => setShowPayrollNominal(prev => !prev)}
-                className="px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
-              >
-                {showPayrollNominal ? <EyeOff className="w-3.5 h-3.5 text-slate-400" /> : <Eye className="w-3.5 h-3.5 text-[#FF6B00]" />}
-                <span>{showPayrollNominal ? 'Sensor Nominal' : 'Buka Nominal'}</span>
-              </button>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setSelectedSlip(null)}
-                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all cursor-pointer"
-                >
-                  Tutup
-                </button>
-                <button
-                  onClick={handlePrint}
-                  className="px-5 py-2 rounded-xl bg-[#FF6B00] hover:bg-[#e56000] text-white text-xs font-bold shadow-md shadow-orange-500/25 flex items-center gap-1.5 transition-all cursor-pointer"
-                >
-                  <Printer className="w-4 h-4" />
-                  Cetak Slip Sekarang
-                </button>
-              </div>
-            </div>
           </div>
         </div>,
         document.body

@@ -70,7 +70,7 @@ export function App() {
   });
 
   // Auto-invalidation build ID (Membersihkan cache lama saat versi baru dirilis)
-  const APP_BUILD_ID = '20261116_v3_notification_modal_icon_buttons';
+  const APP_BUILD_ID = '20261116_v4_refined_payslip_modal';
   if (typeof window !== 'undefined') {
     try {
       const savedBuild = localStorage.getItem('prime_hris_build_id');
