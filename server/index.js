@@ -519,24 +519,87 @@ async function triggerBiometricBackgroundScan(attendanceRecord) {
 // notifications MUST NEVER be dispatched via WhatsApp or Email.
 // ==========================================
 
+// ==========================================
+// IN-MEMORY RATE LIMITER (SLIDING WINDOW PER IP)
+// ==========================================
+const rateLimitStore = new Map();
+export function checkRateLimit(ip, endpoint, limit = 20, windowMs = 60000) {
+  const safeIp = ip || '127.0.0.1';
+  const key = `${safeIp}:${endpoint}`;
+  const now = Date.now();
+  let record = rateLimitStore.get(key);
+  if (!record || now - record.startTime > windowMs) {
+    record = { count: 1, startTime: now };
+    rateLimitStore.set(key, record);
+    return { allowed: true, remaining: limit - 1 };
+  }
+  record.count++;
+  if (record.count > limit) {
+    const retryAfter = Math.ceil((record.startTime + windowMs - now) / 1000);
+    return { allowed: false, remaining: 0, retryAfter };
+  }
+  return { allowed: true, remaining: limit - record.count };
+}
+
+// Clean up stale rate limits every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, record] of rateLimitStore.entries()) {
+    if (now - record.startTime > 300000) {
+      rateLimitStore.delete(key);
+    }
+  }
+}, 300000);
+
+const ALLOWED_ORIGIN_HOSTS = [
+  'hris.primeprojectx.net',
+  'primeprojectx.net',
+  'binus.primeprojectx.net',
+  'porto.primeprojectx.net',
+  'localhost:5173',
+  'localhost:3000',
+  '127.0.0.1:5173',
+  '127.0.0.1:3000'
+];
+
+function resolveCorsOrigin(originHeader) {
+  if (!originHeader) return '*';
+  try {
+    const parsed = new URL(originHeader);
+    const host = parsed.host;
+    if (ALLOWED_ORIGIN_HOSTS.includes(host) || host.endsWith('.primeprojectx.net')) {
+      return originHeader;
+    }
+  } catch (e) {}
+  return 'null';
+}
+
 const server = http.createServer(async (req, res) => {
   const url = req.url || '';
   const cleanUrl = url.split('?')[0];
   const method = req.method?.toUpperCase() || 'GET';
+  const reqOrigin = req.headers['origin'] || '';
+  const corsOrigin = resolveCorsOrigin(reqOrigin);
 
-  // Helper for JSON with Automatic GZIP Compression
+  // Helper for JSON with Automatic GZIP Compression & Enterprise Security Headers
   const sendJson = (status, data) => {
     const jsonStr = typeof data === 'string' ? data : JSON.stringify(data);
     const acceptEncoding = req.headers['accept-encoding'] || '';
     const headers = {
       'Content-Type': 'application/json; charset=utf-8',
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': corsOrigin,
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Credentials': corsOrigin !== '*' && corsOrigin !== 'null' ? 'true' : 'false',
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'SAMEORIGIN',
+      'Referrer-Policy': 'strict-origin-when-cross-origin',
+      'Permissions-Policy': 'camera=(self), geolocation=(self), microphone=()',
+      'Strict-Transport-Security': 'max-age=31536000; includeSubDomains; preload',
       'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
       'Pragma': 'no-cache',
       'Expires': '0',
-      'Vary': 'Accept-Encoding'
+      'Vary': 'Accept-Encoding, Origin'
     };
 
     if (acceptEncoding.includes('gzip') && jsonStr.length > 1024) {
@@ -558,9 +621,11 @@ const server = http.createServer(async (req, res) => {
 
   if (method === 'OPTIONS') {
     res.writeHead(204, {
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': corsOrigin,
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Credentials': corsOrigin !== '*' && corsOrigin !== 'null' ? 'true' : 'false',
+      'Vary': 'Origin'
     });
     return res.end();
   }
@@ -595,12 +660,12 @@ const server = http.createServer(async (req, res) => {
     try {
       // 0. Auth Routes
       if (cleanUrl === '/api/auth/login' && method === 'POST') {
+        const clientIp = getClientIp(req);
+        const rateCheck = checkRateLimit(clientIp, 'auth_login', 12, 60000);
+        if (!rateCheck.allowed) {
+          return sendJson(429, { success: false, error: `Terlalu banyak percobaan masuk. Mohon tunggu ${rateCheck.retryAfter} detik.` });
+        }
         const body = await readBody();
-        const clientIp = req.headers['cf-connecting-ip'] || 
-                         req.headers['x-real-ip'] || 
-                         (req.headers['x-forwarded-for'] ? req.headers['x-forwarded-for'].split(',')[0].trim() : null) || 
-                         req.socket.remoteAddress || 
-                         '127.0.0.1';
         const result = authenticateUser(body.identifier || body.username || body.email, body.password, clientIp);
         if (!result.success) {
           return sendJson(401, result);
@@ -610,6 +675,11 @@ const server = http.createServer(async (req, res) => {
 
       // 0-forgot. Forgot Password Notification Dispatcher (HP / Email / Username)
       if (cleanUrl === '/api/auth/forgot-password' && method === 'POST') {
+        const clientIp = getClientIp(req);
+        const rateCheck = checkRateLimit(clientIp, 'auth_forgot_pw', 5, 300000);
+        if (!rateCheck.allowed) {
+          return sendJson(429, { success: false, error: `Batas permohonan reset password tercapai. Mohon tunggu ${rateCheck.retryAfter} detik.` });
+        }
         const body = await readBody();
         const identifier = body.identifier || body.username || body.email || body.phone;
         if (!identifier || !String(identifier).trim()) {
@@ -733,6 +803,11 @@ const server = http.createServer(async (req, res) => {
 
       // 0a. Native Server Biometric Frame Verification (Ultra-Fast YuNet + SFace on Central VPS)
       if (cleanUrl === '/api/auth/biometric-verify' && method === 'POST') {
+        const clientIp = getClientIp(req);
+        const rateCheck = checkRateLimit(clientIp, 'biometric_verify', 30, 60000);
+        if (!rateCheck.allowed) {
+          return sendJson(429, { success: false, error: `Batas verifikasi presensi wajah tercapai. Silakan coba lagi dalam ${rateCheck.retryAfter} detik.` });
+        }
         const body = await readBody();
         const { image } = body || {};
         if (!image) {
@@ -1949,6 +2024,11 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (cleanUrl === '/api/wa/test' && method === 'POST') {
+        const clientIp = getClientIp(req);
+        const rateCheck = checkRateLimit(clientIp, 'wa_test', 5, 60000);
+        if (!rateCheck.allowed) {
+          return sendJson(429, { success: false, error: `Batas pengujian pesan WhatsApp tercapai. Tunggu ${rateCheck.retryAfter} detik.` });
+        }
         const token = getAuthToken();
         const user = getCurrentUserFromToken(token);
         if (!user || !['admin', 'superuser', 'hr', 'finance'].includes(user.systemRole)) {
@@ -2053,6 +2133,11 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (cleanUrl === '/api/email/test' && method === 'POST') {
+        const clientIp = getClientIp(req);
+        const rateCheck = checkRateLimit(clientIp, 'email_test', 5, 60000);
+        if (!rateCheck.allowed) {
+          return sendJson(429, { success: false, error: `Batas pengujian email tercapai. Tunggu ${rateCheck.retryAfter} detik.` });
+        }
         const token = getAuthToken();
         const user = getCurrentUserFromToken(token);
         if (!user || !['admin', 'superuser', 'hr', 'finance'].includes(user.systemRole)) {
@@ -2351,11 +2436,21 @@ const server = http.createServer(async (req, res) => {
       res.end('Server Error loading asset');
       return;
     }
-    const headers = { 'Content-Type': contentType };
+    const headers = { 
+      'Content-Type': contentType,
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'SAMEORIGIN',
+      'Referrer-Policy': 'strict-origin-when-cross-origin',
+      'Permissions-Policy': 'camera=(self), geolocation=(self), microphone=()',
+      'Strict-Transport-Security': 'max-age=31536000; includeSubDomains; preload'
+    };
     if (ext === '.html' || cleanUrl === '/sw.js' || cleanUrl.endsWith('.webmanifest') || cleanUrl.endsWith('manifest.json')) {
       headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, max-age=0';
       headers['Pragma'] = 'no-cache';
       headers['Expires'] = '0';
+      if (ext === '.html') {
+        headers['Content-Security-Policy'] = "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: wss: https:; frame-ancestors 'self';";
+      }
     } else {
       headers['Cache-Control'] = 'public, max-age=31536000, immutable';
     }
