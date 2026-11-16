@@ -55,6 +55,7 @@ import {
   deleteAttendance,
   getAttendancePhoto,
   getAttendancePhotoOut,
+  getApprovalAttachment,
   getEmployeeByIdentifier,
   getEmployeeProjectSchedule,
   updateUserProfile
@@ -1324,6 +1325,37 @@ const server = http.createServer(async (req, res) => {
         }
         res.writeHead(404, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
         return res.end(JSON.stringify({ error: 'Photo not found' }));
+      }
+
+      // 6f. Stream Approval Attachment Binary (PDF / Images / Docs) with Content-Disposition inline
+      const attachmentMatch = cleanUrl.match(/^\/api\/approval\/([^\/]+)\/attachment$/);
+      if (attachmentMatch && method === 'GET') {
+        const id = decodeURIComponent(attachmentMatch[1]);
+        const attData = getApprovalAttachment(id);
+        const attachmentStr = attData?.attachment;
+        if (attachmentStr) {
+          if (attachmentStr.startsWith('data:')) {
+            const matches = attachmentStr.match(/^data:([^;]+);base64,(.+)$/);
+            if (matches && matches.length === 3) {
+              const mimeType = matches[1];
+              const buffer = Buffer.from(matches[2], 'base64');
+              const filename = encodeURIComponent(attData.name || 'dokumen_lampiran');
+              res.writeHead(200, {
+                'Content-Type': mimeType,
+                'Content-Length': buffer.length,
+                'Content-Disposition': `inline; filename="${filename}"`,
+                'Cache-Control': 'public, max-age=86400',
+                'Access-Control-Allow-Origin': '*'
+              });
+              return res.end(buffer);
+            }
+          } else if (attachmentStr.startsWith('http')) {
+            res.writeHead(302, { Location: attachmentStr, 'Access-Control-Allow-Origin': '*' });
+            return res.end();
+          }
+        }
+        res.writeHead(404, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        return res.end(JSON.stringify({ error: 'Lampiran dokumen tidak ditemukan' }));
       }
 
       // 7. Update Approval with Instant Broadcast (Supports Admin, HR, Superuser, Finance & PM Stage 1)

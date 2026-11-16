@@ -575,9 +575,13 @@ export function getAllData() {
   const approvals: ApprovalItem[] = (db.prepare('SELECT id, data_json FROM approvals ORDER BY submittedAt DESC LIMIT 300;').all() as any[])
     .map(row => {
       const item = JSON.parse(row.data_json);
-      if (item.proofAttachment && item.proofAttachment.startsWith('data:image')) {
+      if (item.proofAttachment && (item.proofAttachment.startsWith('data:') || item.proofAttachment.length > 500)) {
         item.hasAttachment = true;
-        delete item.proofAttachment;
+        item.attachmentUrl = `/api/approval/${row.id || item.id}/attachment`;
+        item.proofAttachment = `/api/approval/${row.id || item.id}/attachment`;
+      } else if (item.proofAttachment) {
+        item.hasAttachment = true;
+        item.attachmentUrl = item.proofAttachment;
       }
       const canonicalLoginId = (item.employeeId === 'EMP-001')
         ? 'admin'
@@ -638,6 +642,22 @@ export function getAttendancePhotoOut(id: string): string | null {
     if (!row) return null;
     const item = JSON.parse(row.data_json);
     return item.photoOutUrl || item.checkOutPhotoUrl || (item.attendanceType === 'CHECK_OUT' ? item.photoUrl : null);
+  } catch (e) {
+    return null;
+  }
+}
+
+export function getApprovalAttachment(id: string): { attachment: string | null; name: string; type: string | null } | null {
+  const db = getDatabase();
+  try {
+    const row = db.prepare('SELECT data_json FROM approvals WHERE id = ?').get(id) as any;
+    if (!row) return null;
+    const item = JSON.parse(row.data_json);
+    return {
+      attachment: item.proofAttachment || null,
+      name: item.attachmentName || 'Dokumen_Bukti_Lampiran',
+      type: item.attachmentType || null
+    };
   } catch (e) {
     return null;
   }

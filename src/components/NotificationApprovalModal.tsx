@@ -31,7 +31,9 @@ import {
   Building2,
   MapPin,
   Sliders,
-  CreditCard
+  CreditCard,
+  Paperclip,
+  Eye
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Employee, ApprovalItem, LeaveType, SystemRole, getEffectiveSystemRole, Project, KasbonRecord, KasbonRepaymentType, KasbonInstallmentSchedule } from '../types';
@@ -45,6 +47,8 @@ import {
   requestNotificationPermission 
 } from '../utils/pwaNotificationService';
 import { PwaNotificationSettingsPanel } from './PwaNotificationSettingsPanel';
+import { DocumentAttachmentUpload, DocumentAttachmentData } from './DocumentAttachmentUpload';
+import { DocumentViewerModal } from './DocumentViewerModal';
 
 interface NotificationApprovalModalProps {
   isOpen: boolean;
@@ -218,6 +222,16 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
   const [kasbonAccountNumber, setKasbonAccountNumber] = useState<string>(currentUser?.bankAccount?.accountNumber || '');
   const [kasbonAccountHolder, setKasbonAccountHolder] = useState<string>(currentUser?.bankAccount?.accountHolder || currentUser?.name || '');
   const [kasbonReason, setKasbonReason] = useState<string>('Kebutuhan operasional / mendesak');
+
+  // Dokumen Bukti Lampiran & In-App Lightbox Viewer State
+  const [newAttachment, setNewAttachment] = useState<DocumentAttachmentData | null>(null);
+  const [viewingDocument, setViewingDocument] = useState<{
+    url: string;
+    name?: string;
+    type?: string;
+    title?: string;
+    submittedBy?: string;
+  } | null>(null);
 
   // Floating Pointer-Following Tooltip State untuk Action & Tab Buttons
   interface PointerTooltipState {
@@ -546,10 +560,16 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
         requiresHrApproval: false,
         status: 'PENDING',
         submittedAt: nowIso,
+        proofAttachment: newAttachment?.dataUrl,
+        attachmentName: newAttachment?.name,
+        attachmentType: newAttachment?.type,
+        attachmentSize: newAttachment?.size,
+        hasAttachment: Boolean(newAttachment),
         kasbonData
       };
 
       onSubmitNewLeaveRequest(newItem);
+      setNewAttachment(null);
       confetti({
         particleCount: 60,
         spread: 60,
@@ -587,10 +607,16 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
         targetApproverRole: approverRole,
         requiresHrApproval: approverRole === 'HR',
         status: 'PENDING',
-        submittedAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
+        submittedAt: new Date().toISOString().replace('T', ' ').substring(0, 19),
+        proofAttachment: newAttachment?.dataUrl,
+        attachmentName: newAttachment?.name,
+        attachmentType: newAttachment?.type,
+        attachmentSize: newAttachment?.size,
+        hasAttachment: Boolean(newAttachment)
       };
 
       onSubmitNewLeaveRequest(newItem);
+      setNewAttachment(null);
       confetti({
         particleCount: 60,
         spread: 60,
@@ -636,10 +662,16 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
       isEarlySubmission: isRosterLeave ? isEarlySubmission : undefined,
       earlyReason: isRosterLeave && isEarlySubmission ? earlyReason : undefined,
       status: 'PENDING',
-      submittedAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
+      submittedAt: new Date().toISOString().replace('T', ' ').substring(0, 19),
+      proofAttachment: newAttachment?.dataUrl,
+      attachmentName: newAttachment?.name,
+      attachmentType: newAttachment?.type,
+      attachmentSize: newAttachment?.size,
+      hasAttachment: Boolean(newAttachment)
     };
 
     onSubmitNewLeaveRequest(newItem);
+    setNewAttachment(null);
     confetti({
       particleCount: 60,
       spread: 60,
@@ -1046,6 +1078,34 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
                     </div>
                   )}
 
+                  {activeReviewAction.item.proofAttachment && (
+                    <div className="p-2.5 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Paperclip className="w-4 h-4 text-indigo-600 shrink-0" />
+                        <div className="min-w-0">
+                          <span className="text-[11px] font-bold text-indigo-900 block truncate">
+                            {activeReviewAction.item.attachmentName || 'Dokumen Bukti Lampiran'}
+                          </span>
+                          <span className="text-[10px] text-indigo-700">Lampiran tersedia untuk verifikasi keputusan</span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setViewingDocument({
+                          url: activeReviewAction.item.proofAttachment!,
+                          name: activeReviewAction.item.attachmentName || 'Dokumen Bukti',
+                          type: activeReviewAction.item.attachmentType,
+                          title: activeReviewAction.item.title,
+                          submittedBy: activeReviewAction.item.employeeName
+                        })}
+                        className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold flex items-center gap-1 cursor-pointer shrink-0 shadow-xs"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>Pratinjau</span>
+                      </button>
+                    </div>
+                  )}
+
                   <div>
                     <label className="text-[11px] font-bold text-slate-700 block mb-1">
                       Catatan Reviewer / Alasan (Opsional):
@@ -1198,6 +1258,32 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
                           {item.isEarlyReturnClosed && (
                             <div className="mt-1.5 p-2 rounded-xl bg-amber-50 border border-amber-300 text-[11px] text-amber-900 space-y-0.5">
                               <b>⚠️ Ditutup Otomatis Lebih Awal:</b> Karyawan kembali aktif presensi pada {item.earlyReturnDate}. Durasi cuti disesuaikan menjadi {item.actualUsedDays} hari. Sisa <b>{item.forfeitedDays || 0} hari cuti HANGUS</b> dan tidak diakumulasikan ke periode cuti berikutnya sesuai kebijakan Cuti Roster Non-Lokal.
+                            </div>
+                          )}
+
+                          {/* Dokumen Bukti Lampiran (Bisa Dilihat oleh PM maupun HR) */}
+                          {item.proofAttachment && (
+                            <div className="mt-1.5 flex items-center justify-between gap-2 p-2 rounded-xl bg-indigo-50/80 border border-indigo-200 text-xs">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <Paperclip className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                                <span className="text-[11px] font-bold text-indigo-900 truncate">
+                                  {item.attachmentName || 'Dokumen Bukti Lampiran'}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setViewingDocument({
+                                  url: item.proofAttachment!,
+                                  name: item.attachmentName || 'Dokumen Bukti',
+                                  type: item.attachmentType,
+                                  title: item.title,
+                                  submittedBy: item.employeeName
+                                })}
+                                className="px-2 py-0.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[10.5px] font-bold flex items-center gap-1 cursor-pointer shrink-0 shadow-xs active:scale-95 transition-all"
+                              >
+                                <Eye className="w-3 h-3" />
+                                <span>Lihat Dokumen</span>
+                              </button>
                             </div>
                           )}
                         </div>
@@ -2125,6 +2211,33 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
                 </>
               )}
 
+              {/* Upload Dokumen Bukti Lampiran (Surat Dokter, Izin, Tiket, Dispensasi, dll.) */}
+              <DocumentAttachmentUpload
+                value={newAttachment}
+                onChange={setNewAttachment}
+                onPreview={doc => setViewingDocument({
+                  url: doc.dataUrl,
+                  name: doc.name,
+                  type: doc.type,
+                  title: newTitle,
+                  submittedBy: currentUser.name
+                })}
+                label={
+                  newRequestType === 'PERMIT' && newLeaveType === 'CUTI_SAKIT'
+                    ? 'Upload Surat Keterangan Dokter (Disarankan)'
+                    : newRequestType === 'ATTENDANCE_CORRECTION'
+                    ? 'Upload Foto Bukti Presensi Site / Surat Tugas'
+                    : 'Upload Dokumen Bukti / Surat Izin / Lampiran'
+                }
+                helperText={
+                  newRequestType === 'PERMIT' && newLeaveType === 'CUTI_SAKIT'
+                    ? 'Lampirkan scan atau foto surat dokter resmi klinik / rumah sakit untuk verifikasi HR & PM.'
+                    : newRequestType === 'ATTENDANCE_CORRECTION'
+                    ? 'Lampirkan foto kendala presensi site, log perangkat, atau surat tugas lapangan.'
+                    : 'Format: PDF, JPG, PNG (Maksimal 10 MB). Dokumen dapat dilihat langsung oleh PM dan HR.'
+                }
+              />
+
               <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
                 <button
                   type="button"
@@ -2219,6 +2332,17 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
             </div>
           </div>
         )}
+
+        {/* Lightbox / In-App Document Viewer Modal */}
+        <DocumentViewerModal
+          isOpen={Boolean(viewingDocument)}
+          onClose={() => setViewingDocument(null)}
+          documentUrl={viewingDocument?.url}
+          documentName={viewingDocument?.name}
+          documentType={viewingDocument?.type}
+          title={viewingDocument?.title}
+          submittedBy={viewingDocument?.submittedBy}
+        />
 
       </div>
     </div>,

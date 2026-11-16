@@ -48,6 +48,8 @@ import {
   UserAuthorityContext 
 } from '../utils/approvalAuthorityHelper';
 import { LeaveGanttChartTab } from './LeaveGanttChartTab';
+import { DocumentAttachmentUpload, DocumentAttachmentData } from './DocumentAttachmentUpload';
+import { DocumentViewerModal } from './DocumentViewerModal';
 
 interface ApprovalHubTabProps {
   approvals: ApprovalItem[];
@@ -173,9 +175,19 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
   // Submit Leave Request Modal State
   const [showNewRequestModal, setShowNewRequestModal] = useState(initialOpenNewRequest || false);
 
+  // Dokumen Bukti Lampiran & In-App Lightbox Viewer State
+  const [newAttachment, setNewAttachment] = useState<DocumentAttachmentData | null>(null);
+  const [viewingDocument, setViewingDocument] = useState<{
+    url: string;
+    name?: string;
+    type?: string;
+    title?: string;
+    submittedBy?: string;
+  } | null>(null);
+
   // Background Scroll Lock saat modal terbuka agar viewport tetap terkunci di layar aktif
   useEffect(() => {
-    if (showNewRequestModal || reviewModalItem || batchModal || detailModalItem) {
+    if (showNewRequestModal || reviewModalItem || batchModal || detailModalItem || viewingDocument) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
@@ -183,7 +195,7 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
     return () => {
       document.body.style.overflow = '';
     };
-  }, [showNewRequestModal, reviewModalItem, batchModal, detailModalItem]);
+  }, [showNewRequestModal, reviewModalItem, batchModal, detailModalItem, viewingDocument]);
 
   // Perhitungan Hak & Saldo Cuti Karyawan
   const annualLeaveQuota = typeof currentUser.leaveQuota === 'number' ? currentUser.leaveQuota : 12;
@@ -537,10 +549,16 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
         requiresHrApproval: false,
         status: 'PENDING',
         submittedAt: nowIso,
+        proofAttachment: newAttachment?.dataUrl,
+        attachmentName: newAttachment?.name,
+        attachmentType: newAttachment?.type,
+        attachmentSize: newAttachment?.size,
+        hasAttachment: Boolean(newAttachment),
         kasbonData
       };
 
       onSubmitNewLeaveRequest(newItem);
+      setNewAttachment(null);
       setShowNewRequestModal(false);
       return;
     }
@@ -573,10 +591,16 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
         targetApproverRole: approverRole,
         requiresHrApproval: approverRole === 'HR',
         status: 'PENDING',
-        submittedAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
+        submittedAt: new Date().toISOString().replace('T', ' ').substring(0, 19),
+        proofAttachment: newAttachment?.dataUrl,
+        attachmentName: newAttachment?.name,
+        attachmentType: newAttachment?.type,
+        attachmentSize: newAttachment?.size,
+        hasAttachment: Boolean(newAttachment)
       };
 
       onSubmitNewLeaveRequest(newItem);
+      setNewAttachment(null);
       setShowNewRequestModal(false);
       return;
     }
@@ -627,10 +651,16 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
       isEarlySubmission: isRosterLeave ? isEarlySubmission : undefined,
       earlyReason: isRosterLeave && isEarlySubmission ? earlyReason : undefined,
       status: 'PENDING',
-      submittedAt: new Date().toISOString().replace('T', ' ').substring(0, 19)
+      submittedAt: new Date().toISOString().replace('T', ' ').substring(0, 19),
+      proofAttachment: newAttachment?.dataUrl,
+      attachmentName: newAttachment?.name,
+      attachmentType: newAttachment?.type,
+      attachmentSize: newAttachment?.size,
+      hasAttachment: Boolean(newAttachment)
     };
 
     onSubmitNewLeaveRequest(newItem);
+    setNewAttachment(null);
     setShowNewRequestModal(false);
   };
 
@@ -1412,16 +1442,24 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                             )}
 
                             {item.proofAttachment && (
-                              <a
-                                href={item.proofAttachment}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.2 rounded border border-indigo-200 transition-colors"
-                                title="Buka Dokumen Bukti Lampiran"
+                              <button
+                                type="button"
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  setViewingDocument({
+                                    url: item.proofAttachment!,
+                                    name: item.attachmentName || 'Dokumen Bukti Lampiran',
+                                    type: item.attachmentType,
+                                    title: item.title,
+                                    submittedBy: item.employeeName
+                                  });
+                                }}
+                                className="inline-flex items-center gap-1 text-[10.5px] font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-2 py-0.5 rounded-md border border-indigo-200 transition-colors cursor-pointer shadow-2xs"
+                                title={`Lihat Dokumen: ${item.attachmentName || 'Lampiran Bukti'}`}
                               >
-                                <Paperclip className="w-2.5 h-2.5" />
-                                <span>Lampiran</span>
-                              </a>
+                                <Paperclip className="w-3 h-3 text-indigo-600" />
+                                <span>{item.attachmentName ? (item.attachmentName.length > 15 ? `${item.attachmentName.slice(0, 12)}...` : item.attachmentName) : 'Lampiran'}</span>
+                              </button>
                             )}
                           </div>
                         </div>
@@ -1647,6 +1685,37 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
             <p className="text-xs text-slate-600">
               Apakah Anda yakin ingin memproses pengajuan <b>{reviewModalItem.item.title}</b> dari <b>{reviewModalItem.item.employeeName}</b>?
             </p>
+
+            {/* Dokumen Bukti Lampiran untuk Ditinjau oleh Reviewer (PM / HR) */}
+            {reviewModalItem.item.proofAttachment && (
+              <div className="p-3 rounded-2xl bg-indigo-50/80 border border-indigo-200 flex items-center justify-between gap-2 animate-in fade-in">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Paperclip className="w-4 h-4 text-indigo-600 shrink-0" />
+                  <div className="min-w-0">
+                    <span className="text-xs font-bold text-indigo-900 block truncate">
+                      {reviewModalItem.item.attachmentName || 'Dokumen Bukti Lampiran'}
+                    </span>
+                    <span className="text-[10.5px] text-indigo-700 font-mono-code">
+                      Verifikasi dokumen sebelum memutuskan
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setViewingDocument({
+                    url: reviewModalItem.item.proofAttachment!,
+                    name: reviewModalItem.item.attachmentName || 'Dokumen Bukti',
+                    type: reviewModalItem.item.attachmentType,
+                    title: reviewModalItem.item.title,
+                    submittedBy: reviewModalItem.item.employeeName
+                  })}
+                  className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shrink-0 shadow-xs active:scale-95 transition-all"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>Lihat Dokumen</span>
+                </button>
+              </div>
+            )}
 
             {/* Opsi Pemilihan Denda Keterlambatan khusus Persetujuan Keterlambatan */}
             {reviewModalItem.action === 'APPROVE' && (reviewModalItem.item.type === 'LATE_JUSTIFICATION' || (reviewModalItem.item.lateMinutes && reviewModalItem.item.lateMinutes > 0)) && (
@@ -2548,6 +2617,33 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                 />
               </div>
 
+              {/* Upload Dokumen Bukti Lampiran (Surat Dokter, Izin, Tiket, Dispensasi, dll.) */}
+              <DocumentAttachmentUpload
+                value={newAttachment}
+                onChange={setNewAttachment}
+                onPreview={doc => setViewingDocument({
+                  url: doc.dataUrl,
+                  name: doc.name,
+                  type: doc.type,
+                  title: newTitle,
+                  submittedBy: currentUser.name
+                })}
+                label={
+                  newRequestType === 'PERMIT' && newLeaveType === 'CUTI_SAKIT'
+                    ? 'Upload Surat Keterangan Dokter (Disarankan)'
+                    : newRequestType === 'ATTENDANCE_CORRECTION'
+                    ? 'Upload Foto Bukti Presensi Site / Surat Tugas'
+                    : 'Upload Dokumen Bukti / Surat Izin / Lampiran'
+                }
+                helperText={
+                  newRequestType === 'PERMIT' && newLeaveType === 'CUTI_SAKIT'
+                    ? 'Lampirkan scan atau foto surat dokter resmi klinik / rumah sakit untuk verifikasi HR & PM.'
+                    : newRequestType === 'ATTENDANCE_CORRECTION'
+                    ? 'Lampirkan foto kendala presensi site, log perangkat, atau surat tugas lapangan.'
+                    : 'Format: PDF, JPG, PNG (Maksimal 10 MB). Dokumen dapat dilihat langsung oleh PM dan HR.'
+                }
+              />
+
               <div className="flex items-center justify-end gap-2 pt-2">
                 <button
                   type="button"
@@ -2972,17 +3068,35 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
               </div>
 
               {detailModalItem.proofAttachment && (
-                <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between">
-                  <span className="text-slate-600 font-medium">Dokumen Bukti Lampiran:</span>
-                  <a
-                    href={detailModalItem.proofAttachment}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-3 py-1 rounded-xl border border-indigo-200 cursor-pointer"
-                  >
-                    <Paperclip className="w-3.5 h-3.5" />
-                    <span>Lihat / Unduh Dokumen</span>
-                  </a>
+                <div className="pt-2 border-t border-slate-200/60 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-700 font-bold text-xs flex items-center gap-1.5">
+                      <Paperclip className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Dokumen Bukti Lampiran:</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setViewingDocument({
+                        url: detailModalItem.proofAttachment!,
+                        name: detailModalItem.attachmentName || 'Dokumen Bukti',
+                        type: detailModalItem.attachmentType,
+                        title: detailModalItem.title,
+                        submittedBy: detailModalItem.employeeName
+                      })}
+                      className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1.5 rounded-xl shadow-xs cursor-pointer active:scale-95 transition-all"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>Buka Pratinjau Dokumen</span>
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-white border border-indigo-200/80">
+                    <span className="text-xs font-mono-code font-semibold text-slate-800 truncate max-w-[240px] sm:max-w-[320px]">
+                      {detailModalItem.attachmentName || 'Dokumen_Lampiran'}
+                    </span>
+                    <span className="text-[10px] font-mono-code uppercase px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-100 font-bold">
+                      {detailModalItem.attachmentType?.includes('pdf') || detailModalItem.attachmentName?.toLowerCase().endsWith('.pdf') ? 'PDF' : 'FOTO / GAMBAR'}
+                    </span>
+                  </div>
                 </div>
               )}
 
@@ -3197,6 +3311,17 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
         </div>,
         document.body
       )}
+
+      {/* Lightbox / In-App Document Viewer Modal */}
+      <DocumentViewerModal
+        isOpen={Boolean(viewingDocument)}
+        onClose={() => setViewingDocument(null)}
+        documentUrl={viewingDocument?.url}
+        documentName={viewingDocument?.name}
+        documentType={viewingDocument?.type}
+        title={viewingDocument?.title}
+        submittedBy={viewingDocument?.submittedBy}
+      />
 
     </div>
   );

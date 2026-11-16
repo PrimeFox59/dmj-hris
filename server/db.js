@@ -929,9 +929,13 @@ export function getAllData() {
   const approvals = db.prepare('SELECT id, data_json FROM approvals ORDER BY submittedAt DESC LIMIT 300;').all().map(r => {
     let item = {};
     try { item = JSON.parse(r.data_json); } catch (e) {}
-    if (item.proofAttachment && item.proofAttachment.startsWith('data:image')) {
+    if (item.proofAttachment && (item.proofAttachment.startsWith('data:') || item.proofAttachment.length > 500)) {
       item.hasAttachment = true;
-      delete item.proofAttachment;
+      item.attachmentUrl = `/api/approval/${r.id || item.id}/attachment`;
+      item.proofAttachment = `/api/approval/${r.id || item.id}/attachment`;
+    } else if (item.proofAttachment) {
+      item.hasAttachment = true;
+      item.attachmentUrl = item.proofAttachment;
     }
     // Canonical Login ID resolution from Master Data (SSOT)
     const canonicalLoginId = (item.employeeId === 'EMP-001')
@@ -997,6 +1001,25 @@ export function getAttendancePhotoOut(id) {
     if (!row) return null;
     const item = JSON.parse(row.data_json);
     return item.photoOutUrl || item.checkOutPhotoUrl || (item.attendanceType === 'CHECK_OUT' ? item.photoUrl : null);
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * Retrieve Approval Document Attachment Binary / Data URL on-demand
+ */
+export function getApprovalAttachment(id) {
+  const db = getDatabase();
+  try {
+    const row = db.prepare('SELECT data_json FROM approvals WHERE id = ?').get(id);
+    if (!row) return null;
+    const item = JSON.parse(row.data_json);
+    return {
+      attachment: item.proofAttachment || null,
+      name: item.attachmentName || 'Dokumen_Bukti_Lampiran',
+      type: item.attachmentType || null
+    };
   } catch (e) {
     return null;
   }

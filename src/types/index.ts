@@ -451,6 +451,10 @@ export interface ApprovalItem {
   isEarlySubmission?: boolean;
   earlyReason?: string;
   proofAttachment?: string;
+  attachmentName?: string;
+  attachmentType?: string;
+  attachmentSize?: number;
+  hasAttachment?: boolean;
   attendanceRecordId?: string;
   status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'REVISION_REQUESTED';
   submittedAt: string;
