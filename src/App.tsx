@@ -70,7 +70,7 @@ export function App() {
   });
 
   // Auto-invalidation build ID (Membersihkan cache lama saat versi baru dirilis)
-  const APP_BUILD_ID = '20261116_v2_icon_buttons_pointer_tooltip';
+  const APP_BUILD_ID = '20261116_v3_notification_modal_icon_buttons';
   if (typeof window !== 'undefined') {
     try {
       const savedBuild = localStorage.getItem('prime_hris_build_id');

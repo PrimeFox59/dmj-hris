@@ -30,10 +30,11 @@ import {
   Crown,
   Building2,
   MapPin,
-  Sliders
+  Sliders,
+  CreditCard
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { Employee, ApprovalItem, LeaveType, SystemRole, getEffectiveSystemRole, Project } from '../types';
+import { Employee, ApprovalItem, LeaveType, SystemRole, getEffectiveSystemRole, Project, KasbonRecord, KasbonRepaymentType, KasbonInstallmentSchedule } from '../types';
 import { 
   isItemWithinUserAuthority, 
   isFinanceEmployee, 
@@ -197,7 +198,7 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
 
   const todayWib = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' });
   // Submit Leave Request State
-  const [newRequestType, setNewRequestType] = useState<'LEAVE' | 'PERMIT' | 'ATTENDANCE_CORRECTION'>('LEAVE');
+  const [newRequestType, setNewRequestType] = useState<'LEAVE' | 'PERMIT' | 'ATTENDANCE_CORRECTION' | 'KASBON'>('LEAVE');
   const [newLeaveType, setNewLeaveType] = useState<LeaveType>('CUTI_TAHUNAN');
   const [newStartDate, setNewStartDate] = useState(todayWib || '2026-10-10');
   const [newEndDate, setNewEndDate] = useState(todayWib || '2026-10-10');
@@ -208,6 +209,107 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
   const [earlyReason, setEarlyReason] = useState('');
   const [agreeUnpaidDeduction, setAgreeUnpaidDeduction] = useState(false);
   const [offScheduleReason, setOffScheduleReason] = useState('');
+
+  // State Khusus Kasbon Pribadi
+  const [kasbonAmount, setKasbonAmount] = useState<number>(1500000);
+  const [kasbonRepaymentType, setKasbonRepaymentType] = useState<KasbonRepaymentType>('CICILAN');
+  const [kasbonInstallments, setKasbonInstallments] = useState<number>(3);
+  const [kasbonBankName, setKasbonBankName] = useState<string>(currentUser?.bankAccount?.bankName || 'BCA');
+  const [kasbonAccountNumber, setKasbonAccountNumber] = useState<string>(currentUser?.bankAccount?.accountNumber || '');
+  const [kasbonAccountHolder, setKasbonAccountHolder] = useState<string>(currentUser?.bankAccount?.accountHolder || currentUser?.name || '');
+  const [kasbonReason, setKasbonReason] = useState<string>('Kebutuhan operasional / mendesak');
+
+  // Floating Pointer-Following Tooltip State untuk Action & Tab Buttons
+  interface PointerTooltipState {
+    title: string;
+    subtitle?: string;
+    color: string;
+    x: number;
+    y: number;
+  }
+  const [pointerTooltip, setPointerTooltip] = useState<PointerTooltipState | null>(null);
+
+  const handlePointerEnter = (
+    e: React.MouseEvent,
+    data: { title: string; subtitle?: string; color: string }
+  ) => {
+    setPointerTooltip({
+      ...data,
+      x: e.clientX,
+      y: e.clientY
+    });
+  };
+
+  const handlePointerMove = (e: React.MouseEvent) => {
+    setPointerTooltip(prev => (prev ? { ...prev, x: e.clientX, y: e.clientY } : null));
+  };
+
+  const handlePointerLeave = () => {
+    setPointerTooltip(null);
+  };
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (pointerTooltip) setPointerTooltip(null);
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [pointerTooltip]);
+
+  const SUBMISSION_ACTIONS = [
+    {
+      type: 'LEAVE' as const,
+      icon: Calendar,
+      bgClass: 'bg-[#FF6B00] hover:bg-[#E05E00]',
+      color: '#FF6B00',
+      title: 'Ajukan Cuti Kerja',
+      subtitle: 'Cuti Tahunan & Roster Non-Lokal'
+    },
+    {
+      type: 'PERMIT' as const,
+      icon: FileText,
+      bgClass: 'bg-[#2563EB] hover:bg-[#1D4ED8]',
+      color: '#2563EB',
+      title: 'Ajukan Izin / Sakit',
+      subtitle: 'Izin Resmi, Dispensasi & Cuti Sakit'
+    },
+    {
+      type: 'ATTENDANCE_CORRECTION' as const,
+      icon: Clock,
+      bgClass: 'bg-[#0D9488] hover:bg-[#0F766E]',
+      color: '#0D9488',
+      title: 'Ajukan Koreksi Absen',
+      subtitle: 'Kendala Jaringan / Lupa Clock In-Out'
+    },
+    {
+      type: 'KASBON' as const,
+      icon: CreditCard,
+      bgClass: 'bg-[#7C3AED] hover:bg-[#6D28D9]',
+      color: '#7C3AED',
+      title: 'Ajukan Kasbon Pribadi',
+      subtitle: 'Pinjaman & Potongan Payroll Finance'
+    }
+  ];
+
+  const openNewRequestTab = (type: 'LEAVE' | 'PERMIT' | 'ATTENDANCE_CORRECTION' | 'KASBON') => {
+    setActiveTab('new_request');
+    setActiveReviewAction(null);
+    setNewRequestType(type);
+    if (type === 'KASBON') {
+      const count = kasbonRepaymentType === 'TOTAL_BULANAN' ? 1 : kasbonInstallments;
+      setNewTitle(`Pengajuan Kasbon Pribadi: Rp ${kasbonAmount.toLocaleString('id-ID')} (${kasbonRepaymentType === 'TOTAL_BULANAN' ? 'Lunas 1 Bln' : `Cicilan ${count}x`})`);
+      setNewDescription('Pengajuan Kasbon Pribadi Karyawan');
+    } else if (type === 'ATTENDANCE_CORRECTION') {
+      setNewTitle(`Koreksi Absensi: ${formatIndonesianDateDisplay(correctionDate)}`);
+      setNewDescription('');
+    } else if (type === 'LEAVE') {
+      setNewTitle(newLeaveType === 'CUTI_ROSTER_NON_LOKAL' ? 'Permohonan Cuti Roster' : 'Permohonan Cuti Tahunan');
+      setNewDescription('Keperluan cuti kerja tahunan / roster.');
+    } else {
+      setNewTitle('Permohonan Izin Resmi');
+      setNewDescription('Izin resmi / keperluan penting.');
+    }
+  };
 
   // State Khusus Koreksi Absensi Mandiri
   const [correctionDate, setCorrectionDate] = useState(todayWib || '2026-10-12');
@@ -294,7 +396,9 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
 
   // Submit Disabled Guard
   const isSubmitDisabled = 
-    newRequestType === 'ATTENDANCE_CORRECTION'
+    newRequestType === 'KASBON'
+      ? (!kasbonAmount || kasbonAmount <= 0 || !kasbonBankName.trim() || !kasbonAccountNumber.trim() || !kasbonAccountHolder.trim())
+      : newRequestType === 'ATTENDANCE_CORRECTION'
       ? (!correctionDate || !targetCheckInTime || !newDescription.trim())
       : ((isOverQuota && !agreeUnpaidDeduction) ||
          (isOffSchedule && !offScheduleReason.trim()) ||
@@ -366,6 +470,94 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
   // Handle New Request Submit
   const handleCreateRequest = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (newRequestType === 'KASBON') {
+      const now = new Date();
+      const nowIso = now.toISOString();
+      const installmentCount = kasbonRepaymentType === 'TOTAL_BULANAN' ? 1 : Math.max(1, kasbonInstallments);
+      const monthlyAmount = Math.round(kasbonAmount / installmentCount);
+
+      const monthNamesIndo = [
+        'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+        'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+      ];
+      const startMonthIdx = now.getMonth();
+      const startYear = now.getFullYear();
+
+      const installmentSchedule: KasbonInstallmentSchedule[] = [];
+      for (let i = 1; i <= installmentCount; i++) {
+        const curM = (startMonthIdx + i - 1) % 12;
+        const curY = startYear + Math.floor((startMonthIdx + i - 1) / 12);
+        const periodLabel = `Periode ${monthNamesIndo[curM]} ${curY}`;
+        const itemAmount = i === installmentCount 
+          ? kasbonAmount - (monthlyAmount * (installmentCount - 1))
+          : monthlyAmount;
+
+        installmentSchedule.push({
+          installmentNumber: i,
+          period: periodLabel,
+          amount: itemAmount,
+          isDeducted: false
+        });
+      }
+
+      const kasbonId = `KSB-${Date.now().toString().slice(-6)}`;
+      const kasbonData: KasbonRecord = {
+        id: kasbonId,
+        employeeId: currentUser.id,
+        employeeName: currentUser.name,
+        employeeNik: currentUser.nik,
+        department: currentUser.department,
+        position: currentUser.position,
+        projectId: currentUserProject?.id,
+        projectCode: currentUserProject?.code,
+        projectName: currentUserProject?.name,
+        amount: kasbonAmount,
+        reason: newDescription.trim() || kasbonReason,
+        repaymentType: kasbonRepaymentType,
+        totalInstallments: installmentCount,
+        monthlyDeduction: monthlyAmount,
+        startPeriod: installmentSchedule[0]?.period || `Periode ${monthNamesIndo[startMonthIdx]} ${startYear}`,
+        disbursementBankName: kasbonBankName,
+        disbursementAccountNumber: kasbonAccountNumber,
+        disbursementAccountHolder: kasbonAccountHolder || currentUser.name,
+        status: 'PENDING',
+        submittedAt: nowIso,
+        totalPaid: 0,
+        remainingBalance: kasbonAmount,
+        installments: installmentSchedule,
+        notes: `Tujuan transfer: ${kasbonBankName} ${kasbonAccountNumber} a/n ${kasbonAccountHolder || currentUser.name}`
+      };
+
+      const newItem: ApprovalItem = {
+        id: `APP-KASBON-${Date.now()}`,
+        type: 'KASBON',
+        employeeId: currentUser.id,
+        employeeName: currentUser.name,
+        employeeNik: currentUser.nik,
+        department: currentUser.department,
+        title: `Pengajuan Kasbon Pribadi: Rp ${kasbonAmount.toLocaleString('id-ID')} (${kasbonRepaymentType === 'TOTAL_BULANAN' ? 'Lunas 1 Bln' : `Cicilan ${installmentCount}x`})`,
+        description: `[Pencairan: ${kasbonBankName} - ${kasbonAccountNumber} a.n. ${kasbonAccountHolder}] Keperluan: ${kasbonReason}`,
+        startDate: todayWib,
+        endDate: todayWib,
+        daysCount: 1,
+        targetApproverRole: 'FINANCE',
+        stage: 'FINANCE',
+        requiresHrApproval: false,
+        status: 'PENDING',
+        submittedAt: nowIso,
+        kasbonData
+      };
+
+      onSubmitNewLeaveRequest(newItem);
+      confetti({
+        particleCount: 60,
+        spread: 60,
+        origin: { y: 0.7 }
+      });
+      setActiveTab('reviews');
+      return;
+    }
 
     if (newRequestType === 'ATTENDANCE_CORRECTION') {
       const targetProj = currentUserProject;
@@ -620,7 +812,15 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
         <div className="px-5 sm:px-6 pt-3 pb-2 bg-slate-50/70 border-b border-slate-200/70 flex items-center justify-between gap-2 overflow-x-auto shrink-0">
           <div className="flex items-center gap-1.5">
             <button
+              type="button"
               onClick={() => { setActiveTab('reviews'); setActiveReviewAction(null); }}
+              onMouseEnter={(e) => handlePointerEnter(e, {
+                title: isApprover ? 'Tiket Butuh Review' : 'Pengajuan Saya',
+                subtitle: `${pendingCount} pengajuan menunggu tindakan otorisasi`,
+                color: '#FF6B00'
+              })}
+              onMouseMove={handlePointerMove}
+              onMouseLeave={handlePointerLeave}
               className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
                 activeTab === 'reviews'
                   ? 'bg-[#FF6B00] text-white shadow-xs'
@@ -639,7 +839,15 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
             </button>
 
             <button
+              type="button"
               onClick={() => { setActiveTab('notifications'); setActiveReviewAction(null); }}
+              onMouseEnter={(e) => handlePointerEnter(e, {
+                title: 'Aktivitas & Notifikasi',
+                subtitle: 'Linimasa riwayat notifikasi & status pengajuan',
+                color: '#3B82F6'
+              })}
+              onMouseMove={handlePointerMove}
+              onMouseLeave={handlePointerLeave}
               className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
                 activeTab === 'notifications'
                   ? 'bg-[#FF6B00] text-white shadow-xs'
@@ -650,20 +858,53 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
               <span>Aktivitas & Notifikasi</span>
             </button>
 
-            <button
-              onClick={() => { setActiveTab('new_request'); setActiveReviewAction(null); }}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                activeTab === 'new_request'
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
-              }`}
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>+ Buat Pengajuan (Cuti / Izin / Kasbon)</span>
-            </button>
+            {/* Separator */}
+            <div className="h-5 w-[1px] bg-slate-200 mx-1 shrink-0" />
+
+            {/* 4 Icon-Only Submission Action Buttons dengan Floating Tooltip Mengikuti Pointer */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              {SUBMISSION_ACTIONS.map(action => {
+                const IconComp = action.icon;
+                const isSelected = activeTab === 'new_request' && newRequestType === action.type;
+                return (
+                  <button
+                    key={action.type}
+                    type="button"
+                    onClick={() => {
+                      setPointerTooltip(null);
+                      openNewRequestTab(action.type);
+                    }}
+                    onMouseEnter={(e) => handlePointerEnter(e, {
+                      title: action.title,
+                      subtitle: action.subtitle,
+                      color: action.color
+                    })}
+                    onMouseMove={handlePointerMove}
+                    onMouseLeave={handlePointerLeave}
+                    className={`w-8 h-8 rounded-xl ${action.bgClass} text-white flex items-center justify-center shadow-xs hover:shadow-md transition-all duration-150 hover:scale-105 active:scale-95 cursor-pointer relative group shrink-0 ${
+                      isSelected ? 'ring-2 ring-offset-1 ring-slate-900 scale-105' : ''
+                    }`}
+                    aria-label={action.title}
+                  >
+                    <IconComp className="w-3.5 h-3.5 shrink-0 transition-transform duration-150 group-hover:scale-110" />
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Separator */}
+            <div className="h-5 w-[1px] bg-slate-200 mx-1 shrink-0" />
 
             <button
+              type="button"
               onClick={() => { setActiveTab('settings'); setActiveReviewAction(null); }}
+              onMouseEnter={(e) => handlePointerEnter(e, {
+                title: 'Pengaturan Notifikasi PWA',
+                subtitle: 'Status bar, pengingat absen & suara notif HP',
+                color: '#0F172A'
+              })}
+              onMouseMove={handlePointerMove}
+              onMouseLeave={handlePointerLeave}
               className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                 activeTab === 'settings'
                   ? 'bg-slate-900 text-white shadow-xs'
@@ -1159,12 +1400,14 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
                       if (val === 'LEAVE') setNewTitle('Permohonan Cuti Tahunan');
                       else if (val === 'PERMIT') setNewTitle('Permohonan Izin / Sakit');
                       else if (val === 'ATTENDANCE_CORRECTION') setNewTitle('Pengajuan Koreksi Absensi Mandiri');
+                      else if (val === 'KASBON') setNewTitle(`Pengajuan Kasbon Pribadi: Rp ${kasbonAmount.toLocaleString('id-ID')}`);
                     }}
                     className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 font-semibold"
                   >
                     <option value="LEAVE">Cuti Karyawan</option>
                     <option value="PERMIT">Izin Tidak Masuk / Sakit</option>
                     <option value="ATTENDANCE_CORRECTION">📝 Koreksi Absensi Mandiri</option>
+                    <option value="KASBON">💳 Kasbon Pribadi (Pinjaman & Potongan Payroll)</option>
                   </select>
                 </div>
 
@@ -1197,6 +1440,202 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
                   </div>
                 )}
               </div>
+
+              {/* BANNER KHUSUS KASBON PRIBADI */}
+              {newRequestType === 'KASBON' && (
+                <div className="p-4 rounded-2xl bg-purple-50/90 border border-purple-200 text-slate-800 space-y-3.5 animate-in fade-in">
+                  <div className="flex items-center justify-between border-b border-purple-200/80 pb-2">
+                    <span className="font-bold flex items-center gap-1.5 text-xs text-purple-950 font-mono-code">
+                      <CreditCard className="w-4 h-4 text-purple-600" />
+                      Pengajuan Kasbon Pribadi & Potongan Payroll
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase font-mono-code bg-purple-100 text-purple-800 border border-purple-300">
+                      OTORISASI FINANCE
+                    </span>
+                  </div>
+
+                  {/* Nominal Input & Quick Presets */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[10px] font-bold text-slate-700 uppercase">
+                        Nominal Kasbon yang Diajukan (Rp)
+                      </label>
+                      <span className="text-xs font-mono-code font-bold text-emerald-700">
+                        Rp {kasbonAmount.toLocaleString('id-ID')}
+                      </span>
+                    </div>
+                    <input
+                      type="number"
+                      step="50000"
+                      min="100000"
+                      max="50000000"
+                      value={kasbonAmount}
+                      onChange={e => {
+                        const val = Math.max(0, Number(e.target.value));
+                        setKasbonAmount(val);
+                        setNewTitle(`Pengajuan Kasbon Pribadi: Rp ${val.toLocaleString('id-ID')}`);
+                      }}
+                      className="w-full glass-input rounded-xl px-3 py-2 text-sm text-slate-900 font-mono-code font-bold bg-white"
+                      placeholder="Masukkan nominal, misal: 1500000"
+                      required
+                    />
+                    <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                      <span className="text-[10px] text-slate-500 font-medium">Preset Cepat:</span>
+                      {[500000, 1000000, 2000000, 3000000, 5000000].map(amt => (
+                        <button
+                          key={amt}
+                          type="button"
+                          onClick={() => {
+                            setKasbonAmount(amt);
+                            setNewTitle(`Pengajuan Kasbon Pribadi: Rp ${amt.toLocaleString('id-ID')}`);
+                          }}
+                          className={`px-2 py-0.5 rounded-lg text-[10px] font-mono-code font-semibold border cursor-pointer transition-all ${
+                            kasbonAmount === amt
+                              ? 'bg-purple-600 text-white border-purple-600 shadow-2xs'
+                              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          Rp {(amt / 1000).toLocaleString('id-ID')}rb
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Skema Pemotongan Gaji */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-700 uppercase block">
+                      Metode Pemotongan Payroll
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setKasbonRepaymentType('TOTAL_BULANAN')}
+                        className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${
+                          kasbonRepaymentType === 'TOTAL_BULANAN'
+                            ? 'bg-white border-emerald-500 shadow-xs ring-2 ring-emerald-400/20'
+                            : 'bg-white/60 border-slate-200 hover:bg-white text-slate-600'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-0.5">
+                          <span className="text-xs font-bold text-slate-900">Lunas Sekaligus</span>
+                          {kasbonRepaymentType === 'TOTAL_BULANAN' && (
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                          )}
+                        </div>
+                        <p className="text-[10px] text-slate-500">
+                          100% dipotong dari gaji bulan berikutnya.
+                        </p>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setKasbonRepaymentType('CICILAN')}
+                        className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${
+                          kasbonRepaymentType === 'CICILAN'
+                            ? 'bg-white border-emerald-500 shadow-xs ring-2 ring-emerald-400/20'
+                            : 'bg-white/60 border-slate-200 hover:bg-white text-slate-600'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-0.5">
+                          <span className="text-xs font-bold text-slate-900">Cicilan Bertahap</span>
+                          {kasbonRepaymentType === 'CICILAN' && (
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                          )}
+                        </div>
+                        <p className="text-[10px] text-slate-500">
+                          Cicil 2 s/d 12 bulan pro-rata per payroll.
+                        </p>
+                      </button>
+                    </div>
+
+                    {kasbonRepaymentType === 'CICILAN' && (
+                      <div className="pt-1">
+                        <label className="text-[10px] font-bold text-slate-700 uppercase block mb-1">
+                          Pilihan Tenor Cicilan
+                        </label>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {[2, 3, 4, 6, 10, 12].map(tenor => (
+                            <button
+                              key={tenor}
+                              type="button"
+                              onClick={() => setKasbonInstallments(tenor)}
+                              className={`px-3 py-1 rounded-xl text-xs font-mono-code font-bold border cursor-pointer transition-all ${
+                                kasbonInstallments === tenor
+                                  ? 'bg-purple-600 text-white border-purple-600 shadow-2xs'
+                                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                              }`}
+                            >
+                              {tenor}x Bulan
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Real-time Payroll Deduction Simulation Box */}
+                  <div className="p-3 rounded-xl bg-white border border-purple-100 shadow-2xs text-xs space-y-1.5">
+                    <div className="flex items-center justify-between text-slate-700">
+                      <span>Skema Pelunasan:</span>
+                      <span className="font-bold text-slate-900">
+                        {kasbonRepaymentType === 'TOTAL_BULANAN' ? '1x Potongan Penuh (1 Bulan)' : `Cicilan ${kasbonInstallments}x Bulan`}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-slate-700">
+                      <span>Estimasi Potongan per Bulan:</span>
+                      <span className="font-mono-code font-bold text-emerald-700 text-sm">
+                        Rp {Math.round(kasbonAmount / (kasbonRepaymentType === 'TOTAL_BULANAN' ? 1 : kasbonInstallments)).toLocaleString('id-ID')} / bulan
+                      </span>
+                    </div>
+                    <div className="pt-1 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                      <span>Otomatisasi Sistem:</span>
+                      <span className="text-emerald-800 font-semibold">Tercatat di Slip Gaji & Payroll Calculator</span>
+                    </div>
+                  </div>
+
+                  {/* Rekening Tujuan Pencairan */}
+                  <div className="p-3 rounded-xl bg-white border border-purple-100 space-y-2">
+                    <span className="font-bold text-[11px] text-slate-900 block">
+                      Rekening Bank Tujuan Pencairan (Transfer Finance)
+                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <div>
+                        <label className="text-[9.5px] font-bold text-slate-500 uppercase block mb-0.5">Nama Bank</label>
+                        <input
+                          type="text"
+                          value={kasbonBankName}
+                          onChange={e => setKasbonBankName(e.target.value)}
+                          placeholder="BCA / Mandiri / BRI"
+                          className="w-full glass-input rounded-lg px-2.5 py-1.5 text-xs text-slate-800 bg-white"
+                          required={newRequestType === 'KASBON'}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9.5px] font-bold text-slate-500 uppercase block mb-0.5">Nomor Rekening</label>
+                        <input
+                          type="text"
+                          value={kasbonAccountNumber}
+                          onChange={e => setKasbonAccountNumber(e.target.value)}
+                          placeholder="Contoh: 1234567890"
+                          className="w-full glass-input rounded-lg px-2.5 py-1.5 text-xs text-slate-800 font-mono-code bg-white"
+                          required={newRequestType === 'KASBON'}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9.5px] font-bold text-slate-500 uppercase block mb-0.5">Atas Nama Pemilik</label>
+                        <input
+                          type="text"
+                          value={kasbonAccountHolder}
+                          onChange={e => setKasbonAccountHolder(e.target.value)}
+                          placeholder="Nama pemilik rekening"
+                          className="w-full glass-input rounded-lg px-2.5 py-1.5 text-xs text-slate-800 bg-white"
+                          required={newRequestType === 'KASBON'}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* BANNER KHUSUS KOREKSI ABSENSI MANDIRI */}
               {newRequestType === 'ATTENDANCE_CORRECTION' && (
@@ -1609,6 +2048,21 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
                     />
                   </div>
                 </>
+              ) : newRequestType === 'KASBON' ? (
+                <div className="text-xs">
+                  <label className="text-[10px] font-bold text-slate-600 uppercase">Catatan / Keterangan Keperluan Kasbon</label>
+                  <textarea
+                    value={kasbonReason}
+                    onChange={e => {
+                      setKasbonReason(e.target.value);
+                      setNewDescription(e.target.value);
+                    }}
+                    rows={2}
+                    className="w-full mt-1 px-3 py-2 rounded-xl bg-slate-50 border border-slate-300 text-xs"
+                    placeholder="Contoh: Kebutuhan operasional mendesak / biaya berobat..."
+                    required
+                  />
+                </div>
               ) : (
                 <>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
@@ -1728,6 +2182,43 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
             Tutup Jendela (Esc)
           </button>
         </div>
+
+        {/* Floating Pointer-Following Tooltip untuk Action & Tab Buttons */}
+        {pointerTooltip && (
+          <div
+            className="fixed z-[99999] pointer-events-none select-none transition-transform duration-75 ease-out"
+            style={{
+              left: `${pointerTooltip.x}px`,
+              top: `${pointerTooltip.y}px`,
+              transform: `translate(${
+                pointerTooltip.x > (typeof window !== 'undefined' ? window.innerWidth - 240 : 800)
+                  ? '-105%'
+                  : '14px'
+              }, ${
+                pointerTooltip.y > (typeof window !== 'undefined' ? window.innerHeight - 80 : 600)
+                  ? '-110%'
+                  : '16px'
+              })`
+            }}
+          >
+            <div className="px-3 py-2 rounded-xl bg-slate-900/95 backdrop-blur-md text-white shadow-2xl border border-slate-700/70 flex items-center gap-2.5 whitespace-nowrap animate-in fade-in zoom-in-95 duration-100">
+              <span
+                className="w-2.5 h-2.5 rounded-full shrink-0 shadow-xs ring-2 ring-white/20"
+                style={{ backgroundColor: pointerTooltip.color }}
+              />
+              <div className="flex flex-col text-left">
+                <span className="font-bold text-white text-[11.5px] leading-tight">
+                  {pointerTooltip.title}
+                </span>
+                {pointerTooltip.subtitle && (
+                  <span className="text-[10px] text-slate-300 font-medium leading-tight mt-0.5">
+                    {pointerTooltip.subtitle}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     </div>,
