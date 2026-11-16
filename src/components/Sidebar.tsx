@@ -405,7 +405,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     ? 'bg-gradient-to-tr from-[#FF6B00] to-[#FF8533] text-white shadow-lg shadow-orange-500/30 scale-110 motion-pulse-glow'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 hover:scale-105 active:scale-95'
                 }`}
-                title={item.title}
               >
                 <Icon className="w-5 h-5 transition-transform" />
                 

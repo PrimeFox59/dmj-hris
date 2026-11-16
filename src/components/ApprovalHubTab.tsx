@@ -25,6 +25,7 @@ import {
   Layers,
   ChevronDown,
   ChevronUp,
+  ChevronRight,
   Check,
   CheckCheck,
   Eye,
@@ -923,7 +924,13 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
       <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl border border-slate-200/80 w-fit">
         <button
           onClick={() => setActiveSubTab('list')}
-          title="Daftar Pengajuan & Otorisasi"
+          onMouseEnter={e => handlePointerEnter(e, {
+            title: 'DAFTAR PENGAJUAN & OTORISASI',
+            subtitle: 'Buka tabel daftar pengajuan cuti, izin, absensi, dan kasbon untuk direview atau disetujui.',
+            color: '#FF6B00'
+          })}
+          onMouseMove={handlePointerMove}
+          onMouseLeave={handlePointerLeave}
           className={`p-2.5 rounded-xl transition-all cursor-pointer flex items-center justify-center ${
             activeSubTab === 'list'
               ? 'bg-white text-slate-900 shadow-xs ring-1 ring-slate-200'
@@ -935,7 +942,13 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
 
         <button
           onClick={() => setActiveSubTab('gantt')}
-          title="Gantt Chart Jadwal Cuti (Plan vs Aktual) - Roster & Lokal"
+          onMouseEnter={e => handlePointerEnter(e, {
+            title: 'GANTT CHART JADWAL CUTI',
+            subtitle: 'Visualisasi timeline jadwal cuti & rotasi kerja roster vs aktual seluruh personil proyek.',
+            color: '#6366F1'
+          })}
+          onMouseMove={handlePointerMove}
+          onMouseLeave={handlePointerLeave}
           className={`p-2.5 rounded-xl transition-all cursor-pointer flex items-center justify-center ${
             activeSubTab === 'gantt'
               ? 'bg-white text-slate-900 shadow-xs ring-1 ring-slate-200'
@@ -981,7 +994,13 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
               <button
                 key={tab.id}
                 onClick={() => setFilterType(tab.id)}
-                title={tab.label}
+                onMouseEnter={e => handlePointerEnter(e, {
+                  title: tab.label.toUpperCase(),
+                  subtitle: tab.id === 'ALL' ? 'Tampilkan seluruh jenis pengajuan tanpa pembatasan kategori.' : `Filter daftar permohonan khusus kategori ${tab.label}.`,
+                  color: tab.id === 'KASBON' ? '#A855F7' : tab.id === 'SLIP_ACCESS' ? '#10B981' : '#FF6B00'
+                })}
+                onMouseMove={handlePointerMove}
+                onMouseLeave={handlePointerLeave}
                 className={`p-2 rounded-xl transition-all cursor-pointer flex items-center justify-center ${
                   isActive
                     ? 'bg-slate-900 text-white shadow-xs ring-2 ring-slate-700'
@@ -1454,8 +1473,14 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                                     submittedBy: item.employeeName
                                   });
                                 }}
+                                onMouseEnter={e => handlePointerEnter(e, {
+                                  title: 'LIHAT DOKUMEN LAMPIRAN',
+                                  subtitle: `Buka pratinjau file bukti: ${item.attachmentName || 'Lampiran Surat/Tiket/Bukti Transaksi'}`,
+                                  color: '#6366F1'
+                                })}
+                                onMouseMove={handlePointerMove}
+                                onMouseLeave={handlePointerLeave}
                                 className="inline-flex items-center gap-1 text-[10.5px] font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-2 py-0.5 rounded-md border border-indigo-200 transition-colors cursor-pointer shadow-2xs"
-                                title={`Lihat Dokumen: ${item.attachmentName || 'Lampiran Bukti'}`}
                               >
                                 <Paperclip className="w-3 h-3 text-indigo-600" />
                                 <span>{item.attachmentName ? (item.attachmentName.length > 15 ? `${item.attachmentName.slice(0, 12)}...` : item.attachmentName) : 'Lampiran'}</span>
@@ -1526,17 +1551,21 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                               <button
                                 type="button"
                                 onClick={() => handleActionClick(item, 'APPROVE')}
-                                title={
-                                  !isFinanceItem && (item.targetApproverRole === 'PM' || (!item.pmApprovedBy && item.projectManagerId))
-                                    ? "Setujui Tahap 1 (Rekomendasi PM)"
+                                onMouseEnter={e => handlePointerEnter(e, {
+                                  title: 'SETUJUI PENGAJUAN',
+                                  subtitle: !isFinanceItem && (item.targetApproverRole === 'PM' || (!item.pmApprovedBy && item.projectManagerId))
+                                    ? "Setujui Tahap 1 (Rekomendasi PM Proyek)"
                                     : isFinanceItem
                                     ? (isApplicantFinance ? "Setujui Otorisasi Akhir (HR Manager - Otorisasi Silang)" : item.type === 'SLIP_ACCESS' ? "Setujui Izin Buka Slip (Divisi Finance - Akses 10 Menit)" : "Setujui Otorisasi (Divisi Finance)")
                                     : isApplicantHr
                                     ? "Setujui Otorisasi Akhir (Finance Manager - Otorisasi Silang)"
                                     : isApplicantFinance
                                     ? "Setujui Otorisasi Akhir (HR Manager - Otorisasi Silang)"
-                                    : "Setujui Otorisasi Akhir (HR Manager)"
-                                }
+                                    : "Setujui Otorisasi Akhir (HR Manager)",
+                                  color: '#10B981'
+                                })}
+                                onMouseMove={handlePointerMove}
+                                onMouseLeave={handlePointerLeave}
                                 className="w-7 h-7 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center transition-all cursor-pointer shadow-2xs hover:shadow active:scale-90 shrink-0"
                               >
                                 <Check className="w-3.5 h-3.5 stroke-[2.5]" />
@@ -1544,7 +1573,13 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                               <button
                                 type="button"
                                 onClick={() => handleActionClick(item, 'REJECT')}
-                                title="Tolak (Reject)"
+                                onMouseEnter={e => handlePointerEnter(e, {
+                                  title: 'TOLAK PENGAJUAN',
+                                  subtitle: 'Tolak permohonan ini secara resmi dengan catatan verifikasi penolakan.',
+                                  color: '#EF4444'
+                                })}
+                                onMouseMove={handlePointerMove}
+                                onMouseLeave={handlePointerLeave}
                                 className="w-7 h-7 rounded-lg bg-rose-50 hover:bg-rose-500 text-rose-600 hover:text-white border border-rose-200 hover:border-rose-500 flex items-center justify-center transition-all cursor-pointer shadow-2xs active:scale-90 shrink-0"
                               >
                                 <X className="w-3.5 h-3.5 stroke-[2.5]" />
@@ -1552,7 +1587,13 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                               <button
                                 type="button"
                                 onClick={() => handleActionClick(item, 'REVISE')}
-                                title="Minta Revisi"
+                                onMouseEnter={e => handlePointerEnter(e, {
+                                  title: 'MINTA REVISI DOKUMEN',
+                                  subtitle: 'Kembalikan tiket pengajuan ke pemohon untuk perbaikan tanggal, alasan, atau lampiran berkas.',
+                                  color: '#F59E0B'
+                                })}
+                                onMouseMove={handlePointerMove}
+                                onMouseLeave={handlePointerLeave}
                                 className="w-7 h-7 rounded-lg bg-amber-50 hover:bg-amber-500 text-amber-600 hover:text-white border border-amber-200 hover:border-amber-500 flex items-center justify-center transition-all cursor-pointer shadow-2xs active:scale-90 shrink-0"
                               >
                                 <AlertCircle className="w-3.5 h-3.5" />
@@ -1565,8 +1606,9 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                                   ? 'text-emerald-700 bg-emerald-50/90 border border-emerald-200/80'
                                   : 'text-amber-700 bg-amber-50/90 border border-amber-200/80'
                               }`}
-                              title={
-                                !isFinanceItem && (item.targetApproverRole === 'PM' || (!item.pmApprovedBy && item.projectManagerId))
+                              onMouseEnter={e => handlePointerEnter(e, {
+                                title: 'STATUS MENUNGGU OTORISASI',
+                                subtitle: !isFinanceItem && (item.targetApproverRole === 'PM' || (!item.pmApprovedBy && item.projectManagerId))
                                   ? `Menunggu Otorisasi PM Terkait: ${item.projectManagerName || 'Project Manager'}`
                                   : item.pmApprovedBy
                                   ? (isFinanceItem
@@ -1582,8 +1624,11 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                                   ? 'Menunggu Otorisasi Finance Manager (Otorisasi Silang HR ➔ Finance)'
                                   : isApplicantFinance
                                   ? 'Menunggu Otorisasi HR Manager (Otorisasi Silang Finance ➔ HR)'
-                                  : 'Menunggu Otorisasi HR Manager'
-                              }
+                                  : 'Menunggu Otorisasi HR Manager',
+                                color: isFinanceItem && !isApplicantFinance ? '#10B981' : '#F59E0B'
+                              })}
+                              onMouseMove={handlePointerMove}
+                              onMouseLeave={handlePointerLeave}
                             >
                               <span className={`w-1.5 h-1.5 rounded-full shrink-0 animate-ping ${
                                 isFinanceItem && !isApplicantFinance ? 'bg-emerald-500' : 'bg-amber-500'
@@ -1604,7 +1649,13 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                           <button
                             type="button"
                             onClick={() => setDetailModalItem(item)}
-                            title="Lihat Detail Lengkap"
+                            onMouseEnter={e => handlePointerEnter(e, {
+                              title: 'DETAIL LENGKAP PENGAJUAN',
+                              subtitle: `Buka riwayat audit trail, catatan verifikasi, dan timeline lengkap ${item.title}`,
+                              color: '#64748B'
+                            })}
+                            onMouseMove={handlePointerMove}
+                            onMouseLeave={handlePointerLeave}
                             className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-800 text-slate-600 hover:text-white border border-slate-200 flex items-center justify-center transition-all cursor-pointer shadow-2xs active:scale-90 shrink-0"
                           >
                             <Eye className="w-3.5 h-3.5" />
@@ -3277,36 +3328,36 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
       {/* Floating Pointer-Following Tooltip untuk Action Buttons (Portal to document.body) */}
       {pointerTooltip && typeof document !== 'undefined' && createPortal(
         <div
-          className="fixed z-[99999] pointer-events-none select-none transition-transform duration-75 ease-out"
+          className="fixed z-[999999] pointer-events-none select-none transition-transform duration-75 ease-out"
           style={{
             left: `${pointerTooltip.x}px`,
             top: `${pointerTooltip.y}px`,
             transform: `translate(${
-              pointerTooltip.x > (typeof window !== 'undefined' ? window.innerWidth - 240 : 800)
+              pointerTooltip.x > (typeof window !== 'undefined' ? window.innerWidth - 300 : 800)
                 ? '-105%'
                 : '14px'
             }, ${
-              pointerTooltip.y > (typeof window !== 'undefined' ? window.innerHeight - 80 : 600)
+              pointerTooltip.y > (typeof window !== 'undefined' ? window.innerHeight - 110 : 600)
                 ? '-110%'
                 : '16px'
             })`
           }}
         >
-          <div className="px-3 py-2 rounded-xl bg-slate-900/95 backdrop-blur-md text-white shadow-2xl border border-slate-700/70 flex items-center gap-2.5 whitespace-nowrap animate-in fade-in zoom-in-95 duration-100">
-            <span
-              className="w-2.5 h-2.5 rounded-full shrink-0 shadow-xs ring-2 ring-white/20"
-              style={{ backgroundColor: pointerTooltip.color }}
-            />
-            <div className="flex flex-col text-left">
-              <span className="font-bold text-white text-[11.5px] leading-tight">
+          <div className="w-64 sm:w-72 bg-slate-900/95 backdrop-blur-md text-white rounded-2xl p-3 shadow-2xl border border-slate-700/60 pointer-events-none z-[999999] animate-in fade-in zoom-in-95 duration-100">
+            <div className="flex items-center justify-between mb-1">
+              <span
+                className="text-[11px] font-black tracking-wider uppercase font-mono-code"
+                style={{ color: pointerTooltip.color || '#FF8533' }}
+              >
                 {pointerTooltip.title}
               </span>
-              {pointerTooltip.subtitle && (
-                <span className="text-[10px] text-slate-300 font-medium leading-tight mt-0.5">
-                  {pointerTooltip.subtitle}
-                </span>
-              )}
+              <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
             </div>
+            {pointerTooltip.subtitle && (
+              <p className="text-xs text-slate-300 leading-snug">
+                {pointerTooltip.subtitle}
+              </p>
+            )}
           </div>
         </div>,
         document.body

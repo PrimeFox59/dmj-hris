@@ -353,6 +353,45 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
   const [isDivisorModalOpen, setIsDivisorModalOpen] = useState<boolean>(false);
   const [isPayrollRulesModalOpen, setIsPayrollRulesModalOpen] = useState<boolean>(false);
 
+  // =========================================================================
+  // FLOATING POINTER-FOLLOWING CALLOUT STATE
+  // =========================================================================
+  interface PointerTooltipState {
+    title: string;
+    subtitle?: string;
+    color?: string;
+    x: number;
+    y: number;
+  }
+  const [pointerTooltip, setPointerTooltip] = useState<PointerTooltipState | null>(null);
+
+  const handlePointerEnter = (
+    e: React.MouseEvent,
+    data: { title: string; subtitle?: string; color?: string }
+  ) => {
+    setPointerTooltip({
+      ...data,
+      x: e.clientX,
+      y: e.clientY
+    });
+  };
+
+  const handlePointerMove = (e: React.MouseEvent) => {
+    setPointerTooltip(prev => (prev ? { ...prev, x: e.clientX, y: e.clientY } : null));
+  };
+
+  const handlePointerLeave = () => {
+    setPointerTooltip(null);
+  };
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (pointerTooltip) setPointerTooltip(null);
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [pointerTooltip]);
+
   // Slip Access 10-Minute Window State (Finance Approval System)
   const canViewSlipFreely = isFinanceOrSuper;
   const [currentTimeMs, setCurrentTimeMs] = useState<number>(() => Date.now());
@@ -1060,12 +1099,18 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
             <button
               type="button"
               onClick={() => setShowPayrollNominal(prev => !prev)}
+              onMouseEnter={e => handlePointerEnter(e, {
+                title: showPayrollNominal ? 'Sensor Nilai (Privasi)' : 'Buka Sensor Nilai',
+                subtitle: showPayrollNominal ? 'Samarkan angka nominal gaji dan take home pay untuk menjaga privasi data' : 'Tampilkan kembali seluruh rincian angka nominal gaji karyawan',
+                color: '#3B82F6'
+              })}
+              onMouseMove={handlePointerMove}
+              onMouseLeave={handlePointerLeave}
               className={`w-9 h-9 rounded-xl border flex items-center justify-center transition-all cursor-pointer active:scale-95 shadow-2xs ${
                 showPayrollNominal
                   ? 'bg-orange-50 text-[#FF6B00] border-orange-200 hover:bg-orange-100'
                   : 'bg-white hover:bg-slate-100 text-slate-600 border-slate-200'
               }`}
-              title={showPayrollNominal ? 'Sembunyikan Nominal (Sensor Aktif)' : 'Tampilkan Nominal Gaji'}
             >
               {showPayrollNominal ? <EyeOff className="w-4 h-4 text-[#FF6B00]" /> : <Eye className="w-4 h-4 text-slate-500" />}
             </button>
@@ -1075,8 +1120,14 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
               <button
                 type="button"
                 onClick={exportCSV}
+                onMouseEnter={e => handlePointerEnter(e, {
+                  title: 'Export CSV / Excel',
+                  subtitle: 'Unduh rekapitulasi data payroll lengkap bulan ini ke format file spreadsheet CSV',
+                  color: '#10B981'
+                })}
+                onMouseMove={handlePointerMove}
+                onMouseLeave={handlePointerLeave}
                 className="w-9 h-9 rounded-xl bg-white hover:bg-slate-100 text-slate-600 hover:text-slate-900 border border-slate-200 shadow-2xs flex items-center justify-center transition-all cursor-pointer active:scale-95"
-                title="Export Data Payroll ke CSV"
               >
                 <Download className="w-4 h-4" />
               </button>
@@ -1086,8 +1137,14 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
             <button
               type="button"
               onClick={handlePrint}
+              onMouseEnter={e => handlePointerEnter(e, {
+                title: isSelfOnly ? 'Cetak Slip Gaji Pribadi' : 'Cetak Laporan Payroll',
+                subtitle: isSelfOnly ? 'Buka format cetak resmi slip gaji Anda' : 'Buka format cetak resmi / export PDF rekapitulasi penggajian seluruh karyawan',
+                color: '#6366F1'
+              })}
+              onMouseMove={handlePointerMove}
+              onMouseLeave={handlePointerLeave}
               className="w-9 h-9 rounded-xl bg-white hover:bg-slate-100 text-slate-600 hover:text-slate-900 border border-slate-200 shadow-2xs flex items-center justify-center transition-all cursor-pointer active:scale-95"
-              title={`Cetak ${isSelfOnly ? 'Slip Gaji' : 'Laporan Rekapitulasi Payroll'}`}
             >
               <Printer className="w-4 h-4" />
             </button>
@@ -1097,8 +1154,14 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
               <button
                 type="button"
                 onClick={() => setIsPayrollRulesModalOpen(true)}
+                onMouseEnter={e => handlePointerEnter(e, {
+                  title: 'Atur Komponen & Tarif',
+                  subtitle: 'Atur fleksibilitas persentase potongan (BPJS, PPh 21), standar tunjangan, dan sembunyikan nilai Rp 0',
+                  color: '#FF6B00'
+                })}
+                onMouseMove={handlePointerMove}
+                onMouseLeave={handlePointerLeave}
                 className="w-9 h-9 rounded-xl bg-white hover:bg-slate-100 text-slate-600 hover:text-slate-900 border border-slate-200 shadow-2xs flex items-center justify-center transition-all cursor-pointer active:scale-95"
-                title="Atur Fleksibilitas Persentase Potongan, Tunjangan & Visibilitas Slip Gaji"
               >
                 <SlidersHorizontal className="w-4 h-4 text-[#FF6B00]" />
               </button>
@@ -1110,12 +1173,20 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                 type="button"
                 onClick={handleSubmitToFinance}
                 disabled={!isHRManagerOrSuper}
+                onMouseEnter={e => handlePointerEnter(e, {
+                  title: 'Ajukan Data ke Finance',
+                  subtitle: isHRManagerOrSuper
+                    ? 'Audit HR selesai, kirim batch payroll ke tim Finance untuk otorisasi & pencairan (disbursement)'
+                    : 'Hanya HR Manager atau Superuser yang berwenang mengajukan batch payroll ini',
+                  color: '#FF6B00'
+                })}
+                onMouseMove={handlePointerMove}
+                onMouseLeave={handlePointerLeave}
                 className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all cursor-pointer active:scale-95 shadow-2xs ${
                   isHRManagerOrSuper
                     ? 'bg-gradient-to-r from-orange-500 to-[#FF6B00] hover:from-orange-600 hover:to-[#e56000] text-white shadow-orange-500/20'
                     : 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
                 }`}
-                title={isHRManagerOrSuper ? 'Ajukan Data ke Finance (Audit HR Selesai)' : 'Hanya HR Manager / Superuser yang berwenang mengajukan'}
               >
                 <Send className="w-4 h-4" />
               </button>
@@ -1126,8 +1197,14 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                 <button
                   type="button"
                   onClick={handleRevertToDraft}
+                  onMouseEnter={e => handlePointerEnter(e, {
+                    title: 'Koreksi HR (Kembalikan ke Draf)',
+                    subtitle: 'Tarik kembali batch payroll dari Finance untuk perbaikan atau penyesuaian data presensi/gaji',
+                    color: '#F59E0B'
+                  })}
+                  onMouseMove={handlePointerMove}
+                  onMouseLeave={handlePointerLeave}
                   className="w-9 h-9 rounded-xl bg-white hover:bg-slate-100 text-slate-600 hover:text-slate-900 border border-slate-200 shadow-2xs flex items-center justify-center transition-all cursor-pointer active:scale-95"
-                  title="Koreksi HR (Kembalikan ke Status Draf)"
                 >
                   <RotateCcw className="w-4 h-4" />
                 </button>
@@ -1135,12 +1212,20 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                   type="button"
                   onClick={handleProcessByFinance}
                   disabled={!isFinanceOrSuper}
+                  onMouseEnter={e => handlePointerEnter(e, {
+                    title: 'Otorisasi Payroll (Finance)',
+                    subtitle: isFinanceOrSuper
+                      ? 'Setujui pencairan dana gaji dan proses transfer payroll resmi ke seluruh rekening karyawan'
+                      : 'Hanya Divisi Finance atau Superuser yang memiliki wewenang mengotorisasi pencairan payroll',
+                    color: '#2563EB'
+                  })}
+                  onMouseMove={handlePointerMove}
+                  onMouseLeave={handlePointerLeave}
                   className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all cursor-pointer active:scale-95 shadow-md ${
                     isFinanceOrSuper
                       ? 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 text-white shadow-blue-500/25'
                       : 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
                   }`}
-                  title={isFinanceOrSuper ? 'Otorisasi Payroll (Finance Disbursement)' : 'Hanya Divisi Finance yang berwenang mengotorisasi'}
                 >
                   <Calculator className="w-4 h-4" />
                 </button>
@@ -1150,8 +1235,14 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
             {canManagePayroll && batchStatus === 'PROCESSED_BY_FINANCE' && (
               <div className="flex items-center gap-1.5">
                 <div
+                  onMouseEnter={e => handlePointerEnter(e, {
+                    title: 'Payroll Disbursed',
+                    subtitle: 'Seluruh gaji karyawan pada periode ini telah selesai diotorisasi resmi dan dicairkan oleh Finance',
+                    color: '#10B981'
+                  })}
+                  onMouseMove={handlePointerMove}
+                  onMouseLeave={handlePointerLeave}
                   className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center justify-center shadow-2xs"
-                  title="Payroll Disbursed (Telah Diotorisasi Resmi oleh Finance)"
                 >
                   <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                 </div>
@@ -1159,8 +1250,14 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                   <button
                     type="button"
                     onClick={handleRevertToDraft}
+                    onMouseEnter={e => handlePointerEnter(e, {
+                      title: 'Buka Ulang Audit (Superuser)',
+                      subtitle: 'Hak istimewa Superuser untuk membuka kembali batch payroll yang telah dicairkan untuk audit khusus',
+                      color: '#EF4444'
+                    })}
+                    onMouseMove={handlePointerMove}
+                    onMouseLeave={handlePointerLeave}
                     className="w-9 h-9 rounded-xl bg-white hover:bg-rose-50 text-slate-600 hover:text-rose-700 border border-slate-200 shadow-2xs flex items-center justify-center transition-all cursor-pointer active:scale-95"
-                    title="Buka Ulang Audit (Superuser)"
                   >
                     <RotateCcw className="w-4 h-4" />
                   </button>
@@ -1269,8 +1366,14 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                   <button
                     type="button"
                     onClick={() => setSelectedPayrollYear((prev) => Math.max(2020, prev - 1))}
+                    onMouseEnter={e => handlePointerEnter(e, {
+                      title: 'TAHUN SEBELUMNYA',
+                      subtitle: `Pindah ke kalender penggajian tahun ${selectedPayrollYear - 1}`,
+                      color: '#64748B'
+                    })}
+                    onMouseMove={handlePointerMove}
+                    onMouseLeave={handlePointerLeave}
                     className="w-5 h-5 rounded flex items-center justify-center hover:bg-slate-200 text-slate-600 transition cursor-pointer"
-                    title="Tahun Sebelumnya"
                   >
                     <ChevronLeft className="w-3 h-3" />
                   </button>
@@ -1288,8 +1391,14 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                   <button
                     type="button"
                     onClick={() => setSelectedPayrollYear((prev) => prev + 1)}
+                    onMouseEnter={e => handlePointerEnter(e, {
+                      title: 'TAHUN BERIKUTNYA',
+                      subtitle: `Pindah ke kalender penggajian tahun ${selectedPayrollYear + 1}`,
+                      color: '#64748B'
+                    })}
+                    onMouseMove={handlePointerMove}
+                    onMouseLeave={handlePointerLeave}
                     className="w-5 h-5 rounded flex items-center justify-center hover:bg-slate-200 text-slate-600 transition cursor-pointer"
-                    title="Tahun Berikutnya"
                   >
                     <ChevronRight className="w-3 h-3" />
                   </button>
@@ -1395,8 +1504,14 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                   <button
                     type="button"
                     onClick={handleSyncFromCalendar}
+                    onMouseEnter={e => handlePointerEnter(e, {
+                      title: 'SINKRONISASI HARI KERJA KALENDER',
+                      subtitle: `Reset dan samakan kembali jumlah hari kerja cut-off (${currentPeriodObj.effectiveWorkDays} HK) sesuai master Kalender Kerja PT DMJ.`,
+                      color: '#10B981'
+                    })}
+                    onMouseMove={handlePointerMove}
+                    onMouseLeave={handlePointerLeave}
                     className="w-8 h-8 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center justify-center transition-all cursor-pointer active:scale-95 shadow-2xs"
-                    title={`Reset Kalender (${currentPeriodObj.effectiveWorkDays} HK Resmi Sesuai Master Kalender Kerja)`}
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
                   </button>
@@ -1404,8 +1519,14 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                 <button
                   type="button"
                   onClick={() => handleSetPresetCutoff('FULL_MONTH')}
+                  onMouseEnter={e => handlePointerEnter(e, {
+                    title: 'PRESET CUT-OFF BULAN PENUH',
+                    subtitle: 'Atur rentang tanggal perhitungan presensi & gaji dari tanggal 1 s/d hari terakhir bulan kalender.',
+                    color: '#3B82F6'
+                  })}
+                  onMouseMove={handlePointerMove}
+                  onMouseLeave={handlePointerLeave}
                   className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 flex items-center justify-center transition-all cursor-pointer active:scale-95 shadow-2xs"
-                  title="Preset Cutoff: Bulan Penuh (Tanggal 1 s/d Akhir Bulan)"
                 >
                   <CalendarDays className="w-3.5 h-3.5" />
                 </button>
@@ -1414,8 +1535,14 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsDivisorModalOpen(true)}
+                  onMouseEnter={e => handlePointerEnter(e, {
+                    title: 'ATUR PEMBAGI GAJI HARIAN',
+                    subtitle: `Konfigurasi pembagi upah harian (HK) untuk personil kantor (${salaryRules.officeDailyDivisorMode === 'OFFICE_WORKING_DAYS' ? `${customWorkingDays || salaryRules.standardWorkDaysPerMonth || 22} HK` : salaryRules.officeDailyDivisorMode === 'PROJECT_25' ? '25 HK' : salaryRules.officeDailyDivisorMode === 'CALENDAR_30' ? '30 HK' : `${salaryRules.officeDailyDivisorDays || 22} HK`}) dan personil lapangan (${salaryRules.projectDailyDivisorMode === 'PROJECT_25' ? '25 HK' : salaryRules.projectDailyDivisorMode === 'OFFICE_WORKING_DAYS' ? `${customWorkingDays} HK` : '30 HK'}).`,
+                    color: '#FF6B00'
+                  })}
+                  onMouseMove={handlePointerMove}
+                  onMouseLeave={handlePointerLeave}
                   className="w-8 h-8 rounded-xl bg-gradient-to-r from-orange-500 to-[#FF6B00] hover:from-orange-600 text-white flex items-center justify-center shadow-xs transition-all cursor-pointer active:scale-95"
-                  title={`Atur Pembagi Gaji Harian (Divisor by Day) • Office: ${salaryRules.officeDailyDivisorMode === 'OFFICE_WORKING_DAYS' ? `${customWorkingDays || salaryRules.standardWorkDaysPerMonth || 22}HK` : salaryRules.officeDailyDivisorMode === 'PROJECT_25' ? '25HK' : salaryRules.officeDailyDivisorMode === 'CALENDAR_30' ? '30HK' : `${salaryRules.officeDailyDivisorDays || 22}HK`} • Proyek: ${salaryRules.projectDailyDivisorMode === 'PROJECT_25' ? '25H' : salaryRules.projectDailyDivisorMode === 'OFFICE_WORKING_DAYS' ? `${customWorkingDays}H` : '30H'}`}
                 >
                   <SlidersHorizontal className="w-3.5 h-3.5" />
                 </button>
@@ -1739,8 +1866,14 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                               <button
                                 type="button"
                                 onClick={() => setViewingTimesheetEmp(emp)}
+                                onMouseEnter={e => handlePointerEnter(e, {
+                                  title: 'Kalender Presensi & Foto',
+                                  subtitle: `Lihat riwayat kehadiran harian, jam masuk/pulang, dan foto biometrik ${emp.name}`,
+                                  color: '#10B981'
+                                })}
+                                onMouseMove={handlePointerMove}
+                                onMouseLeave={handlePointerLeave}
                                 className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white transition-all cursor-pointer shadow-2xs active:scale-95 flex items-center justify-center"
-                                title="Buka Kalender Presensi & Verifikasi Foto Biometrik (Excel Timesheet)"
                               >
                                 <Calendar className="w-3.5 h-3.5" />
                               </button>
@@ -1751,8 +1884,14 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                               <button
                                 type="button"
                                 onClick={() => handleOpenAuditModal(emp, item)}
+                                onMouseEnter={e => handlePointerEnter(e, {
+                                  title: 'Audit Presensi & Cuti',
+                                  subtitle: `Penyesuaian manual hari hadir, dispensasi sakit, atau jam lembur ${emp.name}`,
+                                  color: '#F59E0B'
+                                })}
+                                onMouseMove={handlePointerMove}
+                                onMouseLeave={handlePointerLeave}
                                 className="p-1.5 rounded-lg bg-slate-100 hover:bg-amber-100 text-slate-600 hover:text-amber-800 transition-all cursor-pointer shadow-2xs active:scale-95 flex items-center justify-center"
-                                title="Audit Presensi & Cuti (HR Manager)"
                               >
                                 <UserCheck className="w-3.5 h-3.5" />
                               </button>
@@ -1763,8 +1902,14 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                               <button
                                 type="button"
                                 onClick={() => handleOpenSalaryModal(emp)}
+                                onMouseEnter={e => handlePointerEnter(e, {
+                                  title: 'Atur Struktur Gaji',
+                                  subtitle: `Ubah gaji pokok, tunjangan tetap, harian, proyek, dan rekening bank ${emp.name}`,
+                                  color: '#3B82F6'
+                                })}
+                                onMouseMove={handlePointerMove}
+                                onMouseLeave={handlePointerLeave}
                                 className="p-1.5 rounded-lg bg-slate-100 hover:bg-blue-100 text-slate-600 hover:text-blue-800 transition-all cursor-pointer shadow-2xs active:scale-95 flex items-center justify-center"
-                                title="Atur Gaji Karyawan"
                               >
                                 <Edit3 className="w-3.5 h-3.5" />
                               </button>
@@ -1779,8 +1924,14 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                                   <button
                                     type="button"
                                     onClick={() => setSelectedSlip(item)}
+                                    onMouseEnter={e => handlePointerEnter(e, {
+                                      title: 'Buka Slip Gaji Resmi',
+                                      subtitle: `Buka dokumen slip gaji resmi ${item.employeeName} (${item.period})`,
+                                      color: '#FF6B00'
+                                    })}
+                                    onMouseMove={handlePointerMove}
+                                    onMouseLeave={handlePointerLeave}
                                     className="p-1.5 rounded-lg bg-[#FF6B00] hover:bg-[#e56000] text-white transition-all cursor-pointer shadow-2xs active:scale-95 flex items-center justify-center shrink-0"
-                                    title="Buka / Cetak Slip Gaji Resmi (Akses Finance/Superuser)"
                                   >
                                     <Eye className="w-3.5 h-3.5" />
                                   </button>
@@ -1792,8 +1943,14 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                                   <button
                                     type="button"
                                     onClick={() => setSelectedSlip(item)}
+                                    onMouseEnter={e => handlePointerEnter(e, {
+                                      title: 'Akses Slip Terbuka',
+                                      subtitle: `Sisa waktu akses ${formatCountdown(slipAccess.remainingSeconds)} (Diotorisasi Finance)`,
+                                      color: '#10B981'
+                                    })}
+                                    onMouseMove={handlePointerMove}
+                                    onMouseLeave={handlePointerLeave}
                                     className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 animate-pulse shrink-0"
-                                    title={`Akses Terbuka: ${formatCountdown(slipAccess.remainingSeconds)} Tersisa (Diotorisasi Finance)`}
                                   >
                                     <Unlock className="w-3.5 h-3.5 text-white" />
                                     <span className="font-mono-code font-bold text-[11px]">{formatCountdown(slipAccess.remainingSeconds)}</span>
@@ -1806,8 +1963,14 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                                   <button
                                     type="button"
                                     onClick={() => alert(`Permohonan buka slip gaji periode ${item.period} sedang menunggu persetujuan Divisi Finance.`)}
+                                    onMouseEnter={e => handlePointerEnter(e, {
+                                      title: 'Menunggu Persetujuan Finance',
+                                      subtitle: 'Permohonan buka slip gaji 10 menit masih dalam antrean review Finance',
+                                      color: '#F59E0B'
+                                    })}
+                                    onMouseMove={handlePointerMove}
+                                    onMouseLeave={handlePointerLeave}
                                     className="px-2.5 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 font-bold text-[10.5px] flex items-center gap-1 transition-all cursor-pointer shrink-0"
-                                    title="Menunggu Persetujuan Divisi Finance"
                                   >
                                     <Clock className="w-3 h-3 text-amber-700 animate-spin" />
                                     <span>Menunggu Finance</span>
@@ -1820,8 +1983,14 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                                   <button
                                     type="button"
                                     onClick={() => handleOpenSlipRequestModal(item)}
+                                    onMouseEnter={e => handlePointerEnter(e, {
+                                      title: 'Izin Ditolak Finance',
+                                      subtitle: 'Permohonan sebelumnya ditolak. Klik untuk mengajukan kembali ke Finance',
+                                      color: '#EF4444'
+                                    })}
+                                    onMouseMove={handlePointerMove}
+                                    onMouseLeave={handlePointerLeave}
                                     className="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 font-bold text-[10.5px] flex items-center gap-1 transition-all cursor-pointer shrink-0"
-                                    title="Izin Ditolak Finance. Klik untuk ajukan kembali."
                                   >
                                     <Lock className="w-3.5 h-3.5 text-rose-600" />
                                     <span>Ditolak (Ajukan Lagi)</span>
@@ -1833,8 +2002,14 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => handleOpenSlipRequestModal(item)}
+                                  onMouseEnter={e => handlePointerEnter(e, {
+                                    title: 'Minta Izin Buka Slip',
+                                    subtitle: 'Kirim permohonan ke Finance untuk membuka akses slip gaji selama 10 menit',
+                                    color: '#FF6B00'
+                                  })}
+                                  onMouseMove={handlePointerMove}
+                                  onMouseLeave={handlePointerLeave}
                                   className="px-2.5 py-1 rounded-lg bg-gradient-to-r from-orange-500 to-[#FF6B00] hover:from-orange-600 hover:to-[#e56000] text-white font-bold text-[10.5px] shadow-2xs flex items-center gap-1 transition-all cursor-pointer active:scale-95 shrink-0"
-                                  title="Minta Izin Buka Slip Gaji (Approval Finance, Akses 10 Menit)"
                                 >
                                   <Lock className="w-3.5 h-3.5" />
                                   <span>{slipAccess.status === 'EXPIRED' ? 'Buka Lagi (Expired)' : 'Minta Izin Buka Slip'}</span>
@@ -2906,8 +3081,14 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                         <button
                           type="button"
                           onClick={() => setIsPayrollRulesModalOpen(true)}
+                          onMouseEnter={e => handlePointerEnter(e, {
+                            title: 'PENGATURAN TARIF & VISIBILITAS',
+                            subtitle: 'Atur fleksibilitas persentase potongan BPJS/PPh 21, standar tunjangan, dan sembunyikan nominal Rp 0 pada slip gaji resmi.',
+                            color: '#FF6B00'
+                          })}
+                          onMouseMove={handlePointerMove}
+                          onMouseLeave={handlePointerLeave}
                           className="px-2.5 py-1 rounded-lg border border-orange-200 bg-orange-50 hover:bg-orange-100 text-[#FF6B00] text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
-                          title="Atur Visibilitas Komponen Slip, Persentase Potongan & Tunjangan"
                         >
                           <SlidersHorizontal className="w-3.5 h-3.5 text-[#FF6B00]" />
                           <span className="hidden sm:inline">Atur Komponen & Tarif</span>
@@ -2915,27 +3096,48 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                       )}
 
                       <button
+                        type="button"
                         onClick={() => setShowPayrollNominal(prev => !prev)}
+                        onMouseEnter={e => handlePointerEnter(e, {
+                          title: showPayrollNominal ? 'SENSOR NOMINAL SLIP' : 'BUKA SENSOR NOMINAL',
+                          subtitle: showPayrollNominal ? 'Samarkan seluruh angka rupiah pada slip gaji resmi demi privasi saat ditampilkan di layar umum.' : 'Tampilkan seluruh rincian nominal penerimaan dan potongan gaji karyawan secara transparan.',
+                          color: '#3B82F6'
+                        })}
+                        onMouseMove={handlePointerMove}
+                        onMouseLeave={handlePointerLeave}
                         className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
-                        title="Buka / Tutup sensor nominal gaji"
                       >
                         {showPayrollNominal ? <EyeOff className="w-3.5 h-3.5 text-slate-400" /> : <Eye className="w-3.5 h-3.5 text-[#FF6B00]" />}
                         <span>{showPayrollNominal ? 'Sensor Nilai' : 'Buka Nilai'}</span>
                       </button>
 
                       <button
+                        type="button"
                         onClick={handlePrint}
+                        onMouseEnter={e => handlePointerEnter(e, {
+                          title: 'CETAK DOKUMEN SLIP GAJI',
+                          subtitle: 'Cetak atau simpan dokumen slip gaji resmi PT DMJ ber-barcode QR verifikasi ke format PDF / fisik printer.',
+                          color: '#10B981'
+                        })}
+                        onMouseMove={handlePointerMove}
+                        onMouseLeave={handlePointerLeave}
                         className="px-3 py-1 rounded-lg bg-[#FF6B00] hover:bg-[#e56000] text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
-                        title="Cetak Dokumen Slip Gaji"
                       >
                         <Printer className="w-3.5 h-3.5" />
                         <span className="hidden sm:inline">Cetak</span>
                       </button>
 
                       <button
+                        type="button"
                         onClick={() => setSelectedSlip(null)}
+                        onMouseEnter={e => handlePointerEnter(e, {
+                          title: 'TUTUP SLIP GAJI',
+                          subtitle: 'Tutup tampilan slip gaji resmi dan kembali ke tabel rekapitulasi penggajian.',
+                          color: '#EF4444'
+                        })}
+                        onMouseMove={handlePointerMove}
+                        onMouseLeave={handlePointerLeave}
                         className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 flex items-center justify-center transition-all cursor-pointer ml-1"
-                        title="Tutup Modal"
                       >
                         <X className="w-4 h-4" />
                       </button>
@@ -3843,6 +4045,44 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
           }
         }}
       />
+
+      {/* Floating Pointer-Following Callout Tooltip (Portal to document.body) */}
+      {pointerTooltip && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed z-[999999] pointer-events-none select-none transition-transform duration-75 ease-out"
+          style={{
+            left: `${pointerTooltip.x}px`,
+            top: `${pointerTooltip.y}px`,
+            transform: `translate(${
+              pointerTooltip.x > (typeof window !== 'undefined' ? window.innerWidth - 300 : 800)
+                ? '-105%'
+                : '14px'
+            }, ${
+              pointerTooltip.y > (typeof window !== 'undefined' ? window.innerHeight - 110 : 600)
+                ? '-110%'
+                : '16px'
+            })`
+          }}
+        >
+          <div className="w-64 sm:w-72 bg-slate-900/95 backdrop-blur-md text-white rounded-2xl p-3 shadow-2xl border border-slate-700/60 pointer-events-none z-[999999] animate-in fade-in zoom-in-95 duration-100">
+            <div className="flex items-center justify-between mb-1">
+              <span
+                className="text-[11px] font-black tracking-wider uppercase font-mono-code"
+                style={{ color: pointerTooltip.color || '#FF8533' }}
+              >
+                {pointerTooltip.title}
+              </span>
+              <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            </div>
+            {pointerTooltip.subtitle && (
+              <p className="text-xs text-slate-300 leading-snug">
+                {pointerTooltip.subtitle}
+              </p>
+            )}
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };
