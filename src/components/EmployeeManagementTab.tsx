@@ -45,6 +45,7 @@ import { formatSalaryDisplay } from '../utils/payrollCalculator';
 import { normalizeMaritalStatus, resolvePtkpStatus, getPtkpDetails, PTKP_OPTIONS, formatPtkpBadge } from '../utils/taxHelper';
 import { api } from '../services/api';
 import { BiometricEnrollmentModal } from './BiometricEnrollmentModal';
+import { ExcelHeaderCell, useExcelTable, ActiveFiltersBar, ExcelColumnDefinition } from './ExcelColumnFilter';
 
 interface EmployeeManagementTabProps {
   currentUser?: Employee;
@@ -668,8 +669,75 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
     };
   }, [dropdownAnchor]);
 
-  const visibleEmployees = filteredEmployees.slice(0, displayLimit);
-  const hasMore = displayLimit < filteredEmployees.length;
+  // =========================================================================
+  // EXCEL COLUMN SORTING & FILTERING
+  // =========================================================================
+  const excelColumns = useMemo<Record<string, ExcelColumnDefinition<Employee>>>(() => ({
+    name: {
+      key: 'name',
+      title: 'Karyawan',
+      dataType: 'text',
+      extractor: (e) => e.name,
+      filterValueExtractor: (e) => [e.name, e.department, e.position].filter(Boolean)
+    },
+    loginId: {
+      key: 'loginId',
+      title: 'ID Login Akun',
+      dataType: 'text',
+      extractor: (e) => e.loginId || '-'
+    },
+    ptkp: {
+      key: 'ptkp',
+      title: 'PTKP (PPh 21)',
+      dataType: 'text',
+      extractor: (e) => e.ptkpStatus || 'TK/0'
+    },
+    location: {
+      key: 'location',
+      title: 'Status Lokal / Non-Lokal',
+      dataType: 'text',
+      extractor: (e) => (e.workLocationType || 'LOKAL') === 'NON_LOKAL' ? 'Non-Lokal (Roster)' : 'Lokal'
+    },
+    role: {
+      key: 'role',
+      title: 'Role & Hak Akses',
+      dataType: 'text',
+      extractor: (e) => getEffectiveSystemRole(e),
+      filterValueExtractor: (e) => [getEffectiveSystemRole(e).toUpperCase()]
+    },
+    status: {
+      key: 'status',
+      title: 'Status',
+      dataType: 'text',
+      extractor: (e) => e.status || 'ACTIVE',
+      filterValueExtractor: (e) => [e.status === 'INACTIVE' ? 'Non-Aktif' : 'Aktif']
+    },
+    leaveQuota: {
+      key: 'leaveQuota',
+      title: 'Saldo Cuti',
+      dataType: 'number',
+      extractor: (e) => e.leaveQuota - e.usedLeave
+    }
+  }), []);
+
+  const {
+    processedData: excelProcessedEmployees,
+    sortConfig: employeeSortConfig,
+    setSort: setEmployeeSort,
+    activeFilters: employeeActiveFilters,
+    setColumnFilter: setEmployeeColumnFilter,
+    clearColumnFilter: clearEmployeeColumnFilter,
+    clearAllFilters: clearAllEmployeeFilters,
+    getUniqueValues: getEmployeeUniqueValues,
+    isColumnFiltered: isEmployeeColumnFiltered,
+    totalActiveFiltersCount: totalEmployeeActiveFiltersCount
+  } = useExcelTable({
+    data: filteredEmployees,
+    columns: excelColumns
+  });
+
+  const visibleEmployees = excelProcessedEmployees.slice(0, displayLimit);
+  const hasMore = displayLimit < excelProcessedEmployees.length;
 
   // Auto load-more on scroll down using IntersectionObserver
   useEffect(() => {
@@ -677,7 +745,7 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) {
-          setDisplayLimit(prev => Math.min(prev + PAGE_SIZE, filteredEmployees.length));
+          setDisplayLimit(prev => Math.min(prev + PAGE_SIZE, excelProcessedEmployees.length));
         }
       },
       { rootMargin: '300px', threshold: 0.1 }
@@ -870,17 +938,110 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
 
       {/* Employees Grid Table */}
       <div id="tour-employee-table" className="glass-card rounded-3xl p-5 sm:p-6 overflow-hidden">
+        {/* Active Excel Filters Bar */}
+        <ActiveFiltersBar
+          totalActiveFiltersCount={totalEmployeeActiveFiltersCount}
+          sortConfig={employeeSortConfig}
+          onClearAll={clearAllEmployeeFilters}
+          className="mb-4"
+        />
+
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-slate-200/80 text-slate-500 uppercase tracking-wider text-[10px] font-mono-code">
-                <th className="py-2.5 px-3">Karyawan</th>
-                <th className="py-2.5 px-3">ID Login Akun</th>
-                <th className="py-2.5 px-3">PTKP (PPh 21)</th>
-                <th className="py-2.5 px-3">Status Lokal / Non-Lokal</th>
-                <th className="py-2.5 px-3">Role & Hak Akses</th>
-                <th className="py-2.5 px-3">Status</th>
-                <th className="py-2.5 px-3">Saldo Cuti</th>
+                <ExcelHeaderCell
+                  title="Karyawan"
+                  columnKey="name"
+                  dataType="text"
+                  sortConfig={employeeSortConfig}
+                  onSort={setEmployeeSort}
+                  isFiltered={isEmployeeColumnFiltered('name')}
+                  uniqueValues={getEmployeeUniqueValues('name')}
+                  activeFilterValues={employeeActiveFilters['name']}
+                  onApplyFilter={vals => setEmployeeColumnFilter('name', vals)}
+                  onClearFilter={() => clearEmployeeColumnFilter('name')}
+                  className="py-2.5 px-3 min-w-[200px]"
+                />
+                <ExcelHeaderCell
+                  title="ID Login Akun"
+                  columnKey="loginId"
+                  dataType="text"
+                  sortConfig={employeeSortConfig}
+                  onSort={setEmployeeSort}
+                  isFiltered={isEmployeeColumnFiltered('loginId')}
+                  uniqueValues={getEmployeeUniqueValues('loginId')}
+                  activeFilterValues={employeeActiveFilters['loginId']}
+                  onApplyFilter={vals => setEmployeeColumnFilter('loginId', vals)}
+                  onClearFilter={() => clearEmployeeColumnFilter('loginId')}
+                  className="py-2.5 px-3 min-w-[130px]"
+                />
+                <ExcelHeaderCell
+                  title="PTKP (PPh 21)"
+                  columnKey="ptkp"
+                  dataType="text"
+                  sortConfig={employeeSortConfig}
+                  onSort={setEmployeeSort}
+                  isFiltered={isEmployeeColumnFiltered('ptkp')}
+                  uniqueValues={getEmployeeUniqueValues('ptkp')}
+                  activeFilterValues={employeeActiveFilters['ptkp']}
+                  onApplyFilter={vals => setEmployeeColumnFilter('ptkp', vals)}
+                  onClearFilter={() => clearEmployeeColumnFilter('ptkp')}
+                  className="py-2.5 px-3 min-w-[130px]"
+                />
+                <ExcelHeaderCell
+                  title="Status Lokal / Non-Lokal"
+                  columnKey="location"
+                  dataType="text"
+                  sortConfig={employeeSortConfig}
+                  onSort={setEmployeeSort}
+                  isFiltered={isEmployeeColumnFiltered('location')}
+                  uniqueValues={getEmployeeUniqueValues('location')}
+                  activeFilterValues={employeeActiveFilters['location']}
+                  onApplyFilter={vals => setEmployeeColumnFilter('location', vals)}
+                  onClearFilter={() => clearEmployeeColumnFilter('location')}
+                  className="py-2.5 px-3 min-w-[170px]"
+                />
+                <ExcelHeaderCell
+                  title="Role & Hak Akses"
+                  columnKey="role"
+                  dataType="text"
+                  sortConfig={employeeSortConfig}
+                  onSort={setEmployeeSort}
+                  isFiltered={isEmployeeColumnFiltered('role')}
+                  uniqueValues={getEmployeeUniqueValues('role')}
+                  activeFilterValues={employeeActiveFilters['role']}
+                  onApplyFilter={vals => setEmployeeColumnFilter('role', vals)}
+                  onClearFilter={() => clearEmployeeColumnFilter('role')}
+                  className="py-2.5 px-3 min-w-[140px]"
+                />
+                <ExcelHeaderCell
+                  title="Status"
+                  columnKey="status"
+                  dataType="text"
+                  sortConfig={employeeSortConfig}
+                  onSort={setEmployeeSort}
+                  isFiltered={isEmployeeColumnFiltered('status')}
+                  uniqueValues={getEmployeeUniqueValues('status')}
+                  activeFilterValues={employeeActiveFilters['status']}
+                  onApplyFilter={vals => setEmployeeColumnFilter('status', vals)}
+                  onClearFilter={() => clearEmployeeColumnFilter('status')}
+                  className="py-2.5 px-3 min-w-[100px]"
+                />
+                <ExcelHeaderCell
+                  title="Saldo Cuti"
+                  columnKey="leaveQuota"
+                  dataType="number"
+                  align="center"
+                  sortConfig={employeeSortConfig}
+                  onSort={setEmployeeSort}
+                  isFiltered={isEmployeeColumnFiltered('leaveQuota')}
+                  uniqueValues={getEmployeeUniqueValues('leaveQuota')}
+                  activeFilterValues={employeeActiveFilters['leaveQuota']}
+                  onApplyFilter={vals => setEmployeeColumnFilter('leaveQuota', vals)}
+                  onClearFilter={() => clearEmployeeColumnFilter('leaveQuota')}
+                  className="py-2.5 px-3 text-center min-w-[110px]"
+                />
                 {!isStaff && <th className="py-2.5 px-3 text-right">Aksi</th>}
               </tr>
             </thead>
@@ -1138,24 +1299,24 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
         {/* Load More & Infinite Scroll Controller */}
         <div className="pt-4 mt-2 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
           <div className="font-mono-code text-[11px] text-slate-500">
-            Menampilkan <span className="font-bold text-slate-900">{visibleEmployees.length}</span> dari <span className="font-bold text-slate-900">{filteredEmployees.length}</span> Karyawan
+            Menampilkan <span className="font-bold text-slate-900">{visibleEmployees.length}</span> dari <span className="font-bold text-slate-900">{excelProcessedEmployees.length}</span> Karyawan
           </div>
 
           {hasMore ? (
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setDisplayLimit(prev => Math.min(prev + PAGE_SIZE, filteredEmployees.length))}
+                onClick={() => setDisplayLimit(prev => Math.min(prev + PAGE_SIZE, excelProcessedEmployees.length))}
                 className="px-4 py-2 rounded-xl bg-orange-50 hover:bg-[#FF6B00] text-[#FF6B00] hover:text-white border border-orange-200 hover:border-[#FF6B00] font-bold text-xs flex items-center gap-2 transition-all cursor-pointer active:scale-95 shadow-2xs"
               >
                 <ArrowDown className="w-3.5 h-3.5 animate-bounce" />
-                <span>Muat 15 Karyawan Lagi ({filteredEmployees.length - displayLimit} Tersisa)</span>
+                <span>Muat 15 Karyawan Lagi ({excelProcessedEmployees.length - displayLimit} Tersisa)</span>
               </button>
             </div>
           ) : (
             <div className="text-[11px] text-emerald-600 font-mono-code font-bold flex items-center gap-1.5 bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-200/80">
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Seluruh {filteredEmployees.length} karyawan telah dimuat</span>
+              <span>Seluruh {excelProcessedEmployees.length} karyawan telah dimuat</span>
             </div>
           )}
         </div>

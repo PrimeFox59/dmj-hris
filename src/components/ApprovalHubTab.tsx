@@ -51,6 +51,7 @@ import {
 import { LeaveGanttChartTab } from './LeaveGanttChartTab';
 import { DocumentAttachmentUpload, DocumentAttachmentData } from './DocumentAttachmentUpload';
 import { DocumentViewerModal } from './DocumentViewerModal';
+import { ExcelHeaderCell, useExcelTable, ActiveFiltersBar, ExcelColumnDefinition } from './ExcelColumnFilter';
 
 interface ApprovalHubTabProps {
   approvals: ApprovalItem[];
@@ -696,20 +697,88 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
     return matchType && matchStatus && matchSearch && matchDate;
   });
 
+  // =========================================================================
+  // EXCEL COLUMN SORTING & FILTERING
+  // =========================================================================
+  const excelColumns = React.useMemo<Record<string, ExcelColumnDefinition<ApprovalItem>>>(() => ({
+    applicant: {
+      key: 'applicant',
+      title: 'Pemohon & Proyek',
+      dataType: 'text',
+      extractor: (item) => item.employeeName,
+      filterValueExtractor: (item) => [item.employeeName, item.projectName || '-', item.department || '-'].filter(Boolean)
+    },
+    type: {
+      key: 'type',
+      title: 'Tipe & Rute',
+      dataType: 'text',
+      extractor: (item) => item.type,
+      filterValueExtractor: (item) => {
+        const typeLabel = item.type === 'LEAVE' ? 'Cuti Tahunan' :
+          item.type === 'PERMIT' ? 'Izin Sakit / Pribadi' :
+          item.type === 'ATTENDANCE_CORRECTION' ? 'Koreksi Absensi' :
+          item.type === 'KASBON' ? 'Kasbon Pribadi' :
+          item.type === 'SLIP_ACCESS' ? 'Buka Slip' : item.type;
+        return [typeLabel, item.targetApproverRole || '-'];
+      }
+    },
+    detail: {
+      key: 'detail',
+      title: 'Detail Pengajuan',
+      dataType: 'text',
+      extractor: (item) => item.title,
+      filterValueExtractor: (item) => [item.title, item.description || ''].filter(Boolean)
+    },
+    date: {
+      key: 'date',
+      title: 'Tanggal',
+      dataType: 'date',
+      extractor: (item) => item.startDate || item.submittedAt || '',
+      filterValueExtractor: (item) => [item.startDate ? item.startDate.slice(0, 10) : (item.submittedAt ? item.submittedAt.slice(0, 10) : '')]
+    },
+    status: {
+      key: 'status',
+      title: 'Status',
+      dataType: 'text',
+      extractor: (item) => item.status,
+      filterValueExtractor: (item) => [
+        item.status === 'PENDING' ? 'Menunggu Persetujuan' :
+        item.status === 'APPROVED' ? 'Disetujui' :
+        item.status === 'REJECTED' ? 'Ditolak' : 'Revisi'
+      ]
+    }
+  }), []);
+
+  const {
+    processedData: excelProcessedApprovals,
+    sortConfig: approvalSortConfig,
+    setSort: setApprovalSort,
+    activeFilters: approvalActiveFilters,
+    setColumnFilter: setApprovalColumnFilter,
+    clearColumnFilter: clearApprovalColumnFilter,
+    clearAllFilters: clearAllApprovalFilters,
+    getUniqueValues: getApprovalUniqueValues,
+    isColumnFiltered: isApprovalColumnFiltered,
+    totalActiveFiltersCount: totalApprovalActiveFiltersCount
+  } = useExcelTable({
+    data: filteredApprovals,
+    columns: excelColumns
+  });
+
   const [approvalDisplayLimit, setApprovalDisplayLimit] = useState(10);
   const visibleApprovals = React.useMemo(() => {
-    return filteredApprovals.slice(0, approvalDisplayLimit);
-  }, [filteredApprovals, approvalDisplayLimit]);
-  const hasMoreApprovals = approvalDisplayLimit < filteredApprovals.length;
+    return excelProcessedApprovals.slice(0, approvalDisplayLimit);
+  }, [excelProcessedApprovals, approvalDisplayLimit]);
+  const hasMoreApprovals = approvalDisplayLimit < excelProcessedApprovals.length;
 
   useEffect(() => {
     setApprovalDisplayLimit(10);
-  }, [filterType, filterStatus, searchTerm, approvalStartDate, approvalEndDate]);
+  }, [filterType, filterStatus, searchTerm, approvalStartDate, approvalEndDate, approvalActiveFilters, approvalSortConfig]);
 
   // Filtered pending items that the current user has permission to approve
   const approvableFilteredPending = React.useMemo(() => {
-    return filteredApprovals.filter(item => item.status === 'PENDING' && canUserApproveItem(item));
-  }, [filteredApprovals, canUserApproveItem]);
+    return excelProcessedApprovals.filter(item => item.status === 'PENDING' && canUserApproveItem(item));
+  }, [excelProcessedApprovals, canUserApproveItem]);
 
   // Visible pending items that the current user has permission to approve
   const approvableVisiblePending = React.useMemo(() => {
@@ -1167,12 +1236,20 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
           </div>
         </div>
 
+        {/* Active Excel Filters Bar */}
+        <ActiveFiltersBar
+          totalActiveFiltersCount={totalApprovalActiveFiltersCount}
+          sortConfig={approvalSortConfig}
+          onClearAll={clearAllApprovalFilters}
+          className="mb-3"
+        />
+
         {/* Interactive Data Table */}
-        {filteredApprovals.length === 0 ? (
+        {excelProcessedApprovals.length === 0 ? (
           <div className="glass-card rounded-3xl p-12 text-center space-y-2">
             <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto" />
             <h3 className="text-base font-bold text-slate-800">Tidak Ada Pengajuan Menunggu</h3>
-            <p className="text-xs text-slate-500">Semua pengajuan cuti, izin, dan keterlambatan telah diproses.</p>
+            <p className="text-xs text-slate-500">Semua pengajuan cuti, izin, dan keterlambatan telah diproses atau tidak cocok dengan filter aktif.</p>
           </div>
         ) : (
           <div className="overflow-x-auto rounded-2xl border border-slate-200/90 bg-white/95 shadow-sm motion-fade-in-up">
@@ -1192,11 +1269,74 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                       title={approvableVisiblePending.length === 0 ? "Tidak ada pengajuan yang dapat dipilih pada halaman ini" : "Pilih Semua yang Menunggu Otorisasi"}
                     />
                   </th>
-                  <th className="py-3 px-3 min-w-[190px] max-w-[220px] whitespace-nowrap">Pemohon & Proyek</th>
-                  <th className="py-3 px-3 text-center w-24 whitespace-nowrap">Tipe & Rute</th>
-                  <th className="py-3 px-3 min-w-[200px] max-w-[240px] whitespace-nowrap">Detail Pengajuan</th>
-                  <th className="py-3 px-3 text-center w-28 whitespace-nowrap">Tanggal</th>
-                  <th className="py-3 px-3 text-center w-24 whitespace-nowrap">Status</th>
+                  <ExcelHeaderCell
+                    title="Pemohon & Proyek"
+                    columnKey="applicant"
+                    dataType="text"
+                    sortConfig={approvalSortConfig}
+                    onSort={setApprovalSort}
+                    isFiltered={isApprovalColumnFiltered('applicant')}
+                    uniqueValues={getApprovalUniqueValues('applicant')}
+                    activeFilterValues={approvalActiveFilters['applicant']}
+                    onApplyFilter={vals => setApprovalColumnFilter('applicant', vals)}
+                    onClearFilter={() => clearApprovalColumnFilter('applicant')}
+                    className="py-3 px-3 min-w-[190px] max-w-[220px] whitespace-nowrap"
+                  />
+                  <ExcelHeaderCell
+                    title="Tipe & Rute"
+                    columnKey="type"
+                    dataType="text"
+                    align="center"
+                    sortConfig={approvalSortConfig}
+                    onSort={setApprovalSort}
+                    isFiltered={isApprovalColumnFiltered('type')}
+                    uniqueValues={getApprovalUniqueValues('type')}
+                    activeFilterValues={approvalActiveFilters['type']}
+                    onApplyFilter={vals => setApprovalColumnFilter('type', vals)}
+                    onClearFilter={() => clearApprovalColumnFilter('type')}
+                    className="py-3 px-3 text-center w-28 whitespace-nowrap"
+                  />
+                  <ExcelHeaderCell
+                    title="Detail Pengajuan"
+                    columnKey="detail"
+                    dataType="text"
+                    sortConfig={approvalSortConfig}
+                    onSort={setApprovalSort}
+                    isFiltered={isApprovalColumnFiltered('detail')}
+                    uniqueValues={getApprovalUniqueValues('detail')}
+                    activeFilterValues={approvalActiveFilters['detail']}
+                    onApplyFilter={vals => setApprovalColumnFilter('detail', vals)}
+                    onClearFilter={() => clearApprovalColumnFilter('detail')}
+                    className="py-3 px-3 min-w-[200px] max-w-[240px] whitespace-nowrap"
+                  />
+                  <ExcelHeaderCell
+                    title="Tanggal"
+                    columnKey="date"
+                    dataType="date"
+                    align="center"
+                    sortConfig={approvalSortConfig}
+                    onSort={setApprovalSort}
+                    isFiltered={isApprovalColumnFiltered('date')}
+                    uniqueValues={getApprovalUniqueValues('date')}
+                    activeFilterValues={approvalActiveFilters['date']}
+                    onApplyFilter={vals => setApprovalColumnFilter('date', vals)}
+                    onClearFilter={() => clearApprovalColumnFilter('date')}
+                    className="py-3 px-3 text-center w-28 whitespace-nowrap"
+                  />
+                  <ExcelHeaderCell
+                    title="Status"
+                    columnKey="status"
+                    dataType="text"
+                    align="center"
+                    sortConfig={approvalSortConfig}
+                    onSort={setApprovalSort}
+                    isFiltered={isApprovalColumnFiltered('status')}
+                    uniqueValues={getApprovalUniqueValues('status')}
+                    activeFilterValues={approvalActiveFilters['status']}
+                    onApplyFilter={vals => setApprovalColumnFilter('status', vals)}
+                    onClearFilter={() => clearApprovalColumnFilter('status')}
+                    className="py-3 px-3 text-center w-28 whitespace-nowrap"
+                  />
                   <th className="py-3 px-3 text-center w-36 whitespace-nowrap sticky right-0 bg-slate-50/95 shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.06)] z-10">Aksi Otorisasi</th>
                 </tr>
               </thead>
@@ -1670,20 +1810,20 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
           </div>
         )}
 
-        {filteredApprovals.length > 10 && (
+        {excelProcessedApprovals.length > 10 && (
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-5 py-3.5 bg-slate-50/90 rounded-2xl border border-slate-200/80 text-xs motion-fade-in-up">
             <span className="text-slate-500 font-mono-code text-[11px]">
-              Menampilkan <span className="font-bold text-slate-800">{Math.min(approvalDisplayLimit, filteredApprovals.length)}</span> dari <span className="font-bold text-slate-800">{filteredApprovals.length}</span> pengajuan
+              Menampilkan <span className="font-bold text-slate-800">{Math.min(approvalDisplayLimit, excelProcessedApprovals.length)}</span> dari <span className="font-bold text-slate-800">{excelProcessedApprovals.length}</span> pengajuan
             </span>
             <div className="flex items-center gap-2">
               {hasMoreApprovals ? (
                 <button
                   type="button"
-                  onClick={() => setApprovalDisplayLimit(prev => Math.min(prev + 10, filteredApprovals.length))}
+                  onClick={() => setApprovalDisplayLimit(prev => Math.min(prev + 10, excelProcessedApprovals.length))}
                   className="px-3.5 py-1.5 rounded-xl bg-orange-50 hover:bg-[#FF6B00] text-[#FF6B00] hover:text-white border border-orange-200 hover:border-[#FF6B00] font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs active:scale-95"
                 >
                   <ChevronDown className="w-3.5 h-3.5" />
-                  <span>Muat 10 Pengajuan Lagi ({filteredApprovals.length - approvalDisplayLimit} Tersisa)</span>
+                  <span>Muat 10 Pengajuan Lagi ({excelProcessedApprovals.length - approvalDisplayLimit} Tersisa)</span>
                 </button>
               ) : (
                 <button
@@ -1698,7 +1838,7 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
               {hasMoreApprovals && (
                 <button
                   type="button"
-                  onClick={() => setApprovalDisplayLimit(filteredApprovals.length)}
+                  onClick={() => setApprovalDisplayLimit(excelProcessedApprovals.length)}
                   className="px-2.5 py-1.5 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-200/60 font-semibold text-xs transition-all cursor-pointer"
                 >
                   Tampilkan Semua

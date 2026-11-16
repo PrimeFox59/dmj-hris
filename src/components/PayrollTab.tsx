@@ -45,6 +45,7 @@ import { getPtkpDetails, resolvePtkpStatus } from '../utils/taxHelper';
 import { EmployeeTimesheetDetailModal } from './EmployeeTimesheetDetailModal';
 import { PayrollDailyDivisorSettingsModal } from './PayrollDailyDivisorSettingsModal';
 import { PayrollRulesAndVisibilityModal } from './PayrollRulesAndVisibilityModal';
+import { ExcelHeaderCell, useExcelTable, ActiveFiltersBar, ExcelColumnDefinition } from './ExcelColumnFilter';
 
 interface PayrollTabProps {
   currentUser?: Employee;
@@ -958,10 +959,76 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
     return isAssigned || hasAllocation;
   });
 
+  // =========================================================================
+  // EXCEL COLUMN SORTING & FILTERING
+  // =========================================================================
+  const excelColumns = useMemo<Record<string, ExcelColumnDefinition<PayrollRecord>>>(() => ({
+    employee: {
+      key: 'employee',
+      title: 'Karyawan',
+      dataType: 'text',
+      extractor: (p) => p.employeeName,
+      filterValueExtractor: (p) => {
+        const emp = employees.find(e => e.id === p.employeeId);
+        const employmentType = emp?.employmentType === 'KONTRAK' ? 'Kontrak' : emp?.workLocationType === 'NON_LOKAL' ? 'Roster' : 'Tetap';
+        return [p.employeeName, employmentType];
+      }
+    },
+    department: {
+      key: 'department',
+      title: 'Departemen & Posisi',
+      dataType: 'text',
+      extractor: (p) => p.department,
+      filterValueExtractor: (p) => {
+        const emp = employees.find(e => e.id === p.employeeId);
+        return [p.department, emp?.position || '-'].filter(Boolean);
+      }
+    },
+    attendance: {
+      key: 'attendance',
+      title: 'Presensi & Cuti',
+      dataType: 'number',
+      extractor: (p) => p.presentDays,
+      filterValueExtractor: (p) => {
+        const alpha = p.alphaDays || 0;
+        return [
+          `${p.presentDays}/${p.workingDays} Hadir`,
+          alpha > 0 ? `${alpha} Alpha` : null,
+          p.leaveDays > 0 ? `${p.leaveDays} Cuti` : null,
+          p.unpaidLeaveDays > 0 ? `${p.unpaidLeaveDays} Unpaid` : null,
+          p.lateDays > 0 ? `${p.lateDays} Terlambat` : null,
+        ].filter(Boolean) as string[];
+      }
+    },
+    statusHr: {
+      key: 'statusHr',
+      title: 'Status HR',
+      dataType: 'text',
+      extractor: (p) => p.hrValidationStatus === 'VALIDATED_BY_HR' ? 'Audit Selesai' : 'Perlu Audit',
+      filterValueExtractor: (p) => [p.hrValidationStatus === 'VALIDATED_BY_HR' ? 'Audit Selesai' : 'Perlu Audit']
+    }
+  }), [employees]);
+
+  const {
+    processedData: excelProcessedRecords,
+    sortConfig: payrollSortConfig,
+    setSort: setPayrollSort,
+    activeFilters: payrollActiveFilters,
+    setColumnFilter: setPayrollColumnFilter,
+    clearColumnFilter: clearPayrollColumnFilter,
+    clearAllFilters: clearAllPayrollFilters,
+    getUniqueValues: getPayrollUniqueValues,
+    isColumnFiltered: isPayrollColumnFiltered,
+    totalActiveFiltersCount: totalPayrollActiveFiltersCount
+  } = useExcelTable({
+    data: filteredRecords,
+    columns: excelColumns
+  });
+
   const [payrollDisplayLimit, setPayrollDisplayLimit] = useState(15);
   const visiblePayrollRecords = useMemo(() => {
-    return filteredRecords.slice(0, payrollDisplayLimit);
-  }, [filteredRecords, payrollDisplayLimit]);
+    return excelProcessedRecords.slice(0, payrollDisplayLimit);
+  }, [excelProcessedRecords, payrollDisplayLimit]);
 
   // Synchronized active slip: real-time updates when salary rules, rates, or visibility changes
   const activeSlip = useMemo(() => {
@@ -969,11 +1036,11 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
     const current = filteredRecords.find(p => p.id === selectedSlip.id || p.employeeId === selectedSlip.employeeId);
     return current || selectedSlip;
   }, [selectedSlip, filteredRecords]);
-  const hasMorePayroll = payrollDisplayLimit < filteredRecords.length;
+  const hasMorePayroll = payrollDisplayLimit < excelProcessedRecords.length;
 
   useEffect(() => {
     setPayrollDisplayLimit(15);
-  }, [searchQuery, currentProjectFilter, validationFilter]);
+  }, [searchQuery, currentProjectFilter, validationFilter, payrollActiveFilters, payrollSortConfig]);
 
   const selectedProjectObj = projects.find(p => p.id === currentProjectFilter);
 
@@ -1735,19 +1802,77 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
         {/* ========================================================================= */}
         {activeSubView === 'REKAP_GAJI' && (
           <>
+            {/* Active Excel Filters & Sort Bar */}
+            <ActiveFiltersBar
+              totalActiveFiltersCount={totalPayrollActiveFiltersCount}
+              sortConfig={payrollSortConfig}
+              onClearAll={clearAllPayrollFilters}
+              className="mb-3 mx-4 sm:mx-5"
+            />
+
             <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50/80 text-slate-500 uppercase font-mono-code text-[10px] tracking-wider border-b border-slate-200">
                 <tr>
-                  <th className="px-2.5 py-2.5 sm:px-3">Karyawan</th>
-                  <th className="px-2.5 py-2.5 sm:px-3">Departemen & Posisi</th>
-                  <th className="px-2 py-2.5 text-center whitespace-nowrap">Presensi & Cuti</th>
-                  <th className="px-1.5 py-2.5 text-center whitespace-nowrap">Status HR</th>
-                  <th className="px-2 py-2.5 text-center whitespace-nowrap">Aksi</th>
+                  <ExcelHeaderCell
+                    title="Karyawan"
+                    columnKey="employee"
+                    dataType="text"
+                    sortConfig={payrollSortConfig}
+                    onSort={setPayrollSort}
+                    isFiltered={isPayrollColumnFiltered('employee')}
+                    uniqueValues={getPayrollUniqueValues('employee')}
+                    activeFilterValues={payrollActiveFilters['employee']}
+                    onApplyFilter={vals => setPayrollColumnFilter('employee', vals)}
+                    onClearFilter={() => clearPayrollColumnFilter('employee')}
+                    className="px-2.5 py-2.5 sm:px-3 min-w-[200px]"
+                  />
+                  <ExcelHeaderCell
+                    title="Departemen & Posisi"
+                    columnKey="department"
+                    dataType="text"
+                    sortConfig={payrollSortConfig}
+                    onSort={setPayrollSort}
+                    isFiltered={isPayrollColumnFiltered('department')}
+                    uniqueValues={getPayrollUniqueValues('department')}
+                    activeFilterValues={payrollActiveFilters['department']}
+                    onApplyFilter={vals => setPayrollColumnFilter('department', vals)}
+                    onClearFilter={() => clearPayrollColumnFilter('department')}
+                    className="px-2.5 py-2.5 sm:px-3 min-w-[180px]"
+                  />
+                  <ExcelHeaderCell
+                    title="Presensi & Cuti"
+                    columnKey="attendance"
+                    dataType="number"
+                    align="center"
+                    sortConfig={payrollSortConfig}
+                    onSort={setPayrollSort}
+                    isFiltered={isPayrollColumnFiltered('attendance')}
+                    uniqueValues={getPayrollUniqueValues('attendance')}
+                    activeFilterValues={payrollActiveFilters['attendance']}
+                    onApplyFilter={vals => setPayrollColumnFilter('attendance', vals)}
+                    onClearFilter={() => clearPayrollColumnFilter('attendance')}
+                    className="px-2 py-2.5 text-center whitespace-nowrap min-w-[140px]"
+                  />
+                  <ExcelHeaderCell
+                    title="Status HR"
+                    columnKey="statusHr"
+                    dataType="text"
+                    align="center"
+                    sortConfig={payrollSortConfig}
+                    onSort={setPayrollSort}
+                    isFiltered={isPayrollColumnFiltered('statusHr')}
+                    uniqueValues={getPayrollUniqueValues('statusHr')}
+                    activeFilterValues={payrollActiveFilters['statusHr']}
+                    onApplyFilter={vals => setPayrollColumnFilter('statusHr', vals)}
+                    onClearFilter={() => clearPayrollColumnFilter('statusHr')}
+                    className="px-1.5 py-2.5 text-center whitespace-nowrap min-w-[110px]"
+                  />
+                  <th className="px-2 py-2.5 text-center whitespace-nowrap min-w-[130px]">Aksi</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium">
-                {filteredRecords.length === 0 ? (
+                {excelProcessedRecords.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
                       Tidak ada karyawan yang sesuai dengan kriteria filter ini.
@@ -2026,20 +2151,20 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
             </table>
           </div>
 
-          {filteredRecords.length > 15 && (
+          {excelProcessedRecords.length > 15 && (
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 bg-slate-50/80 border-t border-slate-200/70 text-xs">
               <span className="text-slate-500 font-mono-code text-[11px]">
-                Menampilkan <span className="font-bold text-slate-800">{Math.min(payrollDisplayLimit, filteredRecords.length)}</span> dari <span className="font-bold text-slate-800">{filteredRecords.length}</span> rekaman penggajian
+                Menampilkan <span className="font-bold text-slate-800">{Math.min(payrollDisplayLimit, excelProcessedRecords.length)}</span> dari <span className="font-bold text-slate-800">{excelProcessedRecords.length}</span> rekaman penggajian
               </span>
               <div className="flex items-center gap-2">
                 {hasMorePayroll ? (
                   <button
                     type="button"
-                    onClick={() => setPayrollDisplayLimit(prev => Math.min(prev + 15, filteredRecords.length))}
+                    onClick={() => setPayrollDisplayLimit(prev => Math.min(prev + 15, excelProcessedRecords.length))}
                     className="px-3.5 py-1.5 rounded-xl bg-orange-50 hover:bg-[#FF6B00] text-[#FF6B00] hover:text-white border border-orange-200 hover:border-[#FF6B00] font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs active:scale-95"
                   >
                     <ChevronDown className="w-3.5 h-3.5" />
-                    <span>Muat 15 Karyawan Lagi ({filteredRecords.length - payrollDisplayLimit} Tersisa)</span>
+                    <span>Muat 15 Karyawan Lagi ({excelProcessedRecords.length - payrollDisplayLimit} Tersisa)</span>
                   </button>
                 ) : (
                   <button
@@ -2054,7 +2179,7 @@ export const PayrollTab: React.FC<PayrollTabProps> = ({
                 {hasMorePayroll && (
                   <button
                     type="button"
-                    onClick={() => setPayrollDisplayLimit(filteredRecords.length)}
+                    onClick={() => setPayrollDisplayLimit(excelProcessedRecords.length)}
                     className="px-2.5 py-1.5 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-200/60 font-semibold text-xs transition-all cursor-pointer"
                   >
                     Tampilkan Semua
