@@ -2161,8 +2161,11 @@ export function updateApproval(id, status, reviewNote, reviewedBy = 'Direksi / H
     updatedAttendance = attRecord;
   }
 
-  // Automatic quota deduction, unpaid leave recording & roster schedule update for approved leave requests
-  if (item.type === 'LEAVE' && status === 'APPROVED' && item.employeeId) {
+  // Automatic quota deduction, unpaid leave recording, roster schedule & attendance synchronization for approved leave & sick requests
+  const isSickLeave = item.leaveType === 'CUTI_SAKIT' || (item.title && item.title.toLowerCase().includes('sakit'));
+  const hasDoctorNote = Boolean(item.hasDoctorNote || item.proofAttachment || item.hasAttachment);
+
+  if ((item.type === 'LEAVE' || item.type === 'PERMIT' || isSickLeave) && status === 'APPROVED' && item.employeeId) {
     const empRow = db.prepare('SELECT data_json FROM employees WHERE id = ?;').get(item.employeeId);
     if (empRow) {
       try {
@@ -2171,7 +2174,19 @@ export function updateApproval(id, status, reviewNote, reviewedBy = 'Direksi / H
         const coveredDays = typeof item.coveredByQuotaDays === 'number' ? item.coveredByQuotaDays : days;
         const unpaidDays = typeof item.unpaidLeaveDays === 'number' ? item.unpaidLeaveDays : 0;
 
-        if (item.leaveType === 'CUTI_ROSTER_NON_LOKAL' && emp.nonLokalLeaveConfig) {
+        if (isSickLeave) {
+          if (hasDoctorNote) {
+            // SAKIT DENGAN SURAT DOKTER: TIDAK TERPOTONG CUTI TAHUNAN! (Bebas potong kuota)
+            item.leaveDeductionWaived = true;
+          } else {
+            // SAKIT TANPA SURAT DOKTER: Memotong jatah cuti tahunan
+            item.leaveDeductionWaived = false;
+            emp.usedLeave = Math.min(emp.leaveQuota || 12, (emp.usedLeave || 0) + coveredDays);
+            if (unpaidDays > 0) {
+              emp.unpaidLeaveDaysTotal = (emp.unpaidLeaveDaysTotal || 0) + unpaidDays;
+            }
+          }
+        } else if (item.leaveType === 'CUTI_ROSTER_NON_LOKAL' && emp.nonLokalLeaveConfig) {
           emp.nonLokalLeaveConfig.usedPeriodLeave = (emp.nonLokalLeaveConfig.usedPeriodLeave || 0) + coveredDays;
           emp.nonLokalLeaveConfig.lastLeaveDate = item.startDate || new Date().toISOString().split('T')[0];
           try {
@@ -2184,19 +2199,77 @@ export function updateApproval(id, status, reviewNote, reviewedBy = 'Direksi / H
             }
             emp.nonLokalLeaveConfig.nextEligibleLeaveDate = `${nextY}-${String(nextM).padStart(2, '0')}-${String(Math.min(d, 28)).padStart(2, '0')}`;
           } catch (e) {}
-        } else if (item.leaveType === 'CUTI_TAHUNAN' || !item.leaveType) {
+        } else if (item.type === 'LEAVE' && (item.leaveType === 'CUTI_TAHUNAN' || !item.leaveType)) {
           emp.usedLeave = Math.min(emp.leaveQuota || 12, (emp.usedLeave || 0) + coveredDays);
-        }
-
-        // Record unpaid leave days for salary deduction if over quota
-        if (unpaidDays > 0) {
-          emp.unpaidLeaveDaysTotal = (emp.unpaidLeaveDaysTotal || 0) + unpaidDays;
+          if (unpaidDays > 0) {
+            emp.unpaidLeaveDaysTotal = (emp.unpaidLeaveDaysTotal || 0) + unpaidDays;
+          }
         }
 
         db.prepare('UPDATE employees SET data_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?;').run(JSON.stringify(emp), item.employeeId);
         updatedEmployee = emp;
       } catch (err) {
         console.warn('[SQLite] Failed updating employee leave quota on approval:', err);
+      }
+    }
+
+    // Synchronize attendance records in SQLite for approved sick/leave dates so employee is not marked Alpha
+    if (item.startDate) {
+      try {
+        const startD = new Date(item.startDate);
+        const daysNum = Math.max(1, Number(item.daysCount) || 1);
+        const attStatus = isSickLeave ? 'SICK' : 'LEAVE';
+        const attNote = isSickLeave
+          ? (hasDoctorNote ? 'Cuti Sakit dengan Surat Dokter (Disetujui HR - Bebas Potong Cuti)' : 'Cuti Sakit Tanpa Surat Dokter (Disetujui HR - Potong Cuti)')
+          : `${item.title} (Disetujui)`;
+
+        for (let i = 0; i < daysNum; i++) {
+          const cur = new Date(startD);
+          cur.setDate(startD.getDate() + i);
+          const dStr = cur.toISOString().split('T')[0];
+          const existingAtt = db.prepare('SELECT id, data_json FROM attendances WHERE employeeId = ? AND date = ?;').get(item.employeeId, dStr);
+          if (existingAtt) {
+            let attObj = {};
+            try { attObj = JSON.parse(existingAtt.data_json); } catch (e) {}
+            attObj.status = attStatus;
+            attObj.approvalStatus = 'APPROVED';
+            attObj.approvedBy = reviewedBy;
+            attObj.approvalDate = new Date().toISOString().substring(0, 10);
+            attObj.approvalNote = attNote;
+            attObj.note = attNote;
+            db.prepare('UPDATE attendances SET status = ?, approvalStatus = ?, data_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?;').run(
+              attStatus, 'APPROVED', JSON.stringify(attObj), existingAtt.id
+            );
+            if (i === 0) updatedAttendance = attObj;
+          } else {
+            const newAttId = `ATT-${attStatus}-${item.id}-${dStr}`;
+            const newAttObj = {
+              id: newAttId,
+              employeeId: item.employeeId,
+              employeeLoginId: item.employeeLoginId,
+              employeeName: item.employeeName,
+              employeeNik: item.employeeNik || '',
+              department: item.department || 'Operasional',
+              date: dStr,
+              mode: 'WFO',
+              status: attStatus,
+              approvalStatus: 'APPROVED',
+              approvedBy: reviewedBy,
+              approvalDate: new Date().toISOString().substring(0, 10),
+              approvalNote: attNote,
+              note: attNote
+            };
+            db.prepare(`
+              INSERT INTO attendances (id, employeeId, employeeName, employeeNik, department, date, mode, status, approvalStatus, data_json, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, 'WFO', ?, 'APPROVED', ?, CURRENT_TIMESTAMP);
+            `).run(
+              newAttId, item.employeeId, item.employeeName, item.employeeNik || '', item.department || '', dStr, attStatus, JSON.stringify(newAttObj)
+            );
+            if (i === 0) updatedAttendance = newAttObj;
+          }
+        }
+      } catch (attErr) {
+        console.warn('[SQLite] Failed synchronizing attendance for approved leave/sick:', attErr);
       }
     }
   }
@@ -2223,8 +2296,52 @@ export function updateApproval(id, status, reviewNote, reviewedBy = 'Direksi / H
 export function saveApproval(item) {
   const db = getDatabase();
 
-  // Smart Leave Quota & Over-Quota Unpaid Leave Gatekeeper
-  if (item.type === 'LEAVE') {
+  // Smart Sick Leave & Leave Quota Gatekeeper
+  const isSickLeave = item.leaveType === 'CUTI_SAKIT' || (item.title && item.title.toLowerCase().includes('sakit'));
+  const hasDoctorNote = Boolean(item.hasDoctorNote || item.proofAttachment || item.hasAttachment);
+
+  if (isSickLeave) {
+    item.leaveType = 'CUTI_SAKIT';
+    item.requiresHrApproval = true; // SAKIT MUTLAK WAJIB APPROVAL HR
+    item.hasDoctorNote = hasDoctorNote;
+    if (hasDoctorNote) {
+      item.leaveDeductionWaived = true;
+      item.coveredByQuotaDays = 0; // Bebas potong cuti tahunan
+      item.unpaidLeaveDays = 0;
+      item.isOverQuota = false;
+      if (!item.title.includes('Surat Dokter')) {
+        item.title = `${item.title} (Surat Dokter Terlampir - Bebas Potong Cuti)`;
+      }
+    } else {
+      item.leaveDeductionWaived = false;
+      // Tanpa surat dokter: memotong kuota cuti tahunan
+      const empRow = db.prepare('SELECT data_json FROM employees WHERE id = ?').get(item.employeeId);
+      if (empRow) {
+        try {
+          const empData = JSON.parse(empRow.data_json);
+          const requested = Number(item.daysCount) || 1;
+          const quota = typeof empData.leaveQuota === 'number' ? empData.leaveQuota : 12;
+          const used = typeof empData.usedLeave === 'number' ? empData.usedLeave : 0;
+          const remaining = Math.max(0, quota - used);
+          if (requested > remaining) {
+            item.coveredByQuotaDays = remaining;
+            item.unpaidLeaveDays = requested - remaining;
+            item.isOverQuota = true;
+            if (!item.title.includes('Potong Gaji')) {
+              item.title = `${item.title} (Tanpa Surat Dokter - Over-Quota: ${item.unpaidLeaveDays} Hari Potong Gaji)`;
+            }
+          } else {
+            item.coveredByQuotaDays = requested;
+            item.unpaidLeaveDays = 0;
+            item.isOverQuota = false;
+            if (!item.title.includes('Potong Cuti')) {
+              item.title = `${item.title} (Tanpa Surat Dokter - Potong Cuti)`;
+            }
+          }
+        } catch (e) {}
+      }
+    }
+  } else if (item.type === 'LEAVE') {
     const empRow = db.prepare('SELECT data_json FROM employees WHERE id = ?').get(item.employeeId);
     if (empRow) {
       try {

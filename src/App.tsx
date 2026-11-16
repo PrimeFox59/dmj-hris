@@ -1273,11 +1273,29 @@ export function App() {
     setApprovals(prev =>
       prev.map(item => {
         if (item.id === id) {
-          // If this is a leave request, deduct from employee quota!
-          if (item.type === 'LEAVE' && item.daysCount) {
+          const isSickLeave = item.leaveType === 'CUTI_SAKIT' || (item.title && item.title.toLowerCase().includes('sakit'));
+          const hasDoctorNote = Boolean(item.hasDoctorNote || item.proofAttachment || item.hasAttachment);
+
+          // If this is a leave or permit request, process employee quota & attendance!
+          if ((item.type === 'LEAVE' || item.type === 'PERMIT' || isSickLeave) && item.daysCount) {
             setEmployees(empList =>
               empList.map(e => {
                 if (e.id === item.employeeId) {
+                  if (isSickLeave) {
+                    // SAKIT: Kalau ada surat dokter -> TIDAK TERPOTONG CUTI TAHUNAN!
+                    if (hasDoctorNote) {
+                      return e; // 0 hari dipotong cuti
+                    }
+                    // Tanpa surat dokter -> Memotong jatah cuti tahunan
+                    const daysToDeduct = item.coveredByQuotaDays !== undefined ? item.coveredByQuotaDays : (item.daysCount || 1);
+                    const unpaidDays = item.unpaidLeaveDays || 0;
+                    return {
+                      ...e,
+                      usedLeave: Math.min(e.leaveQuota || 12, (e.usedLeave || 0) + daysToDeduct),
+                      unpaidLeaveDaysTotal: unpaidDays > 0 ? (e.unpaidLeaveDaysTotal || 0) + unpaidDays : e.unpaidLeaveDaysTotal
+                    };
+                  }
+
                   if (item.leaveType === 'CUTI_ROSTER_NON_LOKAL' && e.nonLokalLeaveConfig) {
                     const cfg = e.nonLokalLeaveConfig;
                     const days = item.daysCount || 1;
@@ -1304,11 +1322,84 @@ export function App() {
                       }
                     };
                   }
-                  return { ...e, usedLeave: e.usedLeave + (item.daysCount || 1) };
+
+                  if (item.type === 'LEAVE' && (item.leaveType === 'CUTI_TAHUNAN' || !item.leaveType)) {
+                    const daysToDeduct = item.coveredByQuotaDays !== undefined ? item.coveredByQuotaDays : (item.daysCount || 1);
+                    const unpaidDays = item.unpaidLeaveDays || 0;
+                    return {
+                      ...e,
+                      usedLeave: Math.min(e.leaveQuota || 12, (e.usedLeave || 0) + daysToDeduct),
+                      unpaidLeaveDaysTotal: unpaidDays > 0 ? (e.unpaidLeaveDaysTotal || 0) + unpaidDays : e.unpaidLeaveDaysTotal
+                    };
+                  }
                 }
                 return e;
               })
             );
+          }
+
+          // Sinkronisasi status absensi karyawan (SICK / LEAVE) agar tidak terhitung Alpha / mangkir
+          if ((isSickLeave || item.type === 'LEAVE' || item.type === 'PERMIT') && item.startDate) {
+            const startD = new Date(item.startDate);
+            const daysNum = Math.max(1, item.daysCount || 1);
+            const targetDates: string[] = [];
+            for (let i = 0; i < daysNum; i++) {
+              const cur = new Date(startD);
+              cur.setDate(startD.getDate() + i);
+              targetDates.push(cur.toISOString().split('T')[0]);
+            }
+
+            const attStatus: AttendanceStatus = isSickLeave ? 'SICK' : 'LEAVE';
+            const attNote = isSickLeave
+              ? (hasDoctorNote ? 'Cuti Sakit dengan Surat Dokter (Disetujui HR - Bebas Potong Cuti)' : 'Cuti Sakit Tanpa Surat Dokter (Disetujui HR - Potong Cuti)')
+              : `${item.title} (Disetujui)`;
+
+            setAttendances(attList => {
+              let updated = [...attList];
+              targetDates.forEach(d => {
+                const existingIdx = updated.findIndex(a => a.employeeId === item.employeeId && a.date === d);
+                if (existingIdx >= 0) {
+                  updated[existingIdx] = {
+                    ...updated[existingIdx],
+                    status: attStatus,
+                    approvalStatus: 'APPROVED',
+                    approvedBy: approverTitle,
+                    approvalDate: new Date().toISOString().substring(0, 10),
+                    approvalNote: attNote,
+                    note: attNote
+                  };
+                } else {
+                  updated.push({
+                    id: `ATT-${attStatus}-${item.id}-${d}`,
+                    employeeId: item.employeeId,
+                    employeeLoginId: item.employeeLoginId,
+                    employeeName: item.employeeName,
+                    employeeNik: item.employeeNik || '',
+                    department: item.department || 'Operasional',
+                    date: d,
+                    mode: 'WFO',
+                    status: attStatus,
+                    isLate: false,
+                    lateMinutes: 0,
+                    approvalStatus: 'APPROVED',
+                    approvedBy: approverTitle,
+                    approvalDate: new Date().toISOString().substring(0, 10),
+                    approvalNote: attNote,
+                    note: attNote,
+                    photoUrl: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150',
+                    location: {
+                      lat: -6.2088,
+                      lng: 106.8456,
+                      accuracy: 10,
+                      address: item.projectName || 'Site Penugasan Proyek',
+                      inGeofence: true,
+                      distanceMeters: 0
+                    }
+                  });
+                }
+              });
+              return updated;
+            });
           }
 
           // If this is an attendance correction, update or add the attendance record in React state
@@ -1425,6 +1516,7 @@ export function App() {
             ...item,
             status: 'APPROVED',
             stage: 'FINAL',
+            leaveDeductionWaived: isSickLeave ? hasDoctorNote : item.leaveDeductionWaived,
             hrApprovedBy: isApplicantHr ? item.hrApprovedBy : approverTitle,
             hrApprovedAt: isApplicantHr ? item.hrApprovedAt : nowStr,
             financeApprovedBy: isApplicantHr ? approverTitle : item.financeApprovedBy,

@@ -1064,6 +1064,56 @@ export function updateApproval(
     WHERE id = ?;
   `).run(status, reviewedBy, now, reviewNote || null, JSON.stringify(item), id);
 
+  // Automatic quota deduction, unpaid leave recording & attendance synchronization for approved leave & sick requests
+  const isSickLeave = item.leaveType === 'CUTI_SAKIT' || (item.title && item.title.toLowerCase().includes('sakit'));
+  const hasDoctorNote = Boolean(item.hasDoctorNote || item.proofAttachment || item.hasAttachment);
+
+  if ((item.type === 'LEAVE' || item.type === 'PERMIT' || isSickLeave) && status === 'APPROVED' && item.employeeId) {
+    const empRow = db.prepare('SELECT data_json FROM employees WHERE id = ?;').get(item.employeeId) as any;
+    if (empRow) {
+      try {
+        const emp: Employee = JSON.parse(empRow.data_json);
+        const days = Number(item.daysCount) || 1;
+        const coveredDays = typeof item.coveredByQuotaDays === 'number' ? item.coveredByQuotaDays : days;
+        const unpaidDays = typeof item.unpaidLeaveDays === 'number' ? item.unpaidLeaveDays : 0;
+
+        if (isSickLeave) {
+          if (hasDoctorNote) {
+            item.leaveDeductionWaived = true;
+          } else {
+            item.leaveDeductionWaived = false;
+            emp.usedLeave = Math.min(emp.leaveQuota || 12, (emp.usedLeave || 0) + coveredDays);
+            if (unpaidDays > 0) {
+              emp.unpaidLeaveDaysTotal = (emp.unpaidLeaveDaysTotal || 0) + unpaidDays;
+            }
+          }
+        } else if (item.leaveType === 'CUTI_ROSTER_NON_LOKAL' && emp.nonLokalLeaveConfig) {
+          emp.nonLokalLeaveConfig.usedPeriodLeave = (emp.nonLokalLeaveConfig.usedPeriodLeave || 0) + coveredDays;
+          emp.nonLokalLeaveConfig.lastLeaveDate = item.startDate || new Date().toISOString().split('T')[0];
+          try {
+            const [y, m, d] = emp.nonLokalLeaveConfig.lastLeaveDate.split('-').map(Number);
+            let nextM = m + (emp.nonLokalLeaveConfig.rosterCycleMonths || 3);
+            let nextY = y;
+            if (nextM > 12) {
+              nextY += Math.floor((nextM - 1) / 12);
+              nextM = ((nextM - 1) % 12) + 1;
+            }
+            emp.nonLokalLeaveConfig.nextEligibleLeaveDate = `${nextY}-${String(nextM).padStart(2, '0')}-${String(Math.min(d, 28)).padStart(2, '0')}`;
+          } catch (e) {}
+        } else if (item.type === 'LEAVE' && (item.leaveType === 'CUTI_TAHUNAN' || !item.leaveType)) {
+          emp.usedLeave = Math.min(emp.leaveQuota || 12, (emp.usedLeave || 0) + coveredDays);
+          if (unpaidDays > 0) {
+            emp.unpaidLeaveDaysTotal = (emp.unpaidLeaveDaysTotal || 0) + unpaidDays;
+          }
+        }
+
+        db.prepare('UPDATE employees SET data_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?;').run(JSON.stringify(emp), item.employeeId);
+      } catch (err) {
+        console.warn('[SQLite] Failed updating employee leave quota on approval:', err);
+      }
+    }
+  }
+
   // If tied to attendance record, update that attendance record too
   if (item.attendanceRecordId) {
     const attRow = db.prepare('SELECT data_json FROM attendances WHERE id = ?;').get(item.attendanceRecordId) as any;

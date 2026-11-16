@@ -455,6 +455,8 @@ export interface ApprovalItem {
   attachmentType?: string;
   attachmentSize?: number;
   hasAttachment?: boolean;
+  hasDoctorNote?: boolean; // Surat keterangan dokter resmi (cuti sakit tidak terpotong kuota cuti tahunan setelah disetujui HR)
+  leaveDeductionWaived?: boolean; // Kuota cuti tahunan tidak dipotong karena ada surat dokter yang disetujui HR
   attendanceRecordId?: string;
   status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'REVISION_REQUESTED';
   submittedAt: string;

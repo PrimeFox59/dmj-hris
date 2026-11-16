@@ -622,6 +622,47 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
     const hasPm = Boolean(targetProj && pmEmp && pmEmp.id !== currentUser.id);
     const approverRole: 'PM' | 'HR' = hasPm ? 'PM' : 'HR';
 
+    const isSick = newLeaveType === 'CUTI_SAKIT' || (newRequestType === 'PERMIT' && newTitle.toLowerCase().includes('sakit'));
+    const hasDoctorNote = Boolean(newAttachment);
+
+    let finalTitle = newTitle;
+    let finalCoveredDays = (isAnnualLeave || isRosterLeave) ? coveredByQuotaDays : newDaysCount;
+    let finalUnpaidDays = (isAnnualLeave || isRosterLeave) ? unpaidLeaveDays : 0;
+    let finalIsOverQuota = unpaidLeaveDays > 0;
+    let finalLeaveDeductionWaived = false;
+
+    if (isSick) {
+      if (hasDoctorNote) {
+        finalCoveredDays = 0; // Bebas potong cuti tahunan
+        finalUnpaidDays = 0;
+        finalIsOverQuota = false;
+        finalLeaveDeductionWaived = true;
+        if (!finalTitle.includes('Surat Dokter')) {
+          finalTitle = `${newTitle} (Surat Dokter Terlampir - Bebas Potong Cuti)`;
+        }
+      } else {
+        // Tanpa surat dokter: memotong jatah cuti tahunan
+        const quotaRem = currentRemainingLeave;
+        if (newDaysCount > quotaRem) {
+          finalCoveredDays = quotaRem;
+          finalUnpaidDays = newDaysCount - quotaRem;
+          finalIsOverQuota = true;
+          if (!finalTitle.includes('Potong Gaji')) {
+            finalTitle = `${newTitle} (Tanpa Surat Dokter - ${finalUnpaidDays} Hr Potong Gaji)`;
+          }
+        } else {
+          finalCoveredDays = newDaysCount;
+          finalUnpaidDays = 0;
+          finalIsOverQuota = false;
+          if (!finalTitle.includes('Potong Cuti')) {
+            finalTitle = `${newTitle} (Tanpa Surat Dokter - Potong Cuti)`;
+          }
+        }
+      }
+    } else if (isOverQuota && unpaidLeaveDays > 0) {
+      finalTitle = `${newTitle} (${unpaidLeaveDays} Hr Potong Gaji)`;
+    }
+
     const newItem: ApprovalItem = {
       id: `APP-${Date.now()}`,
       type: newRequestType,
@@ -629,17 +670,17 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
       employeeName: currentUser.name,
       employeeNik: currentUser.nik,
       department: currentUser.department,
-      title: isOverQuota && unpaidLeaveDays > 0 
-        ? `${newTitle} (${unpaidLeaveDays} Hr Potong Gaji)` 
-        : newTitle,
+      title: finalTitle,
       description: newDescription,
       startDate: newStartDate,
       endDate: (newStartDate && newDaysCount) ? addDaysToDate(newStartDate, newDaysCount) : newEndDate,
       daysCount: newDaysCount,
-      leaveType: newRequestType === 'LEAVE' ? newLeaveType : undefined,
-      coveredByQuotaDays: (isAnnualLeave || isRosterLeave) ? coveredByQuotaDays : newDaysCount,
-      unpaidLeaveDays: (isAnnualLeave || isRosterLeave) ? unpaidLeaveDays : 0,
-      isOverQuota: unpaidLeaveDays > 0,
+      leaveType: (newRequestType === 'LEAVE' || isSick) ? newLeaveType : undefined,
+      hasDoctorNote: isSick ? hasDoctorNote : undefined,
+      leaveDeductionWaived: finalLeaveDeductionWaived,
+      coveredByQuotaDays: finalCoveredDays,
+      unpaidLeaveDays: finalUnpaidDays,
+      isOverQuota: finalIsOverQuota,
       isOffSchedule,
       offScheduleReason: isOffSchedule ? offScheduleReason : undefined,
       projectId: targetProj?.id,
@@ -1600,6 +1641,19 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                               </span>
                             )}
 
+                            {/* Sakit: Status Surat Dokter & Kebijakan Potong Cuti */}
+                            {(item.leaveType === 'CUTI_SAKIT' || (item.title && item.title.toLowerCase().includes('sakit'))) && (
+                              item.proofAttachment || item.hasAttachment || item.hasDoctorNote ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-300 font-mono-code" title="Surat Dokter Terverifikasi: Bebas potong cuti tahunan (Wajib disetujui HR)">
+                                  🩺 Surat Dokter Sah (Bebas Potong Cuti)
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-300 font-mono-code" title="Tanpa Surat Dokter: Memotong jatah cuti tahunan">
+                                  ⚠️ Tanpa Surat Dokter (Potong Cuti)
+                                </span>
+                              )
+                            )}
+
                             {item.proofAttachment && (
                               <button
                                 type="button"
@@ -1966,6 +2020,41 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                   </button>
                 </div>
               </div>
+            )}
+
+            {/* Kebijakan Cuti Sakit: Surat Dokter vs Tanpa Surat Dokter */}
+            {reviewModalItem.action === 'APPROVE' && (reviewModalItem.item.leaveType === 'CUTI_SAKIT' || reviewModalItem.item.title.toLowerCase().includes('sakit')) && (
+              reviewModalItem.item.proofAttachment || reviewModalItem.item.hasAttachment || reviewModalItem.item.hasDoctorNote ? (
+                <div className="bg-emerald-50/95 border-2 border-emerald-300 rounded-2xl p-3.5 space-y-1.5 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>Surat Dokter Terverifikasi Sah</span>
+                    </span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-200 text-emerald-900 font-mono-code">
+                      0 Hari Terpotong
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-emerald-800 leading-relaxed">
+                    Karyawan melampirkan surat keterangan dokter resmi. Otorisasi persetujuan HR ini <b>TIDAK AKAN MEMOTONG KUOTA CUTI TAHUNAN</b> karyawan dan presensi tercatat resmi sebagai Sakit (Paid Sick Leave).
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-amber-50/95 border-2 border-amber-300 rounded-2xl p-3.5 space-y-1.5 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span>Tanpa Surat Dokter (Memotong Jatah Cuti)</span>
+                    </span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-200 text-amber-900 font-mono-code">
+                      Potong {reviewModalItem.item.daysCount || 1} Hari
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-amber-800 leading-relaxed">
+                    Karyawan tidak melampirkan surat keterangan dokter. Persetujuan HR ini akan <b>MEMOTONG {reviewModalItem.item.daysCount || 1} HARI</b> dari jatah cuti tahunan karyawan.
+                  </p>
+                </div>
+              )
             )}
 
             <div className="space-y-1">
@@ -2548,30 +2637,60 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                 </div>
               )}
 
-              {/* Informative Banner for Non-Annual Leave Types */}
-              {newRequestType === 'LEAVE' && newLeaveType !== 'CUTI_TAHUNAN' && newLeaveType !== 'CUTI_ROSTER_NON_LOKAL' && (
+              {/* Kebijakan Cuti Sakit: Surat Dokter vs Tanpa Surat Dokter */}
+              {(newLeaveType === 'CUTI_SAKIT' || (newRequestType === 'PERMIT' && newTitle.toLowerCase().includes('sakit'))) ? (
+                Boolean(newAttachment) ? (
+                  <div className="p-3.5 rounded-2xl bg-emerald-50/95 border-2 border-emerald-400 text-emerald-950 text-xs flex items-start gap-2.5 shadow-xs">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <b className="text-emerald-900 text-sm">Surat Dokter Terlampir: Bebas Potong Cuti Tahunan</b>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold font-mono-code bg-emerald-200 text-emerald-900 border border-emerald-300">
+                          0 HARI TERPOTONG
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-emerald-800 leading-relaxed">
+                        Surat keterangan dokter resmi berhasil dilampirkan. Kuota cuti tahunan Anda <b>TIDAK AKAN DIPOTONG</b>. Pengajuan ini wajib diverifikasi dan disetujui akhir oleh <b>HR Manager</b> sebelum status kehadiran disahkan.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3.5 rounded-2xl bg-amber-50/95 border-2 border-amber-400 text-amber-950 text-xs flex items-start gap-2.5 shadow-xs">
+                    <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <b className="text-amber-900 text-sm">Tanpa Surat Dokter: Memotong Jatah Cuti Tahunan</b>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold font-mono-code bg-amber-200 text-amber-900 border border-amber-300">
+                          POTONG {newDaysCount} HARI
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-amber-800 leading-relaxed">
+                        Anda belum melampirkan surat keterangan dokter. Pengajuan sakit ini akan <b>MEMOTONG {newDaysCount} HARI</b> dari jatah cuti tahunan Anda setelah disetujui oleh <b>HR Manager</b>. Harap lampirkan scan/foto surat dokter di bagian bawah agar cuti tidak terpotong.
+                      </p>
+                    </div>
+                  </div>
+                )
+              ) : newRequestType === 'LEAVE' && newLeaveType !== 'CUTI_TAHUNAN' && newLeaveType !== 'CUTI_ROSTER_NON_LOKAL' ? (
                 <div className="p-3 rounded-2xl bg-blue-50/80 border border-blue-200 text-blue-950 text-xs flex items-start gap-2">
                   <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
                   <div>
                     <b className="text-blue-900">Kategori Izin Resmi / Khusus</b>
                     <p className="text-[11px] text-blue-800 mt-0.5">
-                      Jenis permohonan ini tidak memotong kuota Cuti Tahunan reguler. Tetap memerlukan persetujuan dari HR Manager serta kelengkapan berkas pendukung (surat dokter / surat keterangan).
+                      Jenis permohonan ini tidak memotong kuota Cuti Tahunan reguler. Tetap memerlukan persetujuan dari HR Manager serta kelengkapan berkas pendukung.
                     </p>
                   </div>
                 </div>
-              )}
-
-              {newRequestType === 'PERMIT' && (
+              ) : newRequestType === 'PERMIT' ? (
                 <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-800 text-xs flex items-start gap-2">
                   <Info className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
                   <div>
                     <b className="text-slate-900">Permohonan Izin Resmi / Dispensasi</b>
                     <p className="text-[11px] text-slate-600 mt-0.5">
-                      Permohonan izin dispensasi kehadiran atau urusan kedinasan. Tidak memotong kuota cuti tahunan karyawan.
+                      Permohonan izin dispensasi kehadiran atau urusan kedinasan. Memerlukan otorisasi akhir dari HR Manager.
                     </p>
                   </div>
                 </div>
-              )}
+              ) : null}
 
               {/* Roster Leave Status & Early/Off-Schedule Submission Section */}
               {newRequestType === 'LEAVE' && newLeaveType === 'CUTI_ROSTER_NON_LOKAL' && (
@@ -2820,15 +2939,15 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                   submittedBy: currentUser.name
                 })}
                 label={
-                  newRequestType === 'PERMIT' && newLeaveType === 'CUTI_SAKIT'
-                    ? 'Upload Surat Keterangan Dokter (Disarankan)'
+                  (newLeaveType === 'CUTI_SAKIT' || (newRequestType === 'PERMIT' && newTitle.toLowerCase().includes('sakit')))
+                    ? (Boolean(newAttachment) ? '✅ Surat Dokter Terlampir (Bebas Potong Cuti Tahunan)' : 'Upload Surat Keterangan Dokter (Bebas Potong Cuti)')
                     : newRequestType === 'ATTENDANCE_CORRECTION'
                     ? 'Upload Foto Bukti Presensi Site / Surat Tugas'
                     : 'Upload Dokumen Bukti / Surat Izin / Lampiran'
                 }
                 helperText={
-                  newRequestType === 'PERMIT' && newLeaveType === 'CUTI_SAKIT'
-                    ? 'Lampirkan scan atau foto surat dokter resmi klinik / rumah sakit untuk verifikasi HR & PM.'
+                  (newLeaveType === 'CUTI_SAKIT' || (newRequestType === 'PERMIT' && newTitle.toLowerCase().includes('sakit')))
+                    ? 'Lampirkan scan atau foto surat dokter resmi klinik / RS. Dengan surat dokter sah & disetujui HR, jatah cuti tahunan tidak dipotong (0 hari terpotong).'
                     : newRequestType === 'ATTENDANCE_CORRECTION'
                     ? 'Lampirkan foto kendala presensi site, log perangkat, atau surat tugas lapangan.'
                     : 'Format: PDF, JPG, PNG (Maksimal 10 MB). Dokumen dapat dilihat langsung oleh PM dan HR.'
