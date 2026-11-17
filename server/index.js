@@ -2519,24 +2519,26 @@ const server = http.createServer(async (req, res) => {
 // ==========================================
 // NATIVE WEBSOCKET SERVER ATTACHMENT
 // ==========================================
-const wss = new WebSocketServer({ server });
+const wss = new WebSocketServer({
+  server,
+  verifyClient: (info, callback) => {
+    const origin = info.origin || info.req?.headers?.origin || '';
+    if (origin) {
+      try {
+        const host = new URL(origin).host;
+        if (!ALLOWED_ORIGIN_HOSTS.includes(host) && !host.endsWith('.primeprojectx.net')) {
+          console.warn(`[WebSocket Handshake Blocked] Origin not allowed: ${origin}`);
+          return callback(false, 403, 'Forbidden: Unauthorized Origin');
+        }
+      } catch (e) {
+        return callback(false, 400, 'Bad Request');
+      }
+    }
+    callback(true);
+  }
+});
 
 wss.on('connection', (ws, req) => {
-  const reqOrigin = req.headers['origin'] || '';
-  if (reqOrigin) {
-    try {
-      const host = new URL(reqOrigin).host;
-      if (!ALLOWED_ORIGIN_HOSTS.includes(host) && !host.endsWith('.primeprojectx.net')) {
-        console.warn(`[WebSocket] Blocked connection from unauthorized origin: ${reqOrigin}`);
-        ws.close(4403, 'Unauthorized Origin');
-        return;
-      }
-    } catch (e) {
-      ws.close(4400, 'Bad Request');
-      return;
-    }
-  }
-
   wsClients.add(ws);
   const clientIp = req.headers['cf-connecting-ip'] || 
                    req.headers['x-real-ip'] || 
