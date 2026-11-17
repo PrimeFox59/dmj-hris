@@ -62,7 +62,9 @@ export function verifyToken(token) {
   if (parts.length !== 2) return null;
   const [json, sig] = parts;
   const expectedSig = crypto.createHmac('sha256', AUTH_SECRET).update(json).digest('base64url');
-  if (sig !== expectedSig) return null;
+  const sigBuf = Buffer.from(sig);
+  const expBuf = Buffer.from(expectedSig);
+  if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) return null;
   try {
     const payload = JSON.parse(Buffer.from(json, 'base64url').toString('utf-8'));
     if (payload.exp && Date.now() > payload.exp) return null;

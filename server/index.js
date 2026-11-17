@@ -1051,11 +1051,18 @@ const server = http.createServer(async (req, res) => {
 
       // 2. Real-Time Communication (SSE Live Stream)
       if (cleanUrl === '/api/realtime/stream' && method === 'GET') {
+        const token = getAuthToken();
+        const user = token ? getCurrentUserFromToken(token) : null;
+        if (!user && reqOrigin && corsOrigin === 'null') {
+          return sendJson(403, { success: false, error: 'Forbidden: Akses stream realtime tidak diizinkan' });
+        }
         res.writeHead(200, {
           'Content-Type': 'text/event-stream',
           'Cache-Control': 'no-cache, no-transform',
           'Connection': 'keep-alive',
-          'Access-Control-Allow-Origin': '*'
+          'Access-Control-Allow-Origin': corsOrigin,
+          'Access-Control-Allow-Credentials': corsOrigin !== '*' && corsOrigin !== 'null' ? 'true' : 'false',
+          'Vary': 'Origin'
         });
         const initialPayload = JSON.stringify({
           connected: true,
@@ -1172,6 +1179,11 @@ const server = http.createServer(async (req, res) => {
 
       // 6. Save Attendance with Server RTC Time Lock & Instant Broadcast (Auth / Normal)
       if (cleanUrl === '/api/attendance' && method === 'POST') {
+        const clientIp = getClientIp(req);
+        const rateCheck = checkRateLimit(clientIp, 'attendance_submit', 30, 60000);
+        if (!rateCheck.allowed) {
+          return sendJson(429, { success: false, error: `Batas pengiriman presensi tercapai. Mohon tunggu ${rateCheck.retryAfter} detik.` });
+        }
         try {
           const body = await readBody();
           const serverNow = new Date();
@@ -1238,6 +1250,11 @@ const server = http.createServer(async (req, res) => {
 
       // 6b. Public Kiosk Direct Attendance (Tanpa Login)
       if (cleanUrl === '/api/public-attendance' && method === 'POST') {
+        const clientIp = getClientIp(req);
+        const rateCheck = checkRateLimit(clientIp, 'public_attendance_submit', 60, 60000);
+        if (!rateCheck.allowed) {
+          return sendJson(429, { success: false, error: `Batas pengiriman presensi kiosk tercapai. Mohon tunggu ${rateCheck.retryAfter} detik.` });
+        }
         try {
           const body = await readBody();
           const serverNow = new Date();
@@ -1361,16 +1378,17 @@ const server = http.createServer(async (req, res) => {
                 'Content-Type': mimeType,
                 'Content-Length': buffer.length,
                 'Cache-Control': 'public, max-age=86400, immutable',
-                'Access-Control-Allow-Origin': '*'
+                'Access-Control-Allow-Origin': corsOrigin,
+                'Vary': 'Origin'
               });
               return res.end(buffer);
             }
           } else if (photoUrl.startsWith('http')) {
-            res.writeHead(302, { Location: photoUrl, 'Access-Control-Allow-Origin': '*' });
+            res.writeHead(302, { Location: photoUrl, 'Access-Control-Allow-Origin': corsOrigin, 'Vary': 'Origin' });
             return res.end();
           }
         }
-        res.writeHead(404, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        res.writeHead(404, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': corsOrigin, 'Vary': 'Origin' });
         return res.end(JSON.stringify({ error: 'Photo not found' }));
       }
 
@@ -1389,22 +1407,28 @@ const server = http.createServer(async (req, res) => {
                 'Content-Type': mimeType,
                 'Content-Length': buffer.length,
                 'Cache-Control': 'public, max-age=86400, immutable',
-                'Access-Control-Allow-Origin': '*'
+                'Access-Control-Allow-Origin': corsOrigin,
+                'Vary': 'Origin'
               });
               return res.end(buffer);
             }
           } else if (photoUrl.startsWith('http')) {
-            res.writeHead(302, { Location: photoUrl, 'Access-Control-Allow-Origin': '*' });
+            res.writeHead(302, { Location: photoUrl, 'Access-Control-Allow-Origin': corsOrigin, 'Vary': 'Origin' });
             return res.end();
           }
         }
-        res.writeHead(404, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        res.writeHead(404, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': corsOrigin, 'Vary': 'Origin' });
         return res.end(JSON.stringify({ error: 'Photo not found' }));
       }
 
       // 6f. Stream Approval Attachment Binary (PDF / Images / Docs) with Content-Disposition inline
       const attachmentMatch = cleanUrl.match(/^\/api\/approval\/([^\/]+)\/attachment$/);
       if (attachmentMatch && method === 'GET') {
+        const token = getAuthToken();
+        const user = token ? getCurrentUserFromToken(token) : null;
+        if (!user) {
+          return sendJson(401, { success: false, error: 'Unauthorized: Sesi masuk diperlukan untuk melihat lampiran dokumen' });
+        }
         const id = decodeURIComponent(attachmentMatch[1]);
         const attData = getApprovalAttachment(id);
         const attachmentStr = attData?.attachment;
@@ -1420,16 +1444,17 @@ const server = http.createServer(async (req, res) => {
                 'Content-Length': buffer.length,
                 'Content-Disposition': `inline; filename="${filename}"`,
                 'Cache-Control': 'public, max-age=86400',
-                'Access-Control-Allow-Origin': '*'
+                'Access-Control-Allow-Origin': corsOrigin,
+                'Vary': 'Origin'
               });
               return res.end(buffer);
             }
           } else if (attachmentStr.startsWith('http')) {
-            res.writeHead(302, { Location: attachmentStr, 'Access-Control-Allow-Origin': '*' });
+            res.writeHead(302, { Location: attachmentStr, 'Access-Control-Allow-Origin': corsOrigin, 'Vary': 'Origin' });
             return res.end();
           }
         }
-        res.writeHead(404, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        res.writeHead(404, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': corsOrigin, 'Vary': 'Origin' });
         return res.end(JSON.stringify({ error: 'Lampiran dokumen tidak ditemukan' }));
       }
 
@@ -1785,9 +1810,12 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (cleanUrl === '/api/casual-workers' && method === 'POST') {
-        const body = await readBody();
         const token = getAuthToken();
         const user = token ? getCurrentUserFromToken(token) : null;
+        if (!user) {
+          return sendJson(401, { success: false, error: 'Unauthorized: Sesi masuk diperlukan untuk mendaftarkan tukang' });
+        }
+        const body = await readBody();
 
         // PM Scoping: Fallback to assigned project only if body.projectId was not explicitly supplied
         if (!body.projectId && user && user.systemRole === 'staff') {
@@ -1835,9 +1863,12 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (cleanUrl === '/api/casual-attendances' && method === 'POST') {
-        const body = await readBody();
         const token = getAuthToken();
         const user = token ? getCurrentUserFromToken(token) : null;
+        if (!user) {
+          return sendJson(401, { success: false, error: 'Unauthorized: Sesi masuk PM/Admin diperlukan untuk verifikasi presensi tukang' });
+        }
+        const body = await readBody();
 
         // PM Scoping: Fallback to assigned project only if body.projectId was not explicitly supplied
         if (!body.projectId && user && user.systemRole === 'staff') {
@@ -1934,6 +1965,11 @@ const server = http.createServer(async (req, res) => {
 
       // 11b. WhatsApp Baileys Gateway & Control Endpoints
       if (cleanUrl === '/api/wa/status' && method === 'GET') {
+        const token = getAuthToken();
+        const user = token ? getCurrentUserFromToken(token) : null;
+        if (!user || !['admin', 'superuser', 'hr', 'finance'].includes(user.systemRole)) {
+          return sendJson(403, { success: false, error: 'Forbidden: Hak akses tidak mencukupi untuk melihat status gateway' });
+        }
         const status = await getGatewayStatus();
         return sendJson(200, { success: true, ...status });
       }
@@ -2105,6 +2141,11 @@ const server = http.createServer(async (req, res) => {
 
       // 11c. Email SMTP (Gmail) Configuration, Test & Log Endpoints
       if (cleanUrl === '/api/email/status' && method === 'GET') {
+        const token = getAuthToken();
+        const user = token ? getCurrentUserFromToken(token) : null;
+        if (!user || !['admin', 'superuser', 'hr', 'finance'].includes(user.systemRole)) {
+          return sendJson(403, { success: false, error: 'Forbidden: Hak akses tidak mencukupi untuk melihat konfigurasi SMTP' });
+        }
         const config = getSmtpConfig();
         const verification = await verifySmtp(config);
         return sendJson(200, {
@@ -2481,6 +2522,21 @@ const server = http.createServer(async (req, res) => {
 const wss = new WebSocketServer({ server });
 
 wss.on('connection', (ws, req) => {
+  const reqOrigin = req.headers['origin'] || '';
+  if (reqOrigin) {
+    try {
+      const host = new URL(reqOrigin).host;
+      if (!ALLOWED_ORIGIN_HOSTS.includes(host) && !host.endsWith('.primeprojectx.net')) {
+        console.warn(`[WebSocket] Blocked connection from unauthorized origin: ${reqOrigin}`);
+        ws.close(4403, 'Unauthorized Origin');
+        return;
+      }
+    } catch (e) {
+      ws.close(4400, 'Bad Request');
+      return;
+    }
+  }
+
   wsClients.add(ws);
   const clientIp = req.headers['cf-connecting-ip'] || 
                    req.headers['x-real-ip'] || 

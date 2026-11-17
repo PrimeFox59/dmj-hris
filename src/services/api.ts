@@ -667,7 +667,7 @@ export const api = {
     qrDataUrl?: string | null;
     error?: string;
   }> {
-    const res = await fetch('/api/wa/status');
+    const res = await fetch('/api/wa/status', { headers: api.getAuthHeaders() });
     if (!res.ok) throw new Error(`HTTP ${res.status}: Gagal memuat status WhatsApp`);
     return res.json();
   },
@@ -760,7 +760,7 @@ export const api = {
     verified: boolean;
     statusMessage?: string;
   }> {
-    const res = await fetch('/api/email/status');
+    const res = await fetch('/api/email/status', { headers: api.getAuthHeaders() });
     if (!res.ok) throw new Error(`HTTP ${res.status}: Gagal membaca status SMTP`);
     return res.json();
   },
