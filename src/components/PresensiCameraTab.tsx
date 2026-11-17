@@ -602,9 +602,6 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
 
     // 2. Cek setiap proyek yang ditugaskan
     for (const proj of userAuthorizedProjects) {
-      const isHO = Boolean(proj.isHeadOffice || proj.code === 'PRJ-001' || proj.name.toUpperCase().includes('KANTOR PUSAT'));
-      if (isHO) continue;
-
       const pGeo = getProjectCoordinates(proj);
       if (pGeo) {
         const d = calculateDistanceMeters(coords.lat, coords.lng, pGeo.lat, pGeo.lng);
@@ -635,23 +632,28 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
   // Jarak fisik nyata dari GPS ke lokasi kerja resmi
   const activeProjectDist = useMemo(() => {
     if (!activeProject || !coords.lat || !coords.lng) return null;
+    const pGeo = getProjectCoordinates(activeProject);
+    if (pGeo) {
+      return calculateDistanceMeters(coords.lat, coords.lng, pGeo.lat, pGeo.lng);
+    }
     const isHO = Boolean(activeProject.isHeadOffice || activeProject.code === 'PRJ-001' || activeProject.name.toUpperCase().includes('KANTOR PUSAT'));
     if (isHO) {
       return realGeofenceDistance;
     }
-    const pGeo = getProjectCoordinates(activeProject);
-    if (!pGeo) return null;
-    return calculateDistanceMeters(coords.lat, coords.lng, pGeo.lat, pGeo.lng);
+    return null;
   }, [activeProject, coords.lat, coords.lng, realGeofenceDistance]);
 
   const activeProjectRadius = useMemo(() => {
     if (!activeProject) return salaryRules?.officeGeofence?.radiusMeters || 350;
+    const pGeo = getProjectCoordinates(activeProject);
+    if (pGeo) {
+      return pGeo.radius || 350;
+    }
     const isHO = Boolean(activeProject.isHeadOffice || activeProject.code === 'PRJ-001' || activeProject.name.toUpperCase().includes('KANTOR PUSAT'));
     if (isHO) {
       return salaryRules?.officeGeofence?.radiusMeters || 350;
     }
-    const pGeo = getProjectCoordinates(activeProject);
-    return pGeo?.radius || 350;
+    return salaryRules?.officeGeofence?.radiusMeters || 350;
   }, [activeProject, salaryRules?.officeGeofence?.radiusMeters]);
 
   // Evaluasi Geofence: Jarak riil meter GPS perangkat ke titik kerja resmi

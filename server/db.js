@@ -1363,6 +1363,36 @@ export function saveAttendance(record) {
   const sched = getEmployeeProjectSchedule(record.employeeId);
   const isFlexible = Boolean(sched.isFlexible || record.isFlexibleSchedule);
 
+  // Server-Side Infallible Project Geofence Validation
+  let serverInGeofence = record.location?.inGeofence ?? true;
+  let serverDistanceMeters = record.location?.distanceMeters ?? 0;
+  if ((record.mode === 'WFO' || (!record.mode && prevData.mode === 'WFO')) && record.location && typeof record.location.lat === 'number' && typeof record.location.lng === 'number') {
+    const targetProjId = record.projectId || sched.projectId;
+    if (targetProjId) {
+      const pRow = db.prepare('SELECT data_json FROM projects WHERE id = ? OR code = ? LIMIT 1;').get(targetProjId, targetProjId);
+      if (pRow) {
+        try {
+          const pData = JSON.parse(pRow.data_json);
+          const geo = pData.customRules?.geofence;
+          if (geo && (geo.enabled || geo.latitude) && geo.latitude && geo.longitude) {
+            const R = 6371e3;
+            const φ1 = (record.location.lat * Math.PI) / 180;
+            const φ2 = (Number(geo.latitude) * Math.PI) / 180;
+            const Δφ = ((Number(geo.latitude) - record.location.lat) * Math.PI) / 180;
+            const Δλ = ((Number(geo.longitude) - record.location.lng) * Math.PI) / 180;
+            const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+            const d = Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+            const rad = Number(geo.radiusMeters) || 350;
+            if (d <= rad) {
+              serverInGeofence = true;
+              serverDistanceMeters = d;
+            }
+          }
+        } catch (e) {}
+      }
+    }
+  }
+
   if (attType === 'CHECK_IN') {
     // ==========================================
     // MODE PRESENSI MASUK (OR RE-CHECK-IN)
@@ -1393,7 +1423,7 @@ export function saveAttendance(record) {
 
     if (record.mode === 'DINAS_LUAR') {
       finalStatus = 'DINAS_LUAR';
-    } else if (record.status === 'OUT_OF_GEOFENCE' || (record.location && record.location.inGeofence === false && record.mode === 'WFO')) {
+    } else if (!serverInGeofence || (record.status === 'OUT_OF_GEOFENCE' && !serverInGeofence)) {
       finalStatus = 'OUT_OF_GEOFENCE';
     } else if (finalIsLate === 1 && !isFlexible) {
       finalStatus = 'LATE';
@@ -1462,7 +1492,7 @@ export function saveAttendance(record) {
       }
     }
 
-    const isOutOfGeofenceOut = record.location && record.location.inGeofence === false && (record.mode === 'WFO' || prevData.mode === 'WFO');
+    const isOutOfGeofenceOut = (!serverInGeofence || (record.location && record.location.inGeofence === false && !serverInGeofence)) && (record.mode === 'WFO' || prevData.mode === 'WFO');
 
     if (!finalCheckIn) {
       // Tidak pernah absen masuk: Status Alpa & butuh approval koreksi presensi
@@ -1520,6 +1550,19 @@ export function saveAttendance(record) {
       checkInBiometric: prevData.checkInBiometric || prevData.biometricVerification || record.checkInBiometric || null,
       checkOutBiometric: record.checkOutBiometric || record.biometricVerification || prevData.checkOutBiometric || null
     };
+  }
+
+  if (mergedData.location) {
+    mergedData.location.inGeofence = serverInGeofence;
+    if (serverInGeofence) mergedData.location.distanceMeters = serverDistanceMeters;
+  }
+  if (mergedData.checkInLocation && attType === 'CHECK_IN') {
+    mergedData.checkInLocation.inGeofence = serverInGeofence;
+    if (serverInGeofence) mergedData.checkInLocation.distanceMeters = serverDistanceMeters;
+  }
+  if (mergedData.checkOutLocation && attType === 'CHECK_OUT') {
+    mergedData.checkOutLocation.inGeofence = serverInGeofence;
+    if (serverInGeofence) mergedData.checkOutLocation.distanceMeters = serverDistanceMeters;
   }
 
   // 1. Simpan / Replace data tunggal ke tabel attendances

@@ -9822,6 +9822,49 @@
           "allowFlexibleHours": false
         }
       }
+    },
+    {
+      "id": "PRJ-2026-54",
+      "code": "DMJ-002",
+      "name": "BENGKEL SURABAYA",
+      "client": "CV NEW PILAR STAR",
+      "location": "KEPUTIH, SURABAYA",
+      "status": "ACTIVE",
+      "startDate": "2026-01-01",
+      "targetEndDate": "2028-03-02",
+      "allocatedBudget": 250000001,
+      "actualLaborCost": 0,
+      "projectedLaborCost": 200000000,
+      "totalEstimatedHours": 2000,
+      "actualHoursSpent": 0,
+      "hourlyRateMultiplier": 1,
+      "projectManagerId": "EMP-080",
+      "projectManagerName": "DJOKO JANUARTO (BOY)",
+      "assignedEmployeeIds": [
+        "EMP-080",
+        "EMP-078",
+        "EMP-1793670049826"
+      ],
+      "customRules": {
+        "workSchedule": {
+          "enabled": true,
+          "workDays": 6,
+          "checkInTime": "09:00",
+          "checkOutTime": "17:00",
+          "lateGraceMinutes": 15,
+          "saturdayWork": true,
+          "saturdayCheckIn": "09:00",
+          "saturdayCheckOut": "17:00",
+          "allowFlexibleHours": false
+        },
+        "geofence": {
+          "enabled": true,
+          "siteName": "BENGKEL SURABAYA",
+          "latitude": -7.29662,
+          "longitude": 112.803114,
+          "radiusMeters": 300
+        }
+      }
     }
   ],
   "INITIAL_ATTENDANCE": [],
