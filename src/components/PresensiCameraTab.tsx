@@ -2165,10 +2165,11 @@ export const PresensiCameraTab: React.FC<PresensiCameraTabProps> = ({
                               : `✨ Otomatis (Proyek Aktif: ${activeProject ? activeProject.code : 'Kantor Pusat'})`}
                           </option>
                           {userAuthorizedProjects.map(p => {
+                            const customGeo = getProjectCoordinates(p);
                             const isHO = Boolean(p.isHeadOffice || p.code === 'PRJ-001' || p.name.toUpperCase().includes('KANTOR PUSAT'));
-                            const pGeo = isHO
-                              ? { lat: -7.293144, lng: 112.775337, radius: 350 }
-                              : getProjectCoordinates(p);
+                            const pGeo = customGeo || (isHO
+                              ? { lat: salaryRules?.officeGeofence?.lat ?? -7.293144, lng: salaryRules?.officeGeofence?.lng ?? 112.775337, radius: salaryRules?.officeGeofence?.radiusMeters || 350 }
+                              : null);
                             const dist = pGeo && coords.lat && coords.lng
                               ? calculateDistanceMeters(coords.lat, coords.lng, pGeo.lat, pGeo.lng)
                               : null;

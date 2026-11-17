@@ -1367,30 +1367,79 @@ export function saveAttendance(record) {
   let serverInGeofence = record.location?.inGeofence ?? true;
   let serverDistanceMeters = record.location?.distanceMeters ?? 0;
   if ((record.mode === 'WFO' || (!record.mode && prevData.mode === 'WFO')) && record.location && typeof record.location.lat === 'number' && typeof record.location.lng === 'number') {
-    const targetProjId = record.projectId || sched.projectId;
-    if (targetProjId) {
-      const pRow = db.prepare('SELECT data_json FROM projects WHERE id = ? OR code = ? LIMIT 1;').get(targetProjId, targetProjId);
-      if (pRow) {
+    try {
+      const uLat = record.location.lat;
+      const uLng = record.location.lng;
+      const R = 6371e3;
+      const getDist = (lat, lng) => {
+        const φ1 = (uLat * Math.PI) / 180;
+        const φ2 = (Number(lat) * Math.PI) / 180;
+        const Δφ = ((Number(lat) - uLat) * Math.PI) / 180;
+        const Δλ = ((Number(lng) - uLng) * Math.PI) / 180;
+        const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+        return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+      };
+
+      // 1. Gather all candidate projects: requested, scheduled, and employee assigned
+      const candidateProjectIds = new Set();
+      if (record.projectId && record.projectId !== 'OFFICE' && record.projectId !== 'HO') candidateProjectIds.add(record.projectId);
+      if (sched.projectId && sched.projectId !== 'OFFICE' && sched.projectId !== 'HO') candidateProjectIds.add(sched.projectId);
+
+      const empRow = db.prepare('SELECT assignedProjectId, data_json FROM employees WHERE id = ?;').get(record.employeeId);
+      if (empRow) {
+        if (empRow.assignedProjectId) candidateProjectIds.add(empRow.assignedProjectId);
         try {
-          const pData = JSON.parse(pRow.data_json);
-          const geo = pData.customRules?.geofence;
-          if (geo && (geo.enabled || geo.latitude) && geo.latitude && geo.longitude) {
-            const R = 6371e3;
-            const φ1 = (record.location.lat * Math.PI) / 180;
-            const φ2 = (Number(geo.latitude) * Math.PI) / 180;
-            const Δφ = ((Number(geo.latitude) - record.location.lat) * Math.PI) / 180;
-            const Δλ = ((Number(geo.longitude) - record.location.lng) * Math.PI) / 180;
-            const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-            const d = Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
-            const rad = Number(geo.radiusMeters) || 350;
-            if (d <= rad) {
-              serverInGeofence = true;
-              serverDistanceMeters = d;
+          const empJson = JSON.parse(empRow.data_json);
+          if (Array.isArray(empJson.assignedProjectIds)) empJson.assignedProjectIds.forEach(id => candidateProjectIds.add(id));
+        } catch (e) {}
+      }
+
+      // 2. Check each candidate project geofence
+      for (const pid of candidateProjectIds) {
+        const pRow = db.prepare('SELECT id, code, name, data_json FROM projects WHERE id = ? OR code = ? LIMIT 1;').get(pid, pid);
+        if (pRow) {
+          try {
+            const pData = JSON.parse(pRow.data_json);
+            const geo = pData.customRules?.geofence;
+            if (geo && (geo.enabled || geo.latitude) && geo.latitude && geo.longitude) {
+              const d = getDist(geo.latitude, geo.longitude);
+              const rad = Number(geo.radiusMeters) || 350;
+              if (d <= rad) {
+                serverInGeofence = true;
+                serverDistanceMeters = d;
+                record.projectId = pRow.id;
+                record.projectCode = pRow.code;
+                record.projectName = pRow.name;
+                break;
+              }
+            }
+          } catch (e) {}
+        }
+      }
+
+      // 3. If not in site projects, check Kantor Pusat (Head Office)
+      if (!serverInGeofence) {
+        let hoLat = -7.293144;
+        let hoLng = 112.775337;
+        let hoRad = 350;
+        try {
+          const salaryRow = db.prepare("SELECT config_json FROM salary_rules WHERE id = 'default' LIMIT 1;").get();
+          if (salaryRow) {
+            const sJson = JSON.parse(salaryRow.config_json);
+            if (sJson.officeGeofence?.lat && sJson.officeGeofence?.lng) {
+              hoLat = Number(sJson.officeGeofence.lat);
+              hoLng = Number(sJson.officeGeofence.lng);
+              hoRad = Number(sJson.officeGeofence.radiusMeters) || 350;
             }
           }
         } catch (e) {}
+        const hoDist = getDist(hoLat, hoLng);
+        if (hoDist <= hoRad) {
+          serverInGeofence = true;
+          serverDistanceMeters = hoDist;
+        }
       }
-    }
+    } catch (e) {}
   }
 
   if (attType === 'CHECK_IN') {
@@ -3220,6 +3269,23 @@ export function getPublicKioskEmployees() {
 
 export function saveProject(proj) {
   const db = getDatabase();
+
+  // Strict Single Head Office Invariant: If marked as isHeadOffice, clear it from all other projects
+  if (proj.isHeadOffice) {
+    try {
+      const otherProjects = db.prepare('SELECT id, data_json FROM projects WHERE id != ?;').all(proj.id);
+      for (const other of otherProjects) {
+        try {
+          const otherData = JSON.parse(other.data_json);
+          if (otherData.isHeadOffice) {
+            delete otherData.isHeadOffice;
+            db.prepare('UPDATE projects SET data_json = ? WHERE id = ?;').run(JSON.stringify(otherData), other.id);
+          }
+        } catch (e) {}
+      }
+    } catch (e) {}
+  }
+
   db.prepare(`
     INSERT OR REPLACE INTO projects (
       id, code, name, client, location, status,

@@ -1703,13 +1703,24 @@ export function App() {
   // Project CRUD & Personnel Placement
   const handleSaveProject = (proj: Project, updatedEmployees?: Employee[]) => {
     setProjects(prev => {
-      const idx = prev.findIndex(p => p.id === proj.id);
+      let nextList = prev;
+      if (proj.isHeadOffice) {
+        // Enforce single Head Office in state: remove from others
+        nextList = prev.map(p => {
+          if (p.id !== proj.id && p.isHeadOffice) {
+            const { isHeadOffice, ...rest } = p;
+            return rest as Project;
+          }
+          return p;
+        });
+      }
+      const idx = nextList.findIndex(p => p.id === proj.id);
       if (idx >= 0) {
-        const next = [...prev];
+        const next = [...nextList];
         next[idx] = proj;
         return next;
       }
-      return [proj, ...prev];
+      return [proj, ...nextList];
     });
 
     api.saveProject(proj).catch(err => {
