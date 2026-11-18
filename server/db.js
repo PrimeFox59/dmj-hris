@@ -2527,8 +2527,8 @@ export function saveApproval(item) {
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP);
   `).run(
     item.id, item.type, item.employeeId, item.employeeName, item.employeeNik,
-    item.department, item.title, item.description, item.startDate,
-    item.endDate || null, item.daysCount || null, item.lateMinutes || null,
+    item.department || null, item.title, item.description || item.reason || null, item.startDate,
+    item.endDate || null, item.daysCount || item.totalDays || null, item.lateMinutes || null,
     item.status || 'PENDING', item.submittedAt || new Date().toISOString().replace('T', ' ').slice(0, 19),
     item.reviewedBy || null, item.reviewedAt || null, item.reviewNote || null,
     JSON.stringify(item)
