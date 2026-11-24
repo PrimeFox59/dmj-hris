@@ -39,6 +39,7 @@ import {
   getEffectiveSystemRole
 } from '../types';
 import { calculateEmployeePayroll, formatSalaryDisplay } from '../utils/payrollCalculator';
+import { AttendanceCalendarModal } from './AttendanceCalendarModal';
 
 interface UserPerformanceTabProps {
   currentUser: Employee;
@@ -211,6 +212,7 @@ export const UserPerformanceTab: React.FC<UserPerformanceTabProps> = ({
   const [isRequestSlipModalOpen, setIsRequestSlipModalOpen] = useState<boolean>(false);
   const [slipRequestReason, setSlipRequestReason] = useState<string>('Pengecekan rincian upah, tunjangan, dan potongan gaji bulanan');
   const [slipRequestSuccessMsg, setSlipRequestSuccessMsg] = useState<string | null>(null);
+  const [isAttendanceCalendarOpen, setIsAttendanceCalendarOpen] = useState<boolean>(false);
 
   const handleOpenSlipRequestModal = () => {
     setSlipRequestReason('Pengecekan rincian upah, tunjangan, dan potongan gaji bulanan');
@@ -270,8 +272,13 @@ export const UserPerformanceTab: React.FC<UserPerformanceTabProps> = ({
 
   // Filter personal data for activeEmployee
   const personalAttendances = useMemo(() => {
-    return attendances.filter(a => a.employeeId === activeEmployee.id);
-  }, [attendances, activeEmployee.id]);
+    return attendances.filter(a => {
+      const idMatch = a.employeeId === activeEmployee.id;
+      const nikMatch = Boolean(activeEmployee.nik && a.employeeNik === activeEmployee.nik);
+      const nameMatch = Boolean(a.employeeName && activeEmployee.name && a.employeeName.trim().toLowerCase() === activeEmployee.name.trim().toLowerCase());
+      return idMatch || nikMatch || nameMatch;
+    });
+  }, [attendances, activeEmployee.id, activeEmployee.nik, activeEmployee.name]);
 
   const [attStartDate, setAttStartDate] = useState<string>('');
   const [attEndDate, setAttEndDate] = useState<string>('');
@@ -324,8 +331,13 @@ export const UserPerformanceTab: React.FC<UserPerformanceTabProps> = ({
   const todayAttendance = personalAttendances[0] || null;
 
   const personalApprovals = useMemo(() => {
-    return approvals.filter(a => a.employeeId === activeEmployee.id);
-  }, [approvals, activeEmployee.id]);
+    return approvals.filter(a => {
+      const idMatch = a.employeeId === activeEmployee.id;
+      const nikMatch = Boolean(activeEmployee.nik && a.employeeNik === activeEmployee.nik);
+      const nameMatch = Boolean(a.employeeName && activeEmployee.name && a.employeeName.trim().toLowerCase() === activeEmployee.name.trim().toLowerCase());
+      return idMatch || nikMatch || nameMatch;
+    });
+  }, [approvals, activeEmployee.id, activeEmployee.nik, activeEmployee.name]);
 
   // Calculate current official payroll for activeEmployee
   const personalPayroll = useMemo(() => {
@@ -658,17 +670,32 @@ export const UserPerformanceTab: React.FC<UserPerformanceTabProps> = ({
               )}
             </div>
 
-            {/* KPI 2 */}
-            <div className="glass-card rounded-2xl p-5 border border-slate-200/80 card-interactive">
-              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 font-mono-code block">
-                Kehadiran & Disiplin Masuk
-              </span>
-              <div className="text-xl sm:text-2xl font-black text-emerald-700 font-mono-code mt-1">
-                {personalPayroll.presentDays} / 22 Hari
+            {/* KPI 2: Kehadiran & Disiplin Masuk (Klik untuk membuka Kalender Presensi) */}
+            <div 
+              onClick={() => setIsAttendanceCalendarOpen(true)}
+              className="glass-card rounded-2xl p-5 border border-slate-200/80 card-interactive cursor-pointer hover:border-emerald-500 hover:shadow-lg transition-all group relative overflow-hidden select-none"
+              title="Klik untuk melihat kalender presensi, jam masuk & pulang, serta verifikasi kehadiran"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 font-mono-code block">
+                  Kehadiran & Disiplin Masuk
+                </span>
+                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 group-hover:bg-emerald-600 group-hover:text-white transition-colors flex items-center gap-1 font-mono-code shadow-2xs">
+                  <Calendar className="w-3 h-3" />
+                  <span>Kalender</span>
+                </span>
               </div>
-              <span className="mt-2 text-xs text-slate-500 block">
-                {lateCheckIns > 0 ? `${lateCheckIns}x Terlambat` : '100% Tepat Waktu'}
-              </span>
+              <div className="text-xl sm:text-2xl font-black text-emerald-700 font-mono-code mt-1">
+                {personalPayroll.presentDays} / {personalPayroll.workingDays || 22} Hari
+              </div>
+              <div className="flex items-center justify-between mt-2">
+                <span className="text-xs text-slate-500 block">
+                  {lateCheckIns > 0 ? `${lateCheckIns}x Terlambat` : '100% Tepat Waktu'}
+                </span>
+                <span className="text-[11px] font-bold text-emerald-600 group-hover:underline flex items-center gap-0.5">
+                  Buka Detail <ChevronRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+                </span>
+              </div>
             </div>
 
             {/* KPI 3 */}
@@ -1993,6 +2020,21 @@ export const UserPerformanceTab: React.FC<UserPerformanceTabProps> = ({
             <X className="w-4 h-4" />
           </button>
         </div>,
+        document.body
+      )}
+
+      {/* Interactive Attendance & Work Calendar Pop-Up Modal */}
+      {isAttendanceCalendarOpen && typeof document !== 'undefined' && createPortal(
+        <AttendanceCalendarModal
+          isOpen={isAttendanceCalendarOpen}
+          onClose={() => setIsAttendanceCalendarOpen(false)}
+          employee={activeEmployee}
+          attendances={personalAttendances}
+          approvals={personalApprovals}
+          projects={projects}
+          salaryRules={salaryRules}
+          onNavigateToTab={onNavigateToTab}
+        />,
         document.body
       )}
 
