@@ -1125,7 +1125,7 @@ const server = http.createServer(async (req, res) => {
         if (!user) {
           return sendJson(401, { success: false, error: 'Unauthorized: Sesi tidak valid atau telah berakhir. Silakan login kembali.' });
         }
-        let data = getAllData();
+        let data = getAllData(user);
         if (user && user.systemRole === 'staff' && user.employeeId) {
           const userEmpId = user.employeeId || user.id;
           const userEmpName = (user.employee?.name || user.name || user.username || '').toLowerCase().trim();

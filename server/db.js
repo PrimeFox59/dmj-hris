@@ -811,7 +811,7 @@ export function seedInitialData(db) {
   console.log('[SQLite] Seeding selesai!');
 }
 
-export function getAllData() {
+export function getAllData(targetUser = null) {
   const db = getDatabase();
   const userMap = new Map();
   const userRoleMap = new Map();
@@ -825,7 +825,7 @@ export function getAllData() {
     }
   } catch (e) {}
 
-  const employees = db.prepare('SELECT id, assignedProjectId, data_json FROM employees ORDER BY name ASC;').all().map(r => {
+  let employees = db.prepare('SELECT id, assignedProjectId, data_json FROM employees ORDER BY name ASC;').all().map(r => {
     let emp = {};
     try { emp = JSON.parse(r.data_json); } catch (e) {}
     if (r.assignedProjectId && (!emp.assignedProjectId || emp.assignedProjectId !== r.assignedProjectId)) {
@@ -873,8 +873,39 @@ export function getAllData() {
     if (emp.name && emp.loginId) empLoginMap.set(emp.name.toLowerCase().trim(), emp.loginId);
   }
 
-  // REA Optimization: Streamline attendances and convert inline base64 to /api/attendance/:id/photo
-  const attendances = db.prepare('SELECT id, data_json FROM attendances ORDER BY date DESC, COALESCE(checkOutTime, checkInTime) DESC, checkInTime DESC LIMIT 200;').all().map(r => {
+  // Determine user role and scope for token-efficient and complete data retrieval
+  const isStaff = targetUser && targetUser.systemRole === 'staff';
+  const userEmpId = targetUser?.employeeId || targetUser?.id;
+  const userEmpNik = targetUser?.nik || targetUser?.employee?.nik;
+  const userEmpName = (targetUser?.employee?.name || targetUser?.name || targetUser?.username || '').toLowerCase().trim();
+  const userPos = (targetUser?.employee?.position || targetUser?.position || '').toLowerCase();
+  const userRole = (targetUser?.role || '').toLowerCase();
+
+  let isPmOrAdmin = false;
+  let managedProjectIds = [];
+  if (isStaff && userEmpId) {
+    managedProjectIds = projects.filter(p => {
+      const isPm = p.projectManagerId === userEmpId ||
+                   (p.projectManagerName && userEmpName && p.projectManagerName.toLowerCase().trim() === userEmpName) ||
+                   userPos.includes('project manager') || userPos.includes('site manager') || userRole.includes('pm') || userRole.includes('project_manager');
+      const isPAdmin = (Array.isArray(p.projectAdminIds) && p.projectAdminIds.includes(userEmpId)) ||
+                       (Array.isArray(p.projectAdminNames) && userEmpName && p.projectAdminNames.some(n => n.toLowerCase().trim() === userEmpName));
+      return isPm || isPAdmin;
+    }).map(p => p.id);
+    isPmOrAdmin = managedProjectIds.length > 0;
+  }
+
+  // Attendance query:
+  // For standard staff (non-PM/Admin), query strictly for this employee to maximize query speed and guarantee 100% record integrity!
+  // For PM/Admin/HR/Finance/Superuser, load full attendance history without restrictive LIMIT 200 truncation.
+  let attRows = [];
+  if (isStaff && userEmpId && !isPmOrAdmin) {
+    attRows = db.prepare('SELECT id, data_json FROM attendances WHERE employeeId = ? OR (employeeNik IS NOT NULL AND employeeNik = ?) ORDER BY date DESC, COALESCE(checkOutTime, checkInTime) DESC, checkInTime DESC;').all(userEmpId, userEmpNik || userEmpId);
+  } else {
+    attRows = db.prepare('SELECT id, data_json FROM attendances ORDER BY date DESC, COALESCE(checkOutTime, checkInTime) DESC, checkInTime DESC;').all();
+  }
+
+  let attendances = attRows.map(r => {
     let item = {};
     try { item = JSON.parse(r.data_json); } catch (e) {}
 
@@ -927,8 +958,19 @@ export function getAllData() {
     return item;
   });
 
-  // REA Optimization: Strip heavy base64 proof attachments from historical approvals
-  const approvals = db.prepare('SELECT id, data_json FROM approvals ORDER BY submittedAt DESC LIMIT 300;').all().map(r => {
+  if (isStaff && isPmOrAdmin) {
+    attendances = attendances.filter(a => a.employeeId === userEmpId || (a.projectId && managedProjectIds.includes(a.projectId)));
+  }
+
+  // Approvals query:
+  let appRows = [];
+  if (isStaff && userEmpId && !isPmOrAdmin) {
+    appRows = db.prepare('SELECT id, data_json FROM approvals WHERE employeeId = ? OR (employeeNik IS NOT NULL AND employeeNik = ?) ORDER BY submittedAt DESC;').all(userEmpId, userEmpNik || userEmpId);
+  } else {
+    appRows = db.prepare('SELECT id, data_json FROM approvals ORDER BY submittedAt DESC;').all();
+  }
+
+  let approvals = appRows.map(r => {
     let item = {};
     try { item = JSON.parse(r.data_json); } catch (e) {}
     if (item.proofAttachment && (item.proofAttachment.startsWith('data:') || item.proofAttachment.length > 500)) {
@@ -954,6 +996,19 @@ export function getAllData() {
     }
     return item;
   });
+
+  if (isStaff && isPmOrAdmin) {
+    approvals = approvals.filter(a =>
+      a.employeeId === userEmpId ||
+      (a.projectId && managedProjectIds.includes(a.projectId)) ||
+      (a.projectManagerId && a.projectManagerId === userEmpId) ||
+      (Array.isArray(a.projectAdminIds) && a.projectAdminIds.includes(userEmpId))
+    );
+  }
+
+  if (isStaff && !isPmOrAdmin) {
+    employees = employees.filter(e => e.id === userEmpId || (userEmpNik && e.nik === userEmpNik));
+  }
   const rulesRow = db.prepare('SELECT config_json FROM salary_rules WHERE id = ?;').get('default');
   const salaryRules = rulesRow ? JSON.parse(rulesRow.config_json) : null;
 
