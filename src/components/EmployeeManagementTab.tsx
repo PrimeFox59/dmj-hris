@@ -353,7 +353,7 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
 
   const openEditModal = (emp: Employee) => {
     setEditingEmployee(emp);
-    setExistingNotes(emp.notes || []);
+    setExistingNotes(isHR && emp.notes ? [...emp.notes] : []);
     setNewNoteText('');
     const nextSuggested = computeNextSequentialLoginId(employees);
     setSuggestedLoginId(nextSuggested);
@@ -432,14 +432,19 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
 
     const diffs: string[] = [];
     if (editingEmployee) {
-      if (Number(editingEmployee.baseSalary) !== Number(baseSalary)) {
-        diffs.push(`Gaji Pokok: Rp ${Number(editingEmployee.baseSalary || 0).toLocaleString('id-ID')} ➔ Rp ${Number(baseSalary || 0).toLocaleString('id-ID')}`);
-      }
-      if (Number(editingEmployee.fixedAllowance) !== Number(fixedAllowance)) {
-        diffs.push(`Tunjangan Tetap: Rp ${Number(editingEmployee.fixedAllowance || 0).toLocaleString('id-ID')} ➔ Rp ${Number(fixedAllowance || 0).toLocaleString('id-ID')}`);
-      }
-      if (Number(editingEmployee.dailyAllowance) !== Number(dailyAllowance)) {
-        diffs.push(`Uang Harian: Rp ${Number(editingEmployee.dailyAllowance || 0).toLocaleString('id-ID')} ➔ Rp ${Number(dailyAllowance || 0).toLocaleString('id-ID')}`);
+      if (isFinanceOrSuper) {
+        if (Number(editingEmployee.baseSalary) !== Number(baseSalary)) {
+          diffs.push(`Gaji Pokok: Rp ${Number(editingEmployee.baseSalary || 0).toLocaleString('id-ID')} ➔ Rp ${Number(baseSalary || 0).toLocaleString('id-ID')}`);
+        }
+        if (Number(editingEmployee.fixedAllowance) !== Number(fixedAllowance)) {
+          diffs.push(`Tunjangan Tetap: Rp ${Number(editingEmployee.fixedAllowance || 0).toLocaleString('id-ID')} ➔ Rp ${Number(fixedAllowance || 0).toLocaleString('id-ID')}`);
+        }
+        if (Number(editingEmployee.dailyAllowance) !== Number(dailyAllowance)) {
+          diffs.push(`Uang Harian: Rp ${Number(editingEmployee.dailyAllowance || 0).toLocaleString('id-ID')} ➔ Rp ${Number(dailyAllowance || 0).toLocaleString('id-ID')}`);
+        }
+        if ((editingEmployee.bankAccount?.accountNumber || '').trim() !== accountNumber.trim() || (editingEmployee.bankAccount?.bankName || '').trim() !== bankName.trim()) {
+          diffs.push(`Rekening: ${editingEmployee.bankAccount?.bankName || '-'} ${editingEmployee.bankAccount?.accountNumber || '-'} ➔ ${bankName} ${accountNumber}`);
+        }
       }
       if ((editingEmployee.position || '').trim() !== (position || '').trim()) {
         diffs.push(`Jabatan: ${editingEmployee.position || '-'} ➔ ${position}`);
@@ -469,36 +474,39 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
       }
     }
 
-    let finalNotes = [...existingNotes];
-    const nowStr = new Date().toLocaleString('id-ID', {
-      timeZone: 'Asia/Jakarta',
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    }) + ' WIB';
+    let finalNotes: EmployeeNote[] | undefined = editingEmployee?.notes ? [...editingEmployee.notes] : undefined;
+    if (isHR) {
+      finalNotes = [...existingNotes];
+      const nowStr = new Date().toLocaleString('id-ID', {
+        timeZone: 'Asia/Jakarta',
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      }) + ' WIB';
 
-    if (newNoteText.trim()) {
-      const newEntry: EmployeeNote = {
-        id: `NOTE-${Date.now()}`,
-        createdAt: nowStr,
-        authorName: currentUser?.name || 'Administrator',
-        authorRole: currentUser?.role || currentUser?.systemRole || 'HR',
-        note: newNoteText.trim(),
-        changesSummary: diffs.length > 0 ? diffs.join(' • ') : undefined
-      };
-      finalNotes = [newEntry, ...finalNotes];
-    } else if (diffs.length > 0 && editingEmployee) {
-      const autoEntry: EmployeeNote = {
-        id: `NOTE-${Date.now()}`,
-        createdAt: nowStr,
-        authorName: currentUser?.name || 'Administrator',
-        authorRole: currentUser?.role || currentUser?.systemRole || 'HR',
-        note: `Pembaruan data karyawan: ${diffs.join(' • ')}`,
-        changesSummary: diffs.join(' • ')
-      };
-      finalNotes = [autoEntry, ...finalNotes];
+      if (newNoteText.trim()) {
+        const newEntry: EmployeeNote = {
+          id: `NOTE-${Date.now()}`,
+          createdAt: nowStr,
+          authorName: currentUser?.name || 'Administrator',
+          authorRole: currentUser?.role || currentUser?.systemRole || 'HR',
+          note: newNoteText.trim(),
+          changesSummary: diffs.length > 0 ? diffs.join(' • ') : undefined
+        };
+        finalNotes = [newEntry, ...finalNotes];
+      } else if (diffs.length > 0 && editingEmployee) {
+        const autoEntry: EmployeeNote = {
+          id: `NOTE-${Date.now()}`,
+          createdAt: nowStr,
+          authorName: currentUser?.name || 'Administrator',
+          authorRole: currentUser?.role || currentUser?.systemRole || 'HR',
+          note: `Pembaruan data karyawan: ${diffs.join(' • ')}`,
+          changesSummary: diffs.join(' • ')
+        };
+        finalNotes = [autoEntry, ...finalNotes];
+      }
     }
 
     const empData: Employee = {
@@ -516,9 +524,9 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
       employmentType,
       joinDate: editingEmployee ? editingEmployee.joinDate : '2026-09-01',
       assignedProjectId,
-      baseSalary: Number(baseSalary),
-      fixedAllowance: Number(fixedAllowance),
-      dailyAllowance: Number(dailyAllowance),
+      baseSalary: isFinanceOrSuper ? Number(baseSalary) : (editingEmployee ? editingEmployee.baseSalary : Number(baseSalary)),
+      fixedAllowance: isFinanceOrSuper ? Number(fixedAllowance) : (editingEmployee ? editingEmployee.fixedAllowance : Number(fixedAllowance)),
+      dailyAllowance: isFinanceOrSuper ? Number(dailyAllowance) : (editingEmployee ? editingEmployee.dailyAllowance : Number(dailyAllowance)),
       leaveQuota: Number(leaveQuota),
       usedLeave: editingEmployee ? editingEmployee.usedLeave : 0,
       maritalStatus: maritalStatusForm,
@@ -528,7 +536,7 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
       workLocationType: workLocationTypeForm,
       status: employeeStatus,
       inactiveReason: employeeStatus === 'INACTIVE' ? inactiveReason : undefined,
-      notes: finalNotes,
+      notes: isHR ? finalNotes : editingEmployee?.notes,
       nonLokalLeaveConfig: workLocationTypeForm === 'NON_LOKAL' ? {
         rosterCycleMonths: Number(rosterCycleMonthsInput),
         leaveQuotaPerPeriod: Number(rosterQuotaInput),
@@ -539,11 +547,15 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
         notes: editingEmployee?.nonLokalLeaveConfig?.notes,
         scheduledLeaveHistory: editingEmployee?.nonLokalLeaveConfig?.scheduledLeaveHistory
       } : undefined,
-      bankAccount: {
+      bankAccount: isFinanceOrSuper ? {
         bankName,
         accountNumber,
         accountHolder: accountHolder || name
-      }
+      } : (editingEmployee?.bankAccount || {
+        bankName,
+        accountNumber,
+        accountHolder: accountHolder || name
+      })
     };
 
     try {
@@ -561,7 +573,7 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
   };
 
   const handleAddQuickNote = () => {
-    if (!newNoteText.trim()) return;
+    if (!isHR || !newNoteText.trim()) return;
     const nowStr = new Date().toLocaleString('id-ID', {
       timeZone: 'Asia/Jakarta',
       year: 'numeric',
@@ -583,6 +595,7 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
   };
 
   const handleDeleteNote = (noteId: string) => {
+    if (!isHR) return;
     setExistingNotes(prev => prev.filter(n => n.id !== noteId));
   };
 
@@ -1462,13 +1475,15 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
               <div className="text-left flex-1 min-w-0">
                 <div className="font-semibold text-xs flex items-center justify-between">
                   <span>Edit Karyawan</span>
-                  {dropdownAnchor.emp.notes && dropdownAnchor.emp.notes.length > 0 && (
+                  {isHR && dropdownAnchor.emp.notes && dropdownAnchor.emp.notes.length > 0 && (
                     <span className="px-1.5 py-0.2 rounded-full bg-blue-100 text-blue-800 font-mono-code text-[9px] font-bold">
                       {dropdownAnchor.emp.notes.length} note
                     </span>
                   )}
                 </div>
-                <div className="text-[10px] text-slate-400">Ubah profil, divisi, gaji & timeline note</div>
+                <div className="text-[10px] text-slate-400">
+                  {isHR ? 'Ubah profil, divisi, gaji & timeline note' : 'Ubah profil, divisi & gaji'}
+                </div>
               </div>
             </button>
 
@@ -2032,79 +2047,82 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                 )}
               </div>
 
-              {/* Seksi 4: Rekening & Penggajian */}
-              <div className="space-y-2.5 pt-1">
-                <div className="text-[11px] font-bold text-slate-800 pb-1.5 border-b border-slate-100 flex items-center gap-1.5">
-                  <Banknote className="w-3.5 h-3.5 text-indigo-600" />
-                  <span>Rekening & Penggajian</span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-600 uppercase">Nama Bank</label>
-                    <input
-                      type="text"
-                      value={bankName}
-                      onChange={e => setBankName(e.target.value)}
-                      className="w-full glass-input rounded-xl px-3 py-2 mt-1 bg-white border border-slate-200"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-600 uppercase">Nomor Rekening</label>
-                    <input
-                      type="text"
-                      value={accountNumber}
-                      onChange={e => setAccountNumber(e.target.value)}
-                      className="w-full glass-input rounded-xl px-3 py-2 font-mono-code mt-1 bg-white border border-slate-200"
-                      required
-                    />
-                  </div>
-                </div>
-
-                {isFinanceOrSuper && (
-                  <>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-600 uppercase">Gaji Pokok (IDR)</label>
-                        <input
-                          type="number"
-                          step={500000}
-                          value={baseSalary}
-                          onChange={e => setBaseSalary(Number(e.target.value))}
-                          className="w-full glass-input rounded-xl px-3 py-2 font-mono-code font-bold mt-1 bg-white border border-slate-200"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-600 uppercase">Tunjangan Tetap (IDR)</label>
-                        <input
-                          type="number"
-                          step={100000}
-                          value={fixedAllowance}
-                          onChange={e => setFixedAllowance(Number(e.target.value))}
-                          className="w-full glass-input rounded-xl px-3 py-2 font-mono-code mt-1 bg-white border border-slate-200"
-                          required
-                        />
-                      </div>
+              {/* Seksi 4: Rekening & Penggajian - Khusus Akses Otoritas Finance */}
+              {isFinanceOrSuper && (
+                <div className="space-y-2.5 pt-1">
+                  <div className="text-[11px] font-bold text-slate-800 pb-1.5 border-b border-slate-100 flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Banknote className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Rekening & Penggajian</span>
                     </div>
+                    <span className="px-1.5 py-0.2 rounded-full bg-emerald-50 text-emerald-700 font-mono-code text-[9px] font-semibold border border-emerald-200">
+                      Khusus Finance
+                    </span>
+                  </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-600 uppercase">Uang Harian (IDR)</label>
-                        <input
-                          type="number"
-                          step={5000}
-                          value={dailyAllowance}
-                          onChange={e => setDailyAllowance(Number(e.target.value))}
-                          className="w-full glass-input rounded-xl px-3 py-2 font-mono-code mt-1 bg-white border border-slate-200"
-                          required
-                        />
-                      </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-600 uppercase">Nama Bank</label>
+                      <input
+                        type="text"
+                        value={bankName}
+                        onChange={e => setBankName(e.target.value)}
+                        className="w-full glass-input rounded-xl px-3 py-2 mt-1 bg-white border border-slate-200"
+                        required={isFinanceOrSuper}
+                      />
                     </div>
-                  </>
-                )}
-              </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-600 uppercase">Nomor Rekening</label>
+                      <input
+                        type="text"
+                        value={accountNumber}
+                        onChange={e => setAccountNumber(e.target.value)}
+                        className="w-full glass-input rounded-xl px-3 py-2 font-mono-code mt-1 bg-white border border-slate-200"
+                        required={isFinanceOrSuper}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-600 uppercase">Gaji Pokok (IDR)</label>
+                      <input
+                        type="number"
+                        step={500000}
+                        value={baseSalary}
+                        onChange={e => setBaseSalary(Number(e.target.value))}
+                        className="w-full glass-input rounded-xl px-3 py-2 font-mono-code font-bold mt-1 bg-white border border-slate-200"
+                        required={isFinanceOrSuper}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-600 uppercase">Tunjangan Tetap (IDR)</label>
+                      <input
+                        type="number"
+                        step={100000}
+                        value={fixedAllowance}
+                        onChange={e => setFixedAllowance(Number(e.target.value))}
+                        className="w-full glass-input rounded-xl px-3 py-2 font-mono-code mt-1 bg-white border border-slate-200"
+                        required={isFinanceOrSuper}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-600 uppercase">Uang Harian (IDR)</label>
+                      <input
+                        type="number"
+                        step={5000}
+                        value={dailyAllowance}
+                        onChange={e => setDailyAllowance(Number(e.target.value))}
+                        className="w-full glass-input rounded-xl px-3 py-2 font-mono-code mt-1 bg-white border border-slate-200"
+                        required={isFinanceOrSuper}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Seksi 5: Status Perkawinan & Ketentuan Pajak PPh 21 (PTKP) */}
               <div className="space-y-2.5 pt-1">
@@ -2200,113 +2218,118 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                 </div>
               </div>
 
-              {/* Seksi 6: Catatan & Riwayat Perubahan (Timeline Notes) */}
-              <div className="space-y-3 pt-3 border-t border-slate-100">
-                <div className="flex items-center justify-between">
-                  <div className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
-                    <History className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Catatan & Riwayat Perubahan (Timeline Notes)</span>
-                    <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-mono-code font-bold text-[10px] border border-blue-200">
-                      {existingNotes.length} Catatan
+              {/* Seksi 6: Catatan & Riwayat Perubahan (Timeline Notes) - Akses Khusus HR */}
+              {isHR && (
+                <div className="space-y-3 pt-3 border-t border-slate-100">
+                  <div className="flex items-center justify-between">
+                    <div className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
+                      <History className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Catatan & Riwayat Perubahan (Timeline Notes)</span>
+                      <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-mono-code font-bold text-[10px] border border-blue-200">
+                        {existingNotes.length} Catatan
+                      </span>
+                      <span className="px-1.5 py-0.2 rounded-full bg-amber-50 text-amber-700 font-mono-code text-[9px] font-semibold border border-amber-200">
+                        Khusus HR
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 font-medium hidden sm:inline">
+                      Tercatat kronologis & terarsip otomatis
                     </span>
                   </div>
-                  <span className="text-[10px] text-slate-400 font-medium hidden sm:inline">
-                    Tercatat kronologis & terarsip otomatis
-                  </span>
-                </div>
 
-                {/* Input Note Baru */}
-                <div className="bg-gradient-to-br from-blue-50/50 via-indigo-50/30 to-slate-50 p-3 rounded-2xl border border-blue-100 space-y-2">
-                  <label className="text-[10px] font-bold text-slate-700 uppercase flex items-center gap-1.5">
-                    <MessageSquare className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Tulis Catatan Perubahan Baru</span>
-                    <span className="text-slate-400 font-normal lowercase">(opsional • tersimpan otomatis)</span>
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={newNoteText}
-                    onChange={e => setNewNoteText(e.target.value)}
-                    placeholder="Tulis catatan (contoh: Penyesuaian gaji setelah masa probation, mutasi ke proyek Sorowako, promosi jabatan, dll)..."
-                    className="w-full glass-input rounded-xl px-3 py-2 text-xs bg-white border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-slate-800 placeholder:text-slate-400 resize-none transition-all font-sans"
-                  />
-                  {newNoteText.trim() && (
-                    <div className="flex items-center justify-between pt-1">
-                      <span className="text-[10px] text-blue-700 font-medium flex items-center gap-1">
-                        <Check className="w-3 h-3 text-blue-600" />
-                        Dicatat atas nama <strong>{currentUser?.name || 'Administrator'}</strong>
-                      </span>
-                      <button
-                        type="button"
-                        onClick={handleAddQuickNote}
-                        className="px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] flex items-center gap-1 transition-all cursor-pointer shadow-2xs active:scale-95"
-                      >
-                        <Plus className="w-3 h-3" />
-                        <span>Sisipkan ke Timeline</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
+                  {/* Input Note Baru */}
+                  <div className="bg-gradient-to-br from-blue-50/50 via-indigo-50/30 to-slate-50 p-3 rounded-2xl border border-blue-100 space-y-2">
+                    <label className="text-[10px] font-bold text-slate-700 uppercase flex items-center gap-1.5">
+                      <MessageSquare className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Tulis Catatan Perubahan Baru</span>
+                      <span className="text-slate-400 font-normal lowercase">(opsional • tersimpan otomatis)</span>
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={newNoteText}
+                      onChange={e => setNewNoteText(e.target.value)}
+                      placeholder="Tulis catatan (contoh: Penyesuaian gaji setelah masa probation, mutasi ke proyek Sorowako, promosi jabatan, dll)..."
+                      className="w-full glass-input rounded-xl px-3 py-2 text-xs bg-white border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-slate-800 placeholder:text-slate-400 resize-none transition-all font-sans"
+                    />
+                    {newNoteText.trim() && (
+                      <div className="flex items-center justify-between pt-1">
+                        <span className="text-[10px] text-blue-700 font-medium flex items-center gap-1">
+                          <Check className="w-3 h-3 text-blue-600" />
+                          Dicatat atas nama <strong>{currentUser?.name || 'Administrator'}</strong>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handleAddQuickNote}
+                          className="px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] flex items-center gap-1 transition-all cursor-pointer shadow-2xs active:scale-95"
+                        >
+                          <Plus className="w-3 h-3" />
+                          <span>Sisipkan ke Timeline</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
 
-                {/* Timeline List */}
-                <div className="space-y-2 max-h-56 overflow-y-auto custom-scrollbar pr-1">
-                  {existingNotes.length === 0 ? (
-                    <div className="text-center py-4 px-3 bg-slate-50/70 rounded-2xl border border-dashed border-slate-200">
-                      <Clock className="w-5 h-5 text-slate-300 mx-auto mb-1" />
-                      <p className="text-xs font-semibold text-slate-600">Belum Ada Riwayat Catatan</p>
-                      <p className="text-[10.5px] text-slate-400 mt-0.5">
-                        Catatan dan riwayat perubahan parameter karyawan akan terarsip rapi di timeline ini.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="relative pl-5 space-y-2.5 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-blue-200">
-                      {existingNotes.map((item, idx) => (
-                        <div key={item.id || idx} className="relative group">
-                          {/* Timeline node badge */}
-                          <div className="absolute -left-5 top-1.5 w-2.5 h-2.5 rounded-full bg-blue-600 ring-4 ring-blue-50 group-hover:scale-125 transition-transform" />
-                          
-                          <div className="bg-white p-2.5 rounded-xl border border-slate-200/90 shadow-2xs space-y-1 hover:border-blue-300 transition-colors">
-                            <div className="flex items-center justify-between gap-2 flex-wrap">
-                              <div className="flex items-center gap-1.5 min-w-0">
-                                <span className="font-bold text-slate-900 text-[11px] truncate">
-                                  {item.authorName || 'Administrator'}
-                                </span>
-                                {item.authorRole && (
-                                  <span className="px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 text-[9px] font-mono-code font-semibold">
-                                    {item.authorRole}
+                  {/* Timeline List */}
+                  <div className="space-y-2 max-h-56 overflow-y-auto custom-scrollbar pr-1">
+                    {existingNotes.length === 0 ? (
+                      <div className="text-center py-4 px-3 bg-slate-50/70 rounded-2xl border border-dashed border-slate-200">
+                        <Clock className="w-5 h-5 text-slate-300 mx-auto mb-1" />
+                        <p className="text-xs font-semibold text-slate-600">Belum Ada Riwayat Catatan</p>
+                        <p className="text-[10.5px] text-slate-400 mt-0.5">
+                          Catatan dan riwayat perubahan parameter karyawan akan terarsip rapi di timeline ini.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="relative pl-5 space-y-2.5 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-blue-200">
+                        {existingNotes.map((item, idx) => (
+                          <div key={item.id || idx} className="relative group">
+                            {/* Timeline node badge */}
+                            <div className="absolute -left-5 top-1.5 w-2.5 h-2.5 rounded-full bg-blue-600 ring-4 ring-blue-50 group-hover:scale-125 transition-transform" />
+                            
+                            <div className="bg-white p-2.5 rounded-xl border border-slate-200/90 shadow-2xs space-y-1 hover:border-blue-300 transition-colors">
+                              <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <span className="font-bold text-slate-900 text-[11px] truncate">
+                                    {item.authorName || 'Administrator'}
                                   </span>
-                                )}
+                                  {item.authorRole && (
+                                    <span className="px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 text-[9px] font-mono-code font-semibold">
+                                      {item.authorRole}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[9.5px] font-mono-code text-slate-400 whitespace-nowrap">
+                                    {item.createdAt}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteNote(item.id)}
+                                    className="text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded cursor-pointer"
+                                    title="Hapus catatan ini"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                </div>
                               </div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-[9.5px] font-mono-code text-slate-400 whitespace-nowrap">
-                                  {item.createdAt}
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteNote(item.id)}
-                                  className="text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded cursor-pointer"
-                                  title="Hapus catatan ini"
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
-                              </div>
+
+                              {item.changesSummary && (
+                                <div className="bg-blue-50/80 px-2 py-1 rounded-lg border border-blue-100 text-[10px] text-blue-800 font-mono-code">
+                                  <span className="font-bold">⚡ Deteksi Perubahan:</span> {item.changesSummary}
+                                </div>
+                              )}
+
+                              <p className="text-xs text-slate-700 whitespace-pre-line leading-relaxed font-sans">
+                                {item.note}
+                              </p>
                             </div>
-
-                            {item.changesSummary && (
-                              <div className="bg-blue-50/80 px-2 py-1 rounded-lg border border-blue-100 text-[10px] text-blue-800 font-mono-code">
-                                <span className="font-bold">⚡ Deteksi Perubahan:</span> {item.changesSummary}
-                              </div>
-                            )}
-
-                            <p className="text-xs text-slate-700 whitespace-pre-line leading-relaxed font-sans">
-                              {item.note}
-                            </p>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Action Buttons */}
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">

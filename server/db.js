@@ -825,6 +825,15 @@ export function getAllData(targetUser = null) {
     }
   } catch (e) {}
 
+  const userSysRole = String(targetUser?.systemRole || targetUser?.system_role || '').toLowerCase();
+  const isHRUser = Boolean(
+    targetUser && (
+      ['superuser', 'admin', 'hr'].includes(userSysRole) ||
+      String(targetUser?.role || '').toLowerCase().includes('director') ||
+      String(targetUser?.role || '').toLowerCase().includes('hr')
+    )
+  );
+
   let employees = db.prepare('SELECT id, assignedProjectId, data_json FROM employees ORDER BY name ASC;').all().map(r => {
     let emp = {};
     try { emp = JSON.parse(r.data_json); } catch (e) {}
@@ -861,6 +870,10 @@ export function getAllData(targetUser = null) {
         ...cleanBiometric,
         hasSamples: true
       };
+    }
+    // RBAC: Notes timeline is strictly confidential to HR / Admin / Superuser
+    if (!isHRUser && emp.notes) {
+      delete emp.notes;
     }
     return emp;
   });
@@ -2766,25 +2779,64 @@ export function getEmployeeProjectSchedule(employeeOrId, fallbackRules = null) {
 export function saveEmployee(emp, operatorUser = null) {
   const db = getDatabase();
 
-  // If this is a self-update by non-privileged user, safeguard administrative fields
-  if (operatorUser && !['admin', 'superuser', 'hr'].includes(operatorUser.systemRole)) {
+  // Domain-specific RBAC safeguards:
+  // 1. Finance Authority: only Finance & Superuser can view/modify bank account, salary, and allowances
+  // 2. HR Authority: only HR & Superuser can view/modify position, department, contract, project, and notes
+  const operatorSysRole = String(operatorUser?.systemRole || operatorUser?.system_role || '').toLowerCase();
+  const operatorIsSuper = Boolean(
+    operatorUser && (
+      operatorSysRole === 'superuser' ||
+      String(operatorUser?.role || '').toLowerCase().includes('director') ||
+      operatorUser?.id === 'EMP-001'
+    )
+  );
+  const operatorIsFinance = Boolean(
+    operatorUser && (
+      operatorIsSuper ||
+      operatorSysRole === 'finance' ||
+      String(operatorUser?.role || '').toLowerCase().includes('finance')
+    )
+  );
+  const operatorIsHR = Boolean(
+    operatorUser && (
+      operatorIsSuper ||
+      ['admin', 'hr'].includes(operatorSysRole) ||
+      String(operatorUser?.role || '').toLowerCase().includes('hr')
+    )
+  );
+
+  if (operatorUser && (!operatorIsFinance || !operatorIsHR)) {
     const existing = db.prepare('SELECT role, department, position, assignedProjectId, baseSalary, fixedAllowance, dailyAllowance, leaveQuota, usedLeave, data_json FROM employees WHERE id = ?;').get(emp.id);
     if (existing) {
       let ex = {};
       try { ex = JSON.parse(existing.data_json); } catch (e) {}
-      emp.role = ex.role || existing.role || emp.role;
-      emp.systemRole = ex.systemRole || emp.systemRole;
-      emp.baseSalary = ex.baseSalary !== undefined ? ex.baseSalary : existing.baseSalary;
-      emp.fixedAllowance = ex.fixedAllowance !== undefined ? ex.fixedAllowance : existing.fixedAllowance;
-      emp.dailyAllowance = ex.dailyAllowance !== undefined ? ex.dailyAllowance : existing.dailyAllowance;
-      emp.leaveQuota = ex.leaveQuota !== undefined ? ex.leaveQuota : existing.leaveQuota;
-      emp.usedLeave = ex.usedLeave !== undefined ? ex.usedLeave : existing.usedLeave;
-      emp.assignedProjectId = ex.assignedProjectId || existing.assignedProjectId;
-      emp.status = ex.status || 'ACTIVE';
-      if (emp.maritalStatus === undefined && ex.maritalStatus !== undefined) emp.maritalStatus = ex.maritalStatus;
-      if (emp.dependents === undefined && ex.dependents !== undefined) emp.dependents = ex.dependents;
-      if (emp.ptkpStatus === undefined && ex.ptkpStatus !== undefined) emp.ptkpStatus = ex.ptkpStatus;
-      if (emp.npwpNumber === undefined && ex.npwpNumber !== undefined) emp.npwpNumber = ex.npwpNumber;
+
+      // Non-Finance safeguard: keep existing compensation & bank credentials
+      if (!operatorIsFinance) {
+        emp.baseSalary = ex.baseSalary !== undefined ? ex.baseSalary : existing.baseSalary;
+        emp.fixedAllowance = ex.fixedAllowance !== undefined ? ex.fixedAllowance : existing.fixedAllowance;
+        emp.dailyAllowance = ex.dailyAllowance !== undefined ? ex.dailyAllowance : existing.dailyAllowance;
+        emp.bankAccount = ex.bankAccount || (existing.bankAccount ? JSON.parse(existing.bankAccount) : emp.bankAccount);
+      }
+
+      // Non-HR safeguard: keep existing HR metadata & notes
+      if (!operatorIsHR) {
+        emp.role = ex.role || existing.role || emp.role;
+        emp.systemRole = ex.systemRole || emp.systemRole;
+        emp.leaveQuota = ex.leaveQuota !== undefined ? ex.leaveQuota : existing.leaveQuota;
+        emp.usedLeave = ex.usedLeave !== undefined ? ex.usedLeave : existing.usedLeave;
+        emp.assignedProjectId = ex.assignedProjectId || existing.assignedProjectId;
+        emp.status = ex.status || 'ACTIVE';
+        if (emp.maritalStatus === undefined && ex.maritalStatus !== undefined) emp.maritalStatus = ex.maritalStatus;
+        if (emp.dependents === undefined && ex.dependents !== undefined) emp.dependents = ex.dependents;
+        if (emp.ptkpStatus === undefined && ex.ptkpStatus !== undefined) emp.ptkpStatus = ex.ptkpStatus;
+        if (emp.npwpNumber === undefined && ex.npwpNumber !== undefined) emp.npwpNumber = ex.npwpNumber;
+        if (ex.notes) {
+          emp.notes = ex.notes;
+        } else {
+          delete emp.notes;
+        }
+      }
     }
   }
 

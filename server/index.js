@@ -1640,7 +1640,7 @@ const server = http.createServer(async (req, res) => {
         }
         const sysRole = String(user?.systemRole || '').toLowerCase();
         const uRole = String(user?.role || '').toLowerCase();
-        const isPrivileged = ['admin', 'superuser', 'hr'].includes(sysRole) || uRole.includes('director') || uRole.includes('hr');
+        const isPrivileged = ['admin', 'superuser', 'hr', 'finance'].includes(sysRole) || uRole.includes('director') || uRole.includes('hr') || uRole.includes('finance');
         const isSelf = Boolean(
           (user.employeeId && user.employeeId === body?.id) ||
           (user.id && user.id === body?.id) ||
@@ -1650,7 +1650,7 @@ const server = http.createServer(async (req, res) => {
           (user.email && body?.email && user.email.toLowerCase() === body.email.toLowerCase())
         );
         if (!isPrivileged && !isSelf) {
-          return sendJson(403, { success: false, error: 'Forbidden: Hak akses Admin, HR, atau Superuser diperlukan' });
+          return sendJson(403, { success: false, error: 'Forbidden: Hak akses Admin, HR, Finance, atau Superuser diperlukan' });
         }
         const clientIp = getClientIp(req);
         const result = saveEmployee(body, { ...user, clientIp });
