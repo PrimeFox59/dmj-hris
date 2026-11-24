@@ -293,3 +293,54 @@ export function canAccessDatabaseModule(
   return false;
 }
 
+/**
+ * Check whether an approval item has a genuine document attachment (PDF, medical cert, leave proof, etc.)
+ * Attendance-based approvals (geofence, late justification, early checkout, tanpa absen)
+ * are telemetry events whose selfie photo is attendance verification, NOT a document attachment.
+ */
+export function hasDocumentAttachment(item?: ApprovalItem | null): boolean {
+  if (!item) return false;
+
+  // 1. Explicit attendance types NEVER show "Lampiran"
+  if (
+    item.type === 'OUT_OF_GEOFENCE' ||
+    item.type === 'LATE_JUSTIFICATION' ||
+    item.type === 'EARLY_CHECKOUT'
+  ) {
+    return false;
+  }
+
+  // 2. Attendance-based titles or automatic correction without explicit document name
+  const titleLower = (item.title || '').toLowerCase();
+  if (
+    titleLower.includes('luar area') ||
+    titleLower.includes('keterlambatan') ||
+    titleLower.includes('tanpa absen') ||
+    titleLower.includes('pulang awal') ||
+    titleLower.includes('pulang lebih awal')
+  ) {
+    return false;
+  }
+
+  // 3. For ATTENDANCE_CORRECTION, only consider as having attachment if user uploaded a document (attachmentName exists and not selfie)
+  if (item.type === 'ATTENDANCE_CORRECTION' && !item.attachmentName) {
+    return false;
+  }
+
+  // 4. Must have proofAttachment, attachmentUrl, or hasAttachment
+  const hasProof = Boolean(item.proofAttachment || (item as any).attachmentUrl || item.hasAttachment);
+  if (!hasProof) return false;
+
+  // 5. Permitted document categories: LEAVE (Cuti), PERMIT (Izin/Sakit), KASBON, SLIP_ACCESS, or manual correction with attachmentName
+  return Boolean(
+    item.type === 'LEAVE' ||
+    item.type === 'PERMIT' ||
+    item.type === 'KASBON' ||
+    item.type === 'SLIP_ACCESS' ||
+    (item.type === 'ATTENDANCE_CORRECTION' && Boolean(item.attachmentName)) ||
+    Boolean(item.hasDoctorNote) ||
+    Boolean(item.attachmentName)
+  );
+}
+
+

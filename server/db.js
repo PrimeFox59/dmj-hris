@@ -554,6 +554,45 @@ try {
     console.warn('[SQLite] Failed migration of maritalStatus / ptkpStatus in employees:', errPtkpSync.message);
   }
 
+  // Cleanup historical approvals: Strip proofAttachment from attendance-based approvals (geofence, late, early checkout, tanpa absen)
+  try {
+    const appRows = db.prepare(`
+      SELECT id, type, title, data_json FROM approvals 
+      WHERE type IN ('OUT_OF_GEOFENCE', 'LATE_JUSTIFICATION', 'EARLY_CHECKOUT')
+         OR title LIKE '%Luar Area%'
+         OR title LIKE '%Keterlambatan%'
+         OR title LIKE '%Tanpa Absen%'
+         OR title LIKE '%Pulang Awal%'
+         OR title LIKE '%Pulang Lebih Awal%';
+    `).all();
+
+    const updateAppStmt = db.prepare('UPDATE approvals SET data_json = ? WHERE id = ?;');
+    for (const r of appRows) {
+      try {
+        const item = JSON.parse(r.data_json);
+        let changed = false;
+        if (item.proofAttachment) {
+          item.attendancePhotoUrl = item.attendancePhotoUrl || item.proofAttachment;
+          delete item.proofAttachment;
+          changed = true;
+        }
+        if (item.hasAttachment) {
+          item.hasAttachment = false;
+          changed = true;
+        }
+        if (item.attachmentUrl) {
+          delete item.attachmentUrl;
+          changed = true;
+        }
+        if (changed) {
+          updateAppStmt.run(JSON.stringify(item), r.id);
+        }
+      } catch (e) {}
+    }
+  } catch (errAppMig) {
+    console.warn('[SQLite] Failed migration of attendance approvals proofAttachment:', errAppMig.message);
+  }
+
   const empCount = db.prepare('SELECT count(*) as count FROM employees;').get()?.count || 0;
   if (empCount === 0) {
     seedInitialData(db);
@@ -986,13 +1025,38 @@ export function getAllData(targetUser = null) {
   let approvals = appRows.map(r => {
     let item = {};
     try { item = JSON.parse(r.data_json); } catch (e) {}
-    if (item.proofAttachment && (item.proofAttachment.startsWith('data:') || item.proofAttachment.length > 500)) {
-      item.hasAttachment = true;
-      item.attachmentUrl = `/api/approval/${r.id || item.id}/attachment`;
-      item.proofAttachment = `/api/approval/${r.id || item.id}/attachment`;
-    } else if (item.proofAttachment) {
-      item.hasAttachment = true;
-      item.attachmentUrl = item.proofAttachment;
+
+    // Attendance-based approvals (geofence, late, early checkout, tanpa absen)
+    // NEVER show document attachment labels or buttons; their selfie photo is attendance telemetry, not document proof
+    const isAttendanceApproval = 
+      item.type === 'OUT_OF_GEOFENCE' ||
+      item.type === 'LATE_JUSTIFICATION' ||
+      item.type === 'EARLY_CHECKOUT' ||
+      (item.type === 'ATTENDANCE_CORRECTION' && !item.attachmentName && Boolean(item.attendanceRecordId)) ||
+      (item.title && (
+        item.title.toLowerCase().includes('luar area') ||
+        item.title.toLowerCase().includes('keterlambatan') ||
+        item.title.toLowerCase().includes('tanpa absen') ||
+        item.title.toLowerCase().includes('pulang awal') ||
+        item.title.toLowerCase().includes('pulang lebih awal')
+      ));
+
+    if (isAttendanceApproval) {
+      if (item.proofAttachment) {
+        item.attendancePhotoUrl = item.attendancePhotoUrl || item.proofAttachment;
+        delete item.proofAttachment;
+      }
+      item.hasAttachment = false;
+      delete item.attachmentUrl;
+    } else {
+      if (item.proofAttachment && (item.proofAttachment.startsWith('data:') || item.proofAttachment.length > 500)) {
+        item.hasAttachment = true;
+        item.attachmentUrl = `/api/approval/${r.id || item.id}/attachment`;
+        item.proofAttachment = `/api/approval/${r.id || item.id}/attachment`;
+      } else if (item.proofAttachment) {
+        item.hasAttachment = true;
+        item.attachmentUrl = item.proofAttachment;
+      }
     }
     // Canonical Login ID resolution from Master Data (SSOT)
     const canonicalLoginId = (item.employeeId === 'EMP-001')
@@ -1830,7 +1894,7 @@ export function saveAttendance(record) {
         targetCheckOutTime: finalCheckOut || undefined,
         targetStatus: isOutOfGeofence ? 'OUT_OF_GEOFENCE' : finalStatus,
         attendanceRecordId: targetId,
-        proofAttachment: record.photoUrl,
+        attendancePhotoUrl: record.photoUrl || undefined,
         status: 'PENDING',
         submittedAt: `${record.date} ${finalCheckIn || ''}`,
         projectId: projInfo?.projectId || record.projectId || null,
@@ -1942,7 +2006,7 @@ export function saveAttendance(record) {
         targetCheckOutTime: finalCheckOut || undefined,
         targetStatus: isMissingCheckIn ? 'ALPA' : (finalStatus || 'ON_TIME'),
         attendanceRecordId: targetId,
-        proofAttachment: record.photoOutUrl || record.photoUrl,
+        attendancePhotoUrl: record.photoOutUrl || record.photoUrl || undefined,
         status: 'PENDING',
         submittedAt: `${record.date} ${finalCheckOut || ''}`,
         projectId: projInfo?.projectId || record.projectId || null,
@@ -2457,6 +2521,30 @@ export function updateApproval(id, status, reviewNote, reviewedBy = 'Direksi / H
 
 export function saveApproval(item) {
   const db = getDatabase();
+
+  // Attendance-based approvals (geofence, late, early checkout, tanpa absen)
+  // NEVER treat selfie photo as document attachment
+  const isAttendanceApproval = 
+    item.type === 'OUT_OF_GEOFENCE' ||
+    item.type === 'LATE_JUSTIFICATION' ||
+    item.type === 'EARLY_CHECKOUT' ||
+    (item.type === 'ATTENDANCE_CORRECTION' && !item.attachmentName && Boolean(item.attendanceRecordId)) ||
+    (item.title && (
+      item.title.toLowerCase().includes('luar area') ||
+      item.title.toLowerCase().includes('keterlambatan') ||
+      item.title.toLowerCase().includes('tanpa absen') ||
+      item.title.toLowerCase().includes('pulang awal') ||
+      item.title.toLowerCase().includes('pulang lebih awal')
+    ));
+
+  if (isAttendanceApproval) {
+    if (item.proofAttachment) {
+      item.attendancePhotoUrl = item.attendancePhotoUrl || item.proofAttachment;
+      delete item.proofAttachment;
+    }
+    item.hasAttachment = false;
+    delete item.attachmentUrl;
+  }
 
   // Smart Sick Leave & Leave Quota Gatekeeper
   const isSickLeave = item.leaveType === 'CUTI_SAKIT' || (item.title && item.title.toLowerCase().includes('sakit'));

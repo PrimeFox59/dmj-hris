@@ -575,13 +575,38 @@ export function getAllData() {
   const approvals: ApprovalItem[] = (db.prepare('SELECT id, data_json FROM approvals ORDER BY submittedAt DESC LIMIT 300;').all() as any[])
     .map(row => {
       const item = JSON.parse(row.data_json);
-      if (item.proofAttachment && (item.proofAttachment.startsWith('data:') || item.proofAttachment.length > 500)) {
-        item.hasAttachment = true;
-        item.attachmentUrl = `/api/approval/${row.id || item.id}/attachment`;
-        item.proofAttachment = `/api/approval/${row.id || item.id}/attachment`;
-      } else if (item.proofAttachment) {
-        item.hasAttachment = true;
-        item.attachmentUrl = item.proofAttachment;
+
+      // Attendance-based approvals (geofence, late, early checkout, tanpa absen)
+      // NEVER show document attachment labels or buttons; their selfie photo is attendance telemetry, not document proof
+      const isAttendanceApproval = 
+        item.type === 'OUT_OF_GEOFENCE' ||
+        item.type === 'LATE_JUSTIFICATION' ||
+        item.type === 'EARLY_CHECKOUT' ||
+        (item.type === 'ATTENDANCE_CORRECTION' && !item.attachmentName && Boolean(item.attendanceRecordId)) ||
+        (item.title && (
+          item.title.toLowerCase().includes('luar area') ||
+          item.title.toLowerCase().includes('keterlambatan') ||
+          item.title.toLowerCase().includes('tanpa absen') ||
+          item.title.toLowerCase().includes('pulang awal') ||
+          item.title.toLowerCase().includes('pulang lebih awal')
+        ));
+
+      if (isAttendanceApproval) {
+        if (item.proofAttachment) {
+          item.attendancePhotoUrl = item.attendancePhotoUrl || item.proofAttachment;
+          delete item.proofAttachment;
+        }
+        item.hasAttachment = false;
+        delete item.attachmentUrl;
+      } else {
+        if (item.proofAttachment && (item.proofAttachment.startsWith('data:') || item.proofAttachment.length > 500)) {
+          item.hasAttachment = true;
+          item.attachmentUrl = `/api/approval/${row.id || item.id}/attachment`;
+          item.proofAttachment = `/api/approval/${row.id || item.id}/attachment`;
+        } else if (item.proofAttachment) {
+          item.hasAttachment = true;
+          item.attachmentUrl = item.proofAttachment;
+        }
       }
       const canonicalLoginId = (item.employeeId === 'EMP-001')
         ? 'admin'
@@ -910,7 +935,7 @@ export function saveAttendance(record: AttendanceRecord): {
         targetCheckOutTime: isEarlyCheckOut ? record.checkOutTime : (record.checkOutTime || undefined),
         targetStatus: isOutOfGeofence ? 'OUT_OF_GEOFENCE' : (record.status || 'ON_TIME'),
         attendanceRecordId: record.id,
-        proofAttachment: isEarlyCheckOut ? (record.photoOutUrl || record.photoUrl) : record.photoUrl,
+        attendancePhotoUrl: isEarlyCheckOut ? (record.photoOutUrl || record.photoUrl) : record.photoUrl,
         status: 'PENDING',
         submittedAt: `${record.date} ${isEarlyCheckOut ? (record.checkOutTime || '') : (record.checkInTime || '')}`,
         projectId: projInfo?.projectId || record.projectId,

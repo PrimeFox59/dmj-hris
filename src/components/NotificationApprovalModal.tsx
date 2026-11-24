@@ -40,7 +40,8 @@ import { Employee, ApprovalItem, LeaveType, SystemRole, getEffectiveSystemRole, 
 import { 
   isItemWithinUserAuthority, 
   isFinanceEmployee, 
-  UserAuthorityContext 
+  UserAuthorityContext,
+  hasDocumentAttachment
 } from '../utils/approvalAuthorityHelper';
 import { 
   getNotificationPermission, 
@@ -1122,7 +1123,7 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
                     </div>
                   )}
 
-                  {activeReviewAction.item.proofAttachment && (
+                  {hasDocumentAttachment(activeReviewAction.item) && (
                     <div className="p-2.5 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0">
                         <Paperclip className="w-4 h-4 text-indigo-600 shrink-0" />
@@ -1136,7 +1137,7 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
                       <button
                         type="button"
                         onClick={() => setViewingDocument({
-                          url: activeReviewAction.item.proofAttachment!,
+                          url: (activeReviewAction.item.proofAttachment || (activeReviewAction.item as any).attachmentUrl)!,
                           name: activeReviewAction.item.attachmentName || 'Dokumen Bukti',
                           type: activeReviewAction.item.attachmentType,
                           title: activeReviewAction.item.title,
@@ -1346,7 +1347,7 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
                           )}
 
                           {/* Dokumen Bukti Lampiran (Bisa Dilihat oleh PM maupun HR) */}
-                          {item.proofAttachment && (
+                          {hasDocumentAttachment(item) && (
                             <div className="mt-1.5 flex items-center justify-between gap-2 p-2 rounded-xl bg-indigo-50/80 border border-indigo-200 text-xs">
                               <div className="flex items-center gap-1.5 min-w-0">
                                 <Paperclip className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
@@ -1357,7 +1358,7 @@ export const NotificationApprovalModal: React.FC<NotificationApprovalModalProps>
                               <button
                                 type="button"
                                 onClick={() => setViewingDocument({
-                                  url: item.proofAttachment!,
+                                  url: (item.proofAttachment || (item as any).attachmentUrl)!,
                                   name: item.attachmentName || 'Dokumen Bukti',
                                   type: item.attachmentType,
                                   title: item.title,

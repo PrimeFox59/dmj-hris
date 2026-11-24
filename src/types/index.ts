@@ -461,6 +461,7 @@ export interface ApprovalItem {
   isEarlySubmission?: boolean;
   earlyReason?: string;
   proofAttachment?: string;
+  attendancePhotoUrl?: string;
   attachmentName?: string;
   attachmentType?: string;
   attachmentSize?: number;

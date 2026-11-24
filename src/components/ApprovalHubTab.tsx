@@ -46,7 +46,8 @@ import {
   isHrManager as checkIsHrManager, 
   isItemWithinUserAuthority, 
   canUserApproveItem as checkUserCanApprove, 
-  UserAuthorityContext 
+  UserAuthorityContext,
+  hasDocumentAttachment
 } from '../utils/approvalAuthorityHelper';
 import { LeaveGanttChartTab } from './LeaveGanttChartTab';
 import { DocumentAttachmentUpload, DocumentAttachmentData } from './DocumentAttachmentUpload';
@@ -1657,13 +1658,13 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                               )
                             )}
 
-                            {item.proofAttachment && (
+                            {hasDocumentAttachment(item) && (
                               <button
                                 type="button"
                                 onClick={e => {
                                   e.stopPropagation();
                                   setViewingDocument({
-                                    url: item.proofAttachment!,
+                                    url: (item.proofAttachment || (item as any).attachmentUrl)!,
                                     name: item.attachmentName || 'Dokumen Bukti Lampiran',
                                     type: item.attachmentType,
                                     title: item.title,
@@ -1935,7 +1936,7 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
             </p>
 
             {/* Dokumen Bukti Lampiran untuk Ditinjau oleh Reviewer (PM / HR) */}
-            {reviewModalItem.item.proofAttachment && (
+            {hasDocumentAttachment(reviewModalItem.item) && (
               <div className="p-3 rounded-2xl bg-indigo-50/80 border border-indigo-200 flex items-center justify-between gap-2 animate-in fade-in">
                 <div className="flex items-center gap-2 min-w-0">
                   <Paperclip className="w-4 h-4 text-indigo-600 shrink-0" />
@@ -1951,7 +1952,7 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                 <button
                   type="button"
                   onClick={() => setViewingDocument({
-                    url: reviewModalItem.item.proofAttachment!,
+                    url: (reviewModalItem.item.proofAttachment || (reviewModalItem.item as any).attachmentUrl)!,
                     name: reviewModalItem.item.attachmentName || 'Dokumen Bukti',
                     type: reviewModalItem.item.attachmentType,
                     title: reviewModalItem.item.title,
@@ -3381,7 +3382,7 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                 )}
               </div>
 
-              {detailModalItem.proofAttachment && (
+              {hasDocumentAttachment(detailModalItem) && (
                 <div className="pt-2 border-t border-slate-200/60 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-slate-700 font-bold text-xs flex items-center gap-1.5">
@@ -3391,7 +3392,7 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                     <button
                       type="button"
                       onClick={() => setViewingDocument({
-                        url: detailModalItem.proofAttachment!,
+                        url: (detailModalItem.proofAttachment || (detailModalItem as any).attachmentUrl)!,
                         name: detailModalItem.attachmentName || 'Dokumen Bukti',
                         type: detailModalItem.attachmentType,
                         title: detailModalItem.title,
