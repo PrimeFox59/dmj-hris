@@ -320,9 +320,12 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
       setNewTitle(`Koreksi Absensi: ${formatIndonesianDateDisplay(correctionDate)}`);
       setNewDescription('');
     } else if (type === 'LEAVE') {
-      setNewTitle(newLeaveType === 'CUTI_ROSTER_NON_LOKAL' ? 'Permohonan Cuti Roster' : 'Permohonan Cuti Tahunan');
+      const defaultLeaveType: LeaveType = (newLeaveType === 'CUTI_ROSTER_NON_LOKAL' || currentUser.workLocationType === 'NON_LOKAL') ? 'CUTI_ROSTER_NON_LOKAL' : 'CUTI_TAHUNAN';
+      setNewLeaveType(defaultLeaveType);
+      setNewTitle(defaultLeaveType === 'CUTI_ROSTER_NON_LOKAL' ? 'Permohonan Cuti Roster' : 'Permohonan Cuti Tahunan');
       setNewDescription('Keperluan cuti kerja tahunan / roster.');
     } else {
+      setNewLeaveType('IZIN_KEPERLUAN_PRIBADI');
       setNewTitle('Permohonan Izin Resmi');
       setNewDescription('Izin resmi / keperluan penting.');
     }
@@ -2131,43 +2134,9 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
 
             <form onSubmit={handleCreateRequest} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <div>
-                  <label className="text-[10px] font-bold text-slate-600 uppercase">Kategori Permohonan</label>
-                  <select
-                    value={newRequestType}
-                    onChange={e => {
-                      const val = e.target.value as 'LEAVE' | 'PERMIT' | 'ATTENDANCE_CORRECTION' | 'KASBON';
-                      setNewRequestType(val);
-                      if (val === 'KASBON') {
-                        setNewTitle(`Pengajuan Kasbon Pribadi: Rp ${kasbonAmount.toLocaleString('id-ID')}`);
-                        setNewDescription('Kebutuhan operasional / mendesak keluarga');
-                      } else if (val === 'ATTENDANCE_CORRECTION') {
-                        setNewTitle(`Koreksi Absensi: ${formatIndonesianDateDisplay(correctionDate)}`);
-                      } else if (val === 'LEAVE') {
-                        setNewTitle(newLeaveType === 'CUTI_ROSTER_NON_LOKAL' ? 'Permohonan Cuti Roster' : 'Permohonan Cuti Tahunan');
-                      } else {
-                        setNewTitle('Permohonan Izin Resmi');
-                      }
-                    }}
-                    className="w-full glass-input rounded-xl px-3 py-2 text-xs text-slate-800"
-                  >
-                    <option value="LEAVE">Cuti Kerja (Tahunan & Roster)</option>
-                    <option value="PERMIT">Izin Resmi / Sakit / Pribadi</option>
-                    <option value="ATTENDANCE_CORRECTION">📝 Koreksi Absensi Mandiri (Lupa / Kendala Site)</option>
-                    <option value="KASBON">💳 Kasbon Pribadi (Pinjaman & Potongan Payroll)</option>
-                  </select>
-                </div>
-                {newRequestType === 'KASBON' ? (
+                {newRequestType === 'LEAVE' && (
                   <div>
-                    <label className="text-[10px] font-bold text-emerald-800 uppercase">Rute Approver Sistem</label>
-                    <div className="w-full rounded-xl px-3 py-2 text-xs font-mono-code bg-emerald-50 border border-emerald-200 text-emerald-900 font-bold flex items-center gap-1.5 truncate">
-                      <CreditCard className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                      <span className="truncate">Divisi Finance (Otorisasi Kasbon)</span>
-                    </div>
-                  </div>
-                ) : newRequestType !== 'ATTENDANCE_CORRECTION' ? (
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-600 uppercase">Jenis Cuti / Izin</label>
+                    <label className="text-[10px] font-bold text-slate-600 uppercase">Jenis Cuti</label>
                     <select
                       value={newLeaveType}
                       onChange={e => {
@@ -2188,31 +2157,66 @@ export const ApprovalHubTab: React.FC<ApprovalHubTabProps> = ({
                     >
                       <option value="CUTI_TAHUNAN">Cuti Tahunan (Potong Jatah)</option>
                       <option value="CUTI_ROSTER_NON_LOKAL">✈️ Cuti Roster Non-Lokal (Jatah Tiap 3 Bulan)</option>
-                      <option value="CUTI_SAKIT">Cuti Sakit</option>
                       <option value="CUTI_MELAHIRKAN">Cuti Melahirkan</option>
                       <option value="CUTI_MENIKAH">Cuti Menikah</option>
-                      <option value="IZIN_KEPERLUAN_PRIBADI">Izin Pribadi</option>
+                      <option value="CUTI_BESAR">Cuti Besar</option>
+                    </select>
+                  </div>
+                )}
+
+                {newRequestType === 'PERMIT' && (
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-600 uppercase">Jenis Izin / Sakit</label>
+                    <select
+                      value={newLeaveType}
+                      onChange={e => {
+                        const val = e.target.value as LeaveType;
+                        setNewLeaveType(val);
+                        if (val === 'CUTI_SAKIT') {
+                          setNewTitle('Surat Keterangan Sakit (SKS)');
+                        } else if (val === 'IZIN_DUKA') {
+                          setNewTitle('Izin Duka Cita');
+                        } else {
+                          setNewTitle('Permohonan Izin Resmi / Pribadi');
+                        }
+                      }}
+                      className="w-full glass-input rounded-xl px-3 py-2 text-xs text-slate-800"
+                    >
+                      <option value="CUTI_SAKIT">Cuti Sakit (Dengan Surat Dokter / SKS)</option>
+                      <option value="IZIN_KEPERLUAN_PRIBADI">Izin Keperluan Pribadi</option>
                       <option value="IZIN_DUKA">Izin Duka Cita</option>
                     </select>
                   </div>
-                ) : (
-                  <div>
-                    <label className="text-[10px] font-bold text-teal-800 uppercase">Rute Approver Sistem</label>
-                    <div className="w-full rounded-xl px-3 py-2 text-xs font-mono-code bg-teal-50 border border-teal-200 text-teal-900 font-bold flex items-center gap-1.5 truncate">
-                      {currentUserProject && currentUserProjectManager ? (
-                        <>
-                          <Crown className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                          <span className="truncate">PM: {currentUserProjectManager.name} ({currentUserProject.code})</span>
-                        </>
-                      ) : (
-                        <>
-                          <Building2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                          <span className="truncate">HR Manager Saja (Tanpa Proyek)</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
                 )}
+
+                {/* Rute Approver Sistem */}
+                <div className={newRequestType === 'ATTENDANCE_CORRECTION' || newRequestType === 'KASBON' ? 'sm:col-span-2' : ''}>
+                  <label className={`text-[10px] font-bold uppercase ${newRequestType === 'KASBON' ? 'text-emerald-800' : 'text-slate-600'}`}>
+                    Rute Approver Sistem
+                  </label>
+                  <div className={`w-full rounded-xl px-3 py-2 text-xs font-mono-code font-bold flex items-center gap-1.5 truncate border ${
+                    newRequestType === 'KASBON'
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                      : 'bg-slate-50 border-slate-200 text-slate-800'
+                  }`}>
+                    {newRequestType === 'KASBON' ? (
+                      <>
+                        <CreditCard className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span className="truncate">Divisi Finance (Otorisasi Kasbon)</span>
+                      </>
+                    ) : currentUserProject && currentUserProjectManager ? (
+                      <>
+                        <Crown className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                        <span className="truncate">PM: {currentUserProjectManager.name} ({currentUserProject.code})</span>
+                      </>
+                    ) : (
+                      <>
+                        <Building2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                        <span className="truncate">HR Manager Saja (Tanpa Proyek)</span>
+                      </>
+                    )}
+                  </div>
+                </div>
               </div>
 
               {/* SECTION KHUSUS PENGAJUAN KASBON PRIBADI */}
