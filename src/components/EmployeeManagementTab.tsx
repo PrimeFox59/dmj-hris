@@ -38,9 +38,13 @@ import {
   EyeOff,
   Receipt,
   BadgePercent,
-  FileText
+  FileText,
+  History,
+  MessageSquare,
+  Clock,
+  Plus
 } from 'lucide-react';
-import { Employee, Project, SystemRole, UserRole, getEffectiveSystemRole, BiometricProfile, WorkLocationType, NonLokalLeaveConfig } from '../types';
+import { Employee, Project, SystemRole, UserRole, getEffectiveSystemRole, BiometricProfile, WorkLocationType, NonLokalLeaveConfig, EmployeeNote } from '../types';
 import { formatSalaryDisplay } from '../utils/payrollCalculator';
 import { normalizeMaritalStatus, resolvePtkpStatus, getPtkpDetails, PTKP_OPTIONS, formatPtkpBadge } from '../utils/taxHelper';
 import { api } from '../services/api';
@@ -108,6 +112,9 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
   // Modal State
   const [modalOpen, setModalOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  // Timeline Notes State (Catatan Perubahan Karyawan)
+  const [existingNotes, setExistingNotes] = useState<EmployeeNote[]>([]);
+  const [newNoteText, setNewNoteText] = useState<string>('');
 
   // Non-Lokal / Roster Leave Modal State (HR Manager Control)
   const [rosterModalOpen, setRosterModalOpen] = useState(false);
@@ -339,11 +346,15 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
     setDependentsForm(0);
     setPtkpStatusForm('TK/0');
     setNpwpNumberForm('');
+    setExistingNotes([]);
+    setNewNoteText('');
     setModalOpen(true);
   };
 
   const openEditModal = (emp: Employee) => {
     setEditingEmployee(emp);
+    setExistingNotes(emp.notes || []);
+    setNewNoteText('');
     const nextSuggested = computeNextSequentialLoginId(employees);
     setSuggestedLoginId(nextSuggested);
     let fallbackLoginId = 'd001';
@@ -419,6 +430,77 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
     const cleanDept = department.trim();
     const finalDepartment = canonicalMatch || cleanDept;
 
+    const diffs: string[] = [];
+    if (editingEmployee) {
+      if (Number(editingEmployee.baseSalary) !== Number(baseSalary)) {
+        diffs.push(`Gaji Pokok: Rp ${Number(editingEmployee.baseSalary || 0).toLocaleString('id-ID')} ➔ Rp ${Number(baseSalary || 0).toLocaleString('id-ID')}`);
+      }
+      if (Number(editingEmployee.fixedAllowance) !== Number(fixedAllowance)) {
+        diffs.push(`Tunjangan Tetap: Rp ${Number(editingEmployee.fixedAllowance || 0).toLocaleString('id-ID')} ➔ Rp ${Number(fixedAllowance || 0).toLocaleString('id-ID')}`);
+      }
+      if (Number(editingEmployee.dailyAllowance) !== Number(dailyAllowance)) {
+        diffs.push(`Uang Harian: Rp ${Number(editingEmployee.dailyAllowance || 0).toLocaleString('id-ID')} ➔ Rp ${Number(dailyAllowance || 0).toLocaleString('id-ID')}`);
+      }
+      if ((editingEmployee.position || '').trim() !== (position || '').trim()) {
+        diffs.push(`Jabatan: ${editingEmployee.position || '-'} ➔ ${position}`);
+      }
+      if ((editingEmployee.department || '').trim() !== finalDepartment) {
+        diffs.push(`Divisi: ${editingEmployee.department || '-'} ➔ ${finalDepartment}`);
+      }
+      if (editingEmployee.assignedProjectId !== assignedProjectId) {
+        const oldPrj = projects.find(p => p.id === editingEmployee.assignedProjectId)?.name || editingEmployee.assignedProjectId || '-';
+        const newPrj = projects.find(p => p.id === assignedProjectId)?.name || assignedProjectId || '-';
+        diffs.push(`Proyek: ${oldPrj} ➔ ${newPrj}`);
+      }
+      if (editingEmployee.status !== employeeStatus) {
+        diffs.push(`Status: ${editingEmployee.status || 'ACTIVE'} ➔ ${employeeStatus}`);
+      }
+      if (editingEmployee.employmentType !== employmentType) {
+        diffs.push(`Kontrak: ${editingEmployee.employmentType || '-'} ➔ ${employmentType}`);
+      }
+      if (editingEmployee.systemRole !== systemRole) {
+        diffs.push(`Tingkat Akses (RBAC): ${editingEmployee.systemRole || 'staff'} ➔ ${systemRole}`);
+      }
+      if (editingEmployee.ptkpStatus !== ptkpStatusForm) {
+        diffs.push(`PTKP: ${editingEmployee.ptkpStatus || '-'} ➔ ${ptkpStatusForm}`);
+      }
+      if (editingEmployee.workLocationType !== workLocationTypeForm) {
+        diffs.push(`Domisili: ${editingEmployee.workLocationType || 'LOKAL'} ➔ ${workLocationTypeForm}`);
+      }
+    }
+
+    let finalNotes = [...existingNotes];
+    const nowStr = new Date().toLocaleString('id-ID', {
+      timeZone: 'Asia/Jakarta',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    }) + ' WIB';
+
+    if (newNoteText.trim()) {
+      const newEntry: EmployeeNote = {
+        id: `NOTE-${Date.now()}`,
+        createdAt: nowStr,
+        authorName: currentUser?.name || 'Administrator',
+        authorRole: currentUser?.role || currentUser?.systemRole || 'HR',
+        note: newNoteText.trim(),
+        changesSummary: diffs.length > 0 ? diffs.join(' • ') : undefined
+      };
+      finalNotes = [newEntry, ...finalNotes];
+    } else if (diffs.length > 0 && editingEmployee) {
+      const autoEntry: EmployeeNote = {
+        id: `NOTE-${Date.now()}`,
+        createdAt: nowStr,
+        authorName: currentUser?.name || 'Administrator',
+        authorRole: currentUser?.role || currentUser?.systemRole || 'HR',
+        note: `Pembaruan data karyawan: ${diffs.join(' • ')}`,
+        changesSummary: diffs.join(' • ')
+      };
+      finalNotes = [autoEntry, ...finalNotes];
+    }
+
     const empData: Employee = {
       id: editingEmployee ? editingEmployee.id : newEmpId,
       loginId: cleanLoginId,
@@ -446,6 +528,7 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
       workLocationType: workLocationTypeForm,
       status: employeeStatus,
       inactiveReason: employeeStatus === 'INACTIVE' ? inactiveReason : undefined,
+      notes: finalNotes,
       nonLokalLeaveConfig: workLocationTypeForm === 'NON_LOKAL' ? {
         rosterCycleMonths: Number(rosterCycleMonthsInput),
         leaveQuotaPerPeriod: Number(rosterQuotaInput),
@@ -475,6 +558,32 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleAddQuickNote = () => {
+    if (!newNoteText.trim()) return;
+    const nowStr = new Date().toLocaleString('id-ID', {
+      timeZone: 'Asia/Jakarta',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    }) + ' WIB';
+
+    const newEntry: EmployeeNote = {
+      id: `NOTE-${Date.now()}`,
+      createdAt: nowStr,
+      authorName: currentUser?.name || 'Administrator',
+      authorRole: currentUser?.role || currentUser?.systemRole || 'HR',
+      note: newNoteText.trim()
+    };
+    setExistingNotes(prev => [newEntry, ...prev]);
+    setNewNoteText('');
+  };
+
+  const handleDeleteNote = (noteId: string) => {
+    setExistingNotes(prev => prev.filter(n => n.id !== noteId));
   };
 
   const handleCopyText = (text: string, key: string) => {
@@ -1350,9 +1459,16 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
               className="w-full px-3 py-2 text-slate-700 hover:text-slate-900 hover:bg-slate-50 flex items-center gap-2.5 transition-colors cursor-pointer"
             >
               <Edit2 className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-              <div className="text-left">
-                <div className="font-semibold text-xs">Edit Karyawan</div>
-                <div className="text-[10px] text-slate-400">Ubah profil, divisi & gaji</div>
+              <div className="text-left flex-1 min-w-0">
+                <div className="font-semibold text-xs flex items-center justify-between">
+                  <span>Edit Karyawan</span>
+                  {dropdownAnchor.emp.notes && dropdownAnchor.emp.notes.length > 0 && (
+                    <span className="px-1.5 py-0.2 rounded-full bg-blue-100 text-blue-800 font-mono-code text-[9px] font-bold">
+                      {dropdownAnchor.emp.notes.length} note
+                    </span>
+                  )}
+                </div>
+                <div className="text-[10px] text-slate-400">Ubah profil, divisi, gaji & timeline note</div>
               </div>
             </button>
 
@@ -2081,6 +2197,114 @@ export const EmployeeManagementTab: React.FC<EmployeeManagementTabProps> = ({
                       </p>
                     </div>
                   </div>
+                </div>
+              </div>
+
+              {/* Seksi 6: Catatan & Riwayat Perubahan (Timeline Notes) */}
+              <div className="space-y-3 pt-3 border-t border-slate-100">
+                <div className="flex items-center justify-between">
+                  <div className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
+                    <History className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Catatan & Riwayat Perubahan (Timeline Notes)</span>
+                    <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-mono-code font-bold text-[10px] border border-blue-200">
+                      {existingNotes.length} Catatan
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-medium hidden sm:inline">
+                    Tercatat kronologis & terarsip otomatis
+                  </span>
+                </div>
+
+                {/* Input Note Baru */}
+                <div className="bg-gradient-to-br from-blue-50/50 via-indigo-50/30 to-slate-50 p-3 rounded-2xl border border-blue-100 space-y-2">
+                  <label className="text-[10px] font-bold text-slate-700 uppercase flex items-center gap-1.5">
+                    <MessageSquare className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Tulis Catatan Perubahan Baru</span>
+                    <span className="text-slate-400 font-normal lowercase">(opsional • tersimpan otomatis)</span>
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={newNoteText}
+                    onChange={e => setNewNoteText(e.target.value)}
+                    placeholder="Tulis catatan (contoh: Penyesuaian gaji setelah masa probation, mutasi ke proyek Sorowako, promosi jabatan, dll)..."
+                    className="w-full glass-input rounded-xl px-3 py-2 text-xs bg-white border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-slate-800 placeholder:text-slate-400 resize-none transition-all font-sans"
+                  />
+                  {newNoteText.trim() && (
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="text-[10px] text-blue-700 font-medium flex items-center gap-1">
+                        <Check className="w-3 h-3 text-blue-600" />
+                        Dicatat atas nama <strong>{currentUser?.name || 'Administrator'}</strong>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleAddQuickNote}
+                        className="px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] flex items-center gap-1 transition-all cursor-pointer shadow-2xs active:scale-95"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>Sisipkan ke Timeline</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Timeline List */}
+                <div className="space-y-2 max-h-56 overflow-y-auto custom-scrollbar pr-1">
+                  {existingNotes.length === 0 ? (
+                    <div className="text-center py-4 px-3 bg-slate-50/70 rounded-2xl border border-dashed border-slate-200">
+                      <Clock className="w-5 h-5 text-slate-300 mx-auto mb-1" />
+                      <p className="text-xs font-semibold text-slate-600">Belum Ada Riwayat Catatan</p>
+                      <p className="text-[10.5px] text-slate-400 mt-0.5">
+                        Catatan dan riwayat perubahan parameter karyawan akan terarsip rapi di timeline ini.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="relative pl-5 space-y-2.5 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-blue-200">
+                      {existingNotes.map((item, idx) => (
+                        <div key={item.id || idx} className="relative group">
+                          {/* Timeline node badge */}
+                          <div className="absolute -left-5 top-1.5 w-2.5 h-2.5 rounded-full bg-blue-600 ring-4 ring-blue-50 group-hover:scale-125 transition-transform" />
+                          
+                          <div className="bg-white p-2.5 rounded-xl border border-slate-200/90 shadow-2xs space-y-1 hover:border-blue-300 transition-colors">
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className="font-bold text-slate-900 text-[11px] truncate">
+                                  {item.authorName || 'Administrator'}
+                                </span>
+                                {item.authorRole && (
+                                  <span className="px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 text-[9px] font-mono-code font-semibold">
+                                    {item.authorRole}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[9.5px] font-mono-code text-slate-400 whitespace-nowrap">
+                                  {item.createdAt}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteNote(item.id)}
+                                  className="text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded cursor-pointer"
+                                  title="Hapus catatan ini"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </div>
+
+                            {item.changesSummary && (
+                              <div className="bg-blue-50/80 px-2 py-1 rounded-lg border border-blue-100 text-[10px] text-blue-800 font-mono-code">
+                                <span className="font-bold">⚡ Deteksi Perubahan:</span> {item.changesSummary}
+                              </div>
+                            )}
+
+                            <p className="text-xs text-slate-700 whitespace-pre-line leading-relaxed font-sans">
+                              {item.note}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 

@@ -231,6 +231,15 @@ export interface BiometricVerificationResult {
   details?: string;
 }
 
+export interface EmployeeNote {
+  id: string;
+  createdAt: string; // e.g. "2026-11-24 10:15 WIB"
+  authorName: string;
+  authorRole?: string;
+  note: string;
+  changesSummary?: string;
+}
+
 export interface Employee {
   id: string;
   nik: string;
@@ -269,6 +278,7 @@ export interface Employee {
   status?: 'ACTIVE' | 'INACTIVE';
   inactiveReason?: string;
   unpaidLeaveDaysTotal?: number;
+  notes?: EmployeeNote[];
 }
 
 export type WorkLocationType = 'LOKAL' | 'NON_LOKAL';
